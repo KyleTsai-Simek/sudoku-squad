@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+out/
+.next/
+.turbo/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+!.env.example
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Testing
+coverage/
+.vitest-cache/
+playwright-report/
+test-results/
+.playwright/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+
+# Ingest data (large CSV dumps, never committed)
+scripts/ingest/data/
+*.csv
+
+# Supabase local dev
+supabase/.branches
+supabase/.temp

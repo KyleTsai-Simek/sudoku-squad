@@ -1,0 +1,22 @@
+{
+  "name": "sudoku-squad",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Multiplayer sudoku — collaborative and battle modes",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @sudoku-squad/web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,sql}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
+}

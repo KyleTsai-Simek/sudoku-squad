@@ -1,0 +1,24 @@
+{
+  "name": "@sudoku-squad/ingest",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "One-off scripts for ingesting puzzles from the Kaggle 9M dataset. NOT shipped to clients.",
+  "scripts": {
+    "ingest": "tsx -r dotenv/config src/index.ts dotenv_config_path=../../.env.local",
+    "check": "tsx -r dotenv/config src/check-connectivity.ts dotenv_config_path=../../.env.local",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "echo 'TODO: eslint'"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.47.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  }
+}
