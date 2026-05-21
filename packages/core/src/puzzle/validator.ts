@@ -1,5 +1,5 @@
-import type { BoardState, CellIndex } from '../types/index.js';
-import { cellValue } from './board.js';
+import type { BoardState, CellIndex } from '../types/index';
+import { cellValue } from './board';
 
 /**
  * Return the row, column, and 3x3 box indices for a cell.

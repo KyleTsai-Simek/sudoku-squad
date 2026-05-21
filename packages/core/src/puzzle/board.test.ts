@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createBoard, isFilled } from './board.js';
+import { createBoard, isFilled } from './board';
 
 const EMPTY_GIVENS = Array<number>(81).fill(0);
 const SOLVED_BOARD: number[] = [

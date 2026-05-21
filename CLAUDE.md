@@ -65,6 +65,11 @@ These rules exist to make Phase 4 (iOS port) painless. Breaking them in Phase 1â
 - Naming: `room:{room_id}`.
 - Three payload kinds: `move`, `presence`, `game_event`. Don't proliferate.
 
+### Internal imports in `packages/core` and `scripts/ingest` are extensionless
+- Use `import ... from './foo'`, not `from './foo.js'`.
+- Reason: Next.js's bundler doesn't resolve `.js` imports to `.ts` source files in workspace packages, even with `transpilePackages`. Vitest and `tsx` tolerate either; extensionless works everywhere we run TS source.
+- This applies to relative imports inside our own packages only. `node_modules` imports are unaffected.
+
 ---
 
 ## 3. Code style

@@ -1,4 +1,4 @@
-import type { BoardArray, BoardState, Cell, CellValue, PuzzleId } from '../types/index.js';
+import type { BoardArray, BoardState, Cell, CellValue, PuzzleId } from '../types/index';
 
 /**
  * Build the initial BoardState from a puzzle's givens.

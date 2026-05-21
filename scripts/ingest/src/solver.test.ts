@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countSolutions, hasUniqueSolution, solve } from './solver.js';
+import { countSolutions, hasUniqueSolution, solve } from './solver';
 
 // Classic "world's hardest" sudoku — single solution, slow solvers struggle.
 const HARD: number[] = [
