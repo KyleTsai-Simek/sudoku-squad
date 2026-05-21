@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Multiplayer sudoku — collaborative and battle modes",
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@11.2.2",
   "engines": {
     "node": ">=20"
   },
