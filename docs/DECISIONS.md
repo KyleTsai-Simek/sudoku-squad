@@ -17,6 +17,48 @@ Format:
 
 ---
 
+## 0016 — pnpm 11 build-script approval via `allowBuilds:` in `pnpm-workspace.yaml`
+**Date:** 2026-05-21
+**Status:** Accepted
+
+**Context.** pnpm 10+ defaults to NOT running postinstall scripts for native-binary packages — a security-by-default change. Our toolchain needs three to actually function: `esbuild` (Vitest bundler), `sharp` (Next.js image optimization), `unrs-resolver` (ESLint module resolver).
+
+**Decision.** Approve these three in `pnpm-workspace.yaml`:
+
+```yaml
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+```
+
+These are the standard binary-fetch scripts for our stack and are widely used. We only allow scripts for packages we explicitly trust; new ones surface as install warnings (`ERR_PNPM_IGNORED_BUILDS`) and require an explicit add to the list.
+
+**Alternatives considered.**
+- `pnpm approve-builds` interactive command — does the same thing but interactive only; we want the config in version control.
+- `--ignore-scripts` opt-out — would break Vitest and image optimization at runtime.
+
+**Consequences.** New native-binary deps require an explicit allowlist update. Future agents adding such deps will see the install warning and should add the package here, not work around it.
+
+---
+
+## 0015 — Internal imports inside our own packages are extensionless
+**Date:** 2026-05-21
+**Status:** Accepted
+
+**Context.** TypeScript ESM convention is `import './foo.js'` (the `.js` extension is what the emitted code will use at runtime under Node native ESM). However, Next.js's webpack-based bundler does not resolve `.js` imports back to `.ts` source files in workspace packages, even with `transpilePackages`. The result: `Module not found: Can't resolve './types/index.js'` errors during Next builds.
+
+**Decision.** Inside `packages/core`, `scripts/ingest`, and any future workspace package: relative imports are **extensionless** (`import './foo'`, not `import './foo.js'`). `node_modules` imports are unaffected.
+
+**Alternatives considered.**
+- Add a Next.js webpack alias to strip `.js` from workspace imports — fragile, more config, hidden behavior.
+- Build `packages/core` to `dist/` and consume the build instead of source — slower DX, defeats the point of `transpilePackages`.
+- Switch the entire repo to CJS — large regression in tooling, no benefit.
+
+**Consequences.** Vitest, `tsx`, and Next's bundler all resolve extensionless imports to `.ts` source files in workspace packages. The cost is that we couldn't run these files directly with Node native ESM without a TypeScript compile step — but we never do that (Vitest, tsx, and Next are our runtimes). Documented in [CLAUDE.md](../CLAUDE.md) §2 so it's not relearned.
+
+---
+
 ## 0014 — pnpm as the package manager
 **Date:** 2026-05-21
 **Status:** Accepted

@@ -8,14 +8,38 @@ If you're a human reading this: this is *also* a good orientation doc.
 
 ## 0. Always start by reading the docs
 
-Before doing anything non-trivial in this repo, read:
-1. [docs/GOALS_AND_SCOPE.md](docs/GOALS_AND_SCOPE.md) — what we're building and what we're not.
-2. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the tech stack and data model.
-3. [docs/ROADMAP.md](docs/ROADMAP.md) — what phase we're in.
-4. [docs/TODO.md](docs/TODO.md) — what's next on the list.
-5. [docs/DECISIONS.md](docs/DECISIONS.md) — what's already been decided and what's still open.
+Before doing anything non-trivial in this repo, read **in this order**:
+
+1. [docs/STATUS.md](docs/STATUS.md) — **always read first.** Current state, what's built, what's verified, what's next, known gotchas.
+2. [docs/GOALS_AND_SCOPE.md](docs/GOALS_AND_SCOPE.md) — what we're building and what we're not.
+3. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the tech stack and data model.
+4. [docs/ROADMAP.md](docs/ROADMAP.md) — what phase we're in.
+5. [docs/TODO.md](docs/TODO.md) — what's next on the list.
+6. [docs/DECISIONS.md](docs/DECISIONS.md) — what's already been decided and what's still open.
+7. [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) — game modes, settings, UX choices.
 
 These are the source of truth. If something in the code contradicts the docs, fix the docs (because they're wrong) or fix the code (because it drifted). Don't silently let them diverge.
+
+### Quickstart for a new agent
+
+If you've just landed in this repo:
+
+```bash
+# 1. Verify environment
+pnpm install                                         # idempotent
+pnpm --filter @sudoku-squad/core test                # expect 6/6
+pnpm --filter @sudoku-squad/ingest test              # expect 4/4
+
+# 2. Verify Supabase connection (requires .env.local)
+pnpm --filter @sudoku-squad/ingest check             # expect 3 green checks
+
+# 3. Boot the app
+pnpm dev                                             # http://localhost:3000
+
+# 4. Read docs/STATUS.md and docs/TODO.md to see what to work on
+```
+
+If any of (1–3) fail, fix before adding features. See [docs/STATUS.md](docs/STATUS.md) for credential setup if `.env.local` is missing.
 
 ---
 
@@ -25,6 +49,7 @@ These are the source of truth. If something in the code contradicts the docs, fi
 
 | If you... | Update... |
 |---|---|
+| Land a phase milestone, or the state of the project meaningfully shifts | `docs/STATUS.md` — refresh the "what's built / what's next / gotchas" sections, bump the date |
 | Make a non-trivial design or stack choice | `docs/DECISIONS.md` — add a new entry at the top with the next number |
 | Complete or add a task | `docs/TODO.md` — check it off or add it under the right phase |
 | Change anything about how data flows or the data model | `docs/ARCHITECTURE.md` |

@@ -2,6 +2,16 @@
 
 Four phases, each with an explicit **exit criterion** — we don't move on until it's met. Single player first, then battle, then coop, then iOS. This sequencing exists for a reason: each phase de-risks the next.
 
+**Current position:** end of Phase 0 (setup) → start of Phase 1 (single-player web). See [STATUS.md](STATUS.md) for the live snapshot.
+
+| Phase | Status |
+|---|---|
+| Phase 0 — Setup, scaffold, doc set | ✅ Complete |
+| Phase 1 — Single-player web | 🔄 Active |
+| Phase 2 — Battle mode | Pending |
+| Phase 3 — Coop mode | Pending |
+| Phase 4 — iOS (React Native) | Pending |
+
 ---
 
 ## Phase 1 — Single-player web

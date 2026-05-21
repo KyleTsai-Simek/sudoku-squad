@@ -2,80 +2,69 @@
 
 Working task list. Checkboxes get checked as work completes. New items added as discovered. Older items pruned to keep this readable. Anything in `[ ]` is unstarted; `[~]` is in progress; `[x]` is done.
 
-**How to use this file:** This is the *active* list. Big decisions get logged in [DECISIONS.md](DECISIONS.md). Phase-level milestones live in [ROADMAP.md](ROADMAP.md). This file is the granular grind.
+**How to use this file:** Granular task list. Big decisions live in [DECISIONS.md](DECISIONS.md). Phase-level milestones in [ROADMAP.md](ROADMAP.md). Current snapshot in [STATUS.md](STATUS.md).
 
 ---
 
-## Phase 0 — Planning & setup (current)
+## Phase 0 — Setup ✅ COMPLETE
 
-- [x] Architecture decisions: Supabase, Next.js, RN, anonymous auth
-- [x] Initial doc set (this folder)
-- [x] Confirm name: Sudoku Squad
-- [x] Per-room settings model decided
-- [x] Battle-loser continue-after-win decided
-- [x] Coop notes: shared default + private toggle decided
-- [x] Puzzle dataset chosen: Kaggle 9M Sudoku
-- [ ] Register domain (try sudokusquad.com first)
-- [ ] Create Supabase project (dev + prod)
-- [ ] Create Vercel project + connect GitHub repo
-- [ ] Apple Developer account application (needed before Phase 4; ~1 week processing)
+- [x] All architecture and game-design decisions captured in DECISIONS.md (entries 0001–0016)
+- [x] Initial doc set: STATUS, GOALS_AND_SCOPE, ARCHITECTURE, GAME_DESIGN, ROADMAP, TODO, DECISIONS, CLAUDE
+- [x] pnpm workspace monorepo scaffolded (`apps/`, `packages/`, `scripts/`)
+- [x] `apps/web` scaffolded (Next.js 15, React 19, TypeScript, Tailwind 3) — home page renders, workspace import verified at runtime
+- [x] `packages/core` scaffolded with types, board, validator, tests (6/6 passing)
+- [x] `scripts/ingest` scaffolded with Norvig solver and tests (4/4 passing, including world-hardest puzzle)
+- [x] First Supabase migration applied to live project (`puzzles`, `rooms`, `room_players`, `moves`, `puzzles_public` view, RLS policies)
+- [x] Supabase project created, anonymous auth enabled
+- [x] `.env.local` configured locally with Supabase credentials
+- [x] Connectivity check passing (`pnpm --filter @sudoku-squad/ingest check`)
+- [x] GitHub repo created and pushed: [`KyleTsai-Simek/sudoku-squad`](https://github.com/KyleTsai-Simek/sudoku-squad)
+
+### Phase 0 deferred (not blocking Phase 1)
+- [ ] Register domain (try `sudokusquad.com` first)
+- [ ] Connect Vercel project to GitHub for auto-deploys
+- [ ] Apple Developer account application (only needed before Phase 4; ~1 week processing)
 
 ---
 
-## Phase 1 — Single-player web
+## Phase 1 — Single-player web 🔄 ACTIVE
 
-### Repo & tooling
-- [x] Initialize pnpm workspace monorepo (root `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`)
-- [x] Scaffold `apps/web` (Next.js 15 App Router, React 19, TypeScript, Tailwind 3)
-- [x] Scaffold `packages/core` (TS-only, no React UI) with Vitest + fast-check configured
-- [x] Scaffold `scripts/ingest` with Norvig solver implementation
-- [x] First Supabase migration (`supabase/migrations/0001_initial.sql`)
-- [ ] User: `pnpm install` from repo root
-- [ ] User: apply migration to Supabase (SQL editor or `supabase db push`)
-- [ ] User: `pnpm dev` to verify the home page renders
-- [ ] User: `pnpm --filter @sudoku-squad/core test` to verify tests run
-- [ ] Set up ESLint rule banning DOM/Next/RN imports from `packages/core`
-- [ ] Set up ESLint rule banning solver imports from `packages/core`
-- [ ] Set up Playwright in `apps/web` for the first happy-path smoke test
-- [ ] CI: lint + typecheck + unit + property tests + Playwright on every PR
+### `packages/core` — game engine (first focus)
+- [ ] **Move reducer:** `applyMove(state: BoardState, move: Move): BoardState` — pure function, lives in `src/game/`. Handles `value`, `clear`, `note_toggle` move kinds. Refuses writes to given cells.
+- [ ] Unit tests for the reducer covering each move kind + edge cases
+- [ ] **Property tests** with `fast-check`: random valid move sequences preserve invariants. Specifically: no cell ever holds an invalid value; replaying a move log in seq order produces the same state as applying moves one-by-one; clearing a non-given cell always leaves `value=null`.
+- [ ] Notes mask helpers: `setNote`, `clearNote`, `hasNote`, `notesToArray` for the bitmask `NotesMask` type
+- [ ] Move history wrapper (for client-side undo) — keep separate from the reducer itself
 
-### `packages/core` — game engine
-- [ ] Types: `PuzzleId`, `CellIndex`, `CellValue`, `Notes`, `BoardState`, `Move`
-- [ ] Puzzle loader (takes 81-int array of givens, returns initial `BoardState`)
-- [ ] Validator: detect row/col/box conflicts (does NOT use solution)
-- [ ] Completion checker (does the board match the solution?) — solution input separate from board
-- [ ] Move reducer: `applyMove(state, move) -> state`
-- [ ] Unit tests for all of the above (target ~90% coverage of core)
-- [ ] **Property tests** with `fast-check`: random move sequences preserve invariants (no invalid cell values, replay-equivalence)
-
-### `scripts/ingest` — dataset import (one-off)
-- [ ] Download / load the Kaggle 9M Sudoku CSV
-- [ ] Norvig-ported solver in TypeScript (~100 LoC)
-- [ ] For each candidate row: parse, run solver, confirm exactly one solution, confirm it matches the dataset's claimed `solution`
-- [ ] Pick 500–1000 medium-difficulty rows
-- [ ] Upsert into Supabase `puzzles` table
-- [ ] Document how to re-run if we want to expand the pool later
+### `scripts/ingest` — puzzle data
+- [ ] Implement the Kaggle 9M CSV reader in `scripts/ingest/src/index.ts`
+- [ ] Download dataset to `scripts/ingest/data/` (gitignored)
+- [ ] For each candidate row: parse, run `hasUniqueSolution`, confirm dataset solution matches `solve()` output
+- [ ] Sample 500–1000 medium-difficulty rows, upsert to Supabase `puzzles` via service-role client
+- [ ] After ingest: re-run connectivity check — should now show non-zero rows and become a stronger RLS test
+- [ ] Tighten `check-connectivity.ts` to verify anon canNOT read `puzzles.solution` even when rows exist (insert test row → query as anon → confirm empty result)
 
 ### `apps/web` — single player UI
-- [ ] Home page with "New Game" CTA
-- [ ] Game route `/play/[seed]?` (seed lets you share a specific puzzle even in single player)
-- [ ] Sudoku grid component (9×9, 3×3 box borders, selection highlight)
+- [ ] Replace placeholder home page with "New Game" CTA
+- [ ] Game route `/play/[seed]?` — seed lets a player share a specific puzzle even in single-player
+- [ ] Sudoku grid component (9×9, 3×3 box borders, selection highlight, row/col/box highlighting, same-value highlighting)
 - [ ] Number pad component (1–9, clear, notes toggle, undo)
-- [ ] Keyboard input handler (1–9, arrow keys, N for notes, Backspace)
-- [ ] Settings sheet (show conflicts, auto-check, hints availability)
+- [ ] Keyboard input handler (1–9 to enter, Backspace/0 to clear, N for notes mode, arrow keys to navigate)
+- [ ] Conflict rendering (red tint on cells in conflict; only when "show conflicts" setting is on)
+- [ ] Settings sheet (per-player in single-player; see GAME_DESIGN.md)
 - [ ] Timer
-- [ ] Completion celebration screen
-- [ ] Mobile-responsive layout audit on iPhone SE width
+- [ ] Completion celebration screen with "play again" CTA
+- [ ] Mobile-responsive layout audit on iPhone SE width (375px) and a large phone (420px)
 
-### Puzzle data
-- [ ] Pick open-source dataset (candidates in [ARCHITECTURE.md §7](ARCHITECTURE.md))
-- [ ] Write ingestion script: parse → validate uniqueness with solver → upsert into Supabase
-- [ ] Seed ~200 medium-difficulty puzzles
-- [ ] (Future) difficulty rating recomputation
+### Tooling & CI
+- [ ] ESLint rule: ban DOM/Next/RN imports from `packages/core`
+- [ ] ESLint rule: ban Norvig solver imports from `packages/core` (solver lives in `scripts/ingest`)
+- [ ] Playwright config in `apps/web` + first happy-path smoke (load home page, render board, complete a puzzle)
+- [ ] GitHub Actions CI: lint + typecheck + unit + property tests + Playwright on every PR
 
 ### Deploy
-- [ ] Vercel deploy from `main`
-- [ ] Add a basic favicon + meta tags
+- [ ] Vercel project connected to GitHub `main`; first deploy succeeds
+- [ ] Favicon + meta tags (open graph card with project name)
 - [ ] Lighthouse pass: PWA-installable, good mobile score
 
 ---
@@ -83,46 +72,40 @@ Working task list. Checkboxes get checked as work completes. New items added as 
 ## Phase 2 — Battle mode
 
 ### Backend
-- [ ] Supabase SQL migration: `puzzles`, `rooms`, `room_players`, `moves`
-- [ ] RLS policies on all tables
-- [ ] Enable anonymous auth in Supabase
 - [ ] Edge Function: `create_room({mode, puzzle_id?}) -> {room_id, code}`
 - [ ] Edge Function: `join_room({code, username}) -> {room_id, player_id, color}`
-- [ ] Edge Function: `submit_move({room_id, cell, kind, value})` — validates + assigns seq + broadcasts
-- [ ] Edge Function: `check_completion({room_id, player_id})` — server-side win check
-- [ ] Channel naming convention: `room:{room_id}`
+- [ ] Edge Function: `submit_move({room_id, cell, kind, value})` — validates + assigns `seq` + broadcasts
+- [ ] Edge Function: `check_completion({room_id, player_id})` — server-side win check against `puzzles.solution`
+- [ ] Channel naming convention: `room:{room_id}` for all per-room realtime traffic
 
 ### `packages/core` — sync
-- [ ] Supabase client factory (accepts injected client; web/RN provide it)
+- [ ] Supabase client factory (accepts injected client; web/RN each provide one)
 - [ ] `useRoom(roomId)` hook: subscribes, returns `room`, `players`, board state, move sender
-- [ ] Optimistic move application + server echo reconciliation
-- [ ] Move log replay on join
+- [ ] Optimistic move application + server echo reconciliation (rollback on rejection)
+- [ ] Move log replay on rejoin
 
 ### `apps/web` — battle UI
 - [ ] Home page: "New Battle" CTA
 - [ ] Room route `/r/[code]`
 - [ ] Lobby state: player list, host's Start button, share link with copy button
-- [ ] **Lobby settings panel** (host-editable, locks at Start): auto-check, hints availability, show conflicts, etc.
-- [ ] Read-only settings view for non-host players in the lobby
-- [ ] Mid-game join handling: battle = "this game has already started" screen with option to start a new one
+- [ ] **Lobby settings panel** (host-editable, locks at Start): auto-check, hints availability, show conflicts. Read-only for non-hosts.
+- [ ] Mid-game join handling: battle = "this game has already started" screen with "Start a new one" option
 - [ ] In-game: own board + opponents' progress bars (sidebar or top strip)
 - [ ] **Battle winner overlay**: announces winner, dismissible, losers can continue solving after dismissal
-- [ ] Server-driven game-over UI (winner declared)
 - [ ] Play-again flow (shows immediately for winner, after finish/quit for losers)
 
 ### Testing
-- [ ] Two-browser manual test: both join, both play, one finishes, winner declared
-- [ ] Race-condition test: both submit a completing move within milliseconds — only one wins
+- [ ] Two-browser manual test: both join, both play, one finishes, winner declared correctly
+- [ ] Race-condition test: both submit a completing move within milliseconds — exactly one wins
 
 ---
 
 ## Phase 3 — Coop mode
 
 ### Backend
-- [ ] Extend `submit_move` to handle coop semantics (shared board, LWW per cell)
-- [ ] Notes merge logic on server (or rely on client convergence — decide)
+- [ ] Extend `submit_move` to handle coop semantics (shared board, LWW per cell by seq)
 - [ ] Coop completion event triggers shared-win broadcast
-- [ ] Presence channel for cursors (throttled to 10/s server-side rate limit)
+- [ ] Presence channel for cursors (throttled to ~10/s)
 
 ### `packages/core`
 - [ ] LWW reducer for `value` moves (compare `seq`)
@@ -132,18 +115,18 @@ Working task list. Checkboxes get checked as work completes. New items added as 
 
 ### `apps/web` — coop UI
 - [ ] Other players' cursor highlights with colored rings + username chip
-- [ ] Visual indicator when someone else overwrites your cell (brief flash?)
+- [ ] Brief visual flash when someone else overwrites your cell
 - [ ] **Private notes toggle** near number pad — flips notes mode between shared and private
-- [ ] Visual distinction between shared and private notes when both exist in a cell (e.g., shared notes in player colors, private notes in grey)
-- [ ] Shared completion celebration (all players win)
+- [ ] Visual distinction between shared and private notes when both exist in a cell
+- [ ] Shared completion celebration
 - [ ] Disconnect/reconnect grace UI (greyed cursor, "reconnecting…" badge)
 - [ ] **V1 descope plan:** if private-notes mode is taking too long, ship coop with shared-only and move private notes to V2. Per [DECISIONS.md #0007](DECISIONS.md).
 
 ### Testing
 - [ ] Two browsers, two players, complete a coop game
-- [ ] **Two-tab Playwright smoke test in CI** — opens two browser contexts in the same room, spams same-cell input, asserts state convergence. Runs on every PR.
-- [ ] Stress test: both clients spam the same cell — does state converge?
-- [ ] Network blip test: drop connection mid-game, rejoin, verify state
+- [ ] **Two-tab Playwright smoke test in CI** — both contexts in same room, spam same-cell input, assert state convergence. Runs on every PR. Per [DECISIONS.md #0013](DECISIONS.md).
+- [ ] Stress test: both clients spam the same cell — state converges
+- [ ] Network blip test: drop connection mid-game, rejoin, state intact
 
 ---
 
@@ -160,25 +143,25 @@ Working task list. Checkboxes get checked as work completes. New items added as 
 - [ ] Number pad in RN
 - [ ] Lobby screen in RN
 - [ ] Settings sheet in RN
-- [ ] Navigation: React Navigation, screens: Home, Lobby, Game, Result
+- [ ] Navigation: React Navigation; screens Home, Lobby, Game, Result
 
 ### Native polish
 - [ ] Haptics on tap (selectionAsync) and completion (notificationAsync success)
 - [ ] Safe area + dynamic island handling
-- [ ] Software keyboard avoidance (probably we don't show the system keyboard at all — number pad is custom)
+- [ ] Software keyboard avoidance (we don't show the system keyboard — number pad is custom)
 - [ ] Dark mode
 - [ ] App icon + splash
 
 ### Ship
 - [ ] TestFlight build
 - [ ] Cross-play test: iOS + web in same room, both modes
-- [ ] App Store submission paperwork (screenshots, description, privacy policy)
+- [ ] App Store submission (screenshots, description, privacy policy)
 
 ---
 
 ## Continuous / cross-phase
 
-- [ ] Keep `docs/DECISIONS.md` updated whenever a non-trivial decision is made
-- [ ] Keep `docs/TODO.md` (this file) trimmed and current
-- [ ] CI: lint + typecheck + tests on every PR
-- [ ] Telemetry/analytics: TBD (probably Plausible or PostHog after V1)
+- Keep `docs/STATUS.md` fresh whenever the project state shifts.
+- Keep `docs/DECISIONS.md` updated for any non-trivial decision.
+- Keep this file trimmed — prune completed sub-bullets that no longer add signal.
+- Telemetry/analytics: TBD (Plausible or PostHog after V1).
