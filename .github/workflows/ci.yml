@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          # Pinned in package.json `packageManager`; this confirms.
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Unit + property tests (core)
+        run: pnpm --filter @sudoku-squad/core test
+
+      - name: Solver tests (ingest)
+        run: pnpm --filter @sudoku-squad/ingest test
+
+      - name: Sample-pack solver verification
+        run: pnpm --filter @sudoku-squad/ingest verify:samples
+
+      - name: Ingest dry-run on synthetic fixture
+        run: pnpm --filter @sudoku-squad/ingest ingest:dry-fixture
+
+      - name: Build web
+        run: pnpm --filter @sudoku-squad/web build
+
+  e2e:
+    name: playwright smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @sudoku-squad/web exec playwright install --with-deps chromium
+
+      - name: Run smoke
+        run: pnpm --filter @sudoku-squad/web test:e2e
+        env:
+          CI: '1'
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7

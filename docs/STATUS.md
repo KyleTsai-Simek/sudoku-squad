@@ -46,6 +46,9 @@ This doc captures *where we actually are*. Update it whenever a phase milestone 
 | Solver tests | `pnpm --filter @sudoku-squad/ingest test` | 4/4 passing |
 | Sample-puzzle verification | `pnpm --filter @sudoku-squad/ingest verify:samples` | 5/5 OK |
 | Ingest dry-run on synthetic fixture | `pnpm --filter @sudoku-squad/ingest ingest:dry-fixture` | sampled 5, rejected 2 (as designed) |
+| Core lint (purity rules) | `pnpm --filter @sudoku-squad/core lint` | clean; rules verified to fire on injected violations |
+| Web lint (next) | `pnpm --filter @sudoku-squad/web lint` | clean |
+| Playwright smoke | `pnpm --filter @sudoku-squad/web test:e2e` | 1/1 passing (~4 s) |
 | Supabase connectivity + RLS | `pnpm --filter @sudoku-squad/ingest check` | 3/3 (yellow note expected while `puzzles` is empty) |
 | Web typecheck | `pnpm --filter @sudoku-squad/web typecheck` | clean |
 | Web production build | `pnpm --filter @sudoku-squad/web build` | clean |
@@ -57,9 +60,9 @@ This doc captures *where we actually are*. Update it whenever a phase milestone 
 
 - **Real puzzles in Supabase** — the ingest pipeline is written and dry-run-tested, but the `puzzles` table is still empty until someone drops the Kaggle CSV into `scripts/ingest/data/` and runs `pnpm --filter @sudoku-squad/ingest ingest`. See `scripts/ingest/README.md`. Single-player uses the bundled `apps/web/lib/sample-puzzles.ts` until that happens.
 - **Auto-eliminate notes** — Setting exposed in the sheet but disabled (placeholder for V2).
-- **ESLint rules** for `packages/core` purity (no DOM, no Next, no RN, no solver imports) — planned but not wired.
-- **Playwright** — `@playwright/test` installed, no config or smoke yet.
-- **CI** (GitHub Actions) — not set up.
+- **ESLint rules** for `packages/core` purity — wired. `no-restricted-imports` blocks `next/*`, `react-dom/*`, `react-native/*`, `expo/*`, and any path into `scripts/ingest`; `no-restricted-globals` blocks DOM globals (`window`, `document`, `localStorage`, etc.). Run via `pnpm --filter @sudoku-squad/core lint`. Web still uses `next lint` (deprecated but currently green).
+- **Playwright** — config + first smoke landed (`apps/web/e2e/single-player.spec.ts`). The smoke loads `/`, navigates to `/play?seed=sample-1`, mashes the Hint button to fill the board, and asserts the completion overlay. Run via `pnpm --filter @sudoku-squad/web test:e2e` (~4 s locally).
+- **CI** (GitHub Actions) — `.github/workflows/ci.yml` runs lint + typecheck + core/ingest tests + sample-pack solver verification + dry-run ingest + web build, plus a separate `e2e` job that installs Chromium and runs the Playwright smoke. Triggered on `push` to main and on every PR.
 - **Supabase Edge Functions, realtime sync, coop, battle, iOS** — Phases 2–4.
 - **Domain, public deploy, Apple Developer account** — see "Deployment scaffolding" above.
 

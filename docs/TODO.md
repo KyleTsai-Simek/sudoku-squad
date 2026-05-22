@@ -58,11 +58,12 @@ Working task list. Checkboxes get checked as work completes. New items added as 
 - [x] Completion celebration screen with "Play another" and "Back to menu" CTAs, showing elapsed time + hint count
 - [ ] Mobile-responsive layout audit on iPhone SE width (375px) and a large phone (420px) — uses clamp-based font sizing already; needs in-device test
 
-### Tooling & CI
-- [ ] ESLint rule: ban DOM/Next/RN imports from `packages/core`
-- [ ] ESLint rule: ban Norvig solver imports from `packages/core` (solver lives in `scripts/ingest`)
-- [ ] Playwright config in `apps/web` + first happy-path smoke (load home page, render board, complete a puzzle)
-- [ ] GitHub Actions CI: lint + typecheck + unit + property tests + Playwright on every PR
+### Tooling & CI ✅
+- [x] ESLint rule: ban DOM/Next/RN imports from `packages/core` (`packages/core/eslint.config.js` — `no-restricted-imports` + `no-restricted-globals`).
+- [x] ESLint rule: ban Norvig solver imports from `packages/core` (`**/scripts/ingest/**` and `@sudoku-squad/ingest` both pattern-blocked, with a message pointing at DECISIONS #0012).
+- [x] Playwright config in `apps/web` + first happy-path smoke (load home page, render board, complete a puzzle via the Hint button, assert overlay).
+- [x] GitHub Actions CI: lint + typecheck + unit + property tests + sample/dry-run + Playwright on every PR and push to main (`.github/workflows/ci.yml`).
+- [ ] Migrate `apps/web` from `next lint` to the ESLint CLI before Next.js 16 removes the wrapper (deprecation warning currently logged but build is green).
 
 ### Deploy
 - [ ] Vercel project connected to GitHub `main`; first deploy succeeds

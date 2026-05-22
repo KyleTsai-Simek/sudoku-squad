@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo 'no unit tests in web — use Playwright for e2e'"
+    "test": "echo 'no unit tests in web — use Playwright for e2e'",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@sudoku-squad/core": "workspace:*",
