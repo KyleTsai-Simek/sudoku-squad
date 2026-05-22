@@ -33,7 +33,8 @@ export function BattleBoard() {
     <div
       role="grid"
       aria-label="Sudoku board"
-      className="grid aspect-square w-full max-w-[min(92vw,560px)] select-none grid-cols-9 overflow-hidden rounded-lg border-2 border-stone-900 bg-stone-900 shadow-sm"
+      // See sudoku-board.tsx for why this snapped width matters.
+      className="grid aspect-square w-[calc(round(down,min(92vw,560px)-4px,9px)+4px)] select-none grid-cols-9 overflow-hidden rounded-lg border-2 border-stone-900 bg-stone-900 shadow-sm"
     >
       {board.cells.map((cell, i) => {
         const { row, col, box } = unitsFor(i);
@@ -79,6 +80,8 @@ export function BattleBoard() {
             className={cn(
               'relative flex items-center justify-center outline-none transition-colors',
               'aspect-square text-[clamp(1rem,4.2vw,1.75rem)] font-medium',
+              // See sudoku-board.tsx for why this base color matters.
+              'border-stone-300',
               bg,
               textColor,
               rightBorder,

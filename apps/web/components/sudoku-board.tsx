@@ -26,7 +26,13 @@ export function SudokuBoard() {
     <div
       role="grid"
       aria-label="Sudoku board"
-      className="grid aspect-square w-full max-w-[min(92vw,560px)] select-none grid-cols-9 overflow-hidden rounded-lg border-2 border-stone-900 bg-stone-900 shadow-sm"
+      // Width is rounded down to (9N + 4)px so the inner content area (after
+      // the 2px container border on each side) is exactly divisible by 9.
+      // This gives every cell an identical integer pixel width, which kills
+      // the sub-pixel anti-aliasing variation that otherwise makes some inner
+      // gridlines look fractionally thicker than others. CSS `round()` is
+      // supported in all modern browsers (Chrome 112+, Safari 15.4+, Firefox 118+).
+      className="grid aspect-square w-[calc(round(down,min(92vw,560px)-4px,9px)+4px)] select-none grid-cols-9 overflow-hidden rounded-lg border-2 border-stone-900 bg-stone-900 shadow-sm"
     >
       {board.cells.map((cell, i) => {
         const { row, col, box } = unitsFor(i);
@@ -73,6 +79,14 @@ export function SudokuBoard() {
             className={cn(
               'relative flex items-center justify-center outline-none transition-colors',
               'aspect-square text-[clamp(1rem,4.2vw,1.75rem)] font-medium',
+              // Unify the base border color for all four sides. Without this,
+              // Tailwind's preflight leaves border-top-color and border-left-color
+              // at the default gray-200 even though their width is 0. At
+              // non-integer cell widths the browser anti-aliases corners by
+              // blending colors from adjacent edges, which surfaces the
+              // gray-200/stone-300 mismatch as faint tonal seams on some
+              // corners. The per-side classes below still win on specificity.
+              'border-stone-300',
               bg,
               textColor,
               rightBorder,
