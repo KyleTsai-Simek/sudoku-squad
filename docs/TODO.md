@@ -25,7 +25,7 @@ Live at https://sudoku-squad-web.vercel.app/. Engine + UI + ingest + tests + CI 
 - [ ] Migrate `apps/web` from `next lint` (deprecated) to the ESLint CLI before Next.js 16 removes the wrapper.
 - [ ] Register `sudokusquad.com` and point at Vercel.
 - [ ] Decide on Vercel preview environment vs. Supabase isolation (today previews hit prod Supabase — fine for V1, revisit before more users).
-- [ ] Revisit expert tier when we have a high-difficulty puzzle source (3M dataset has ~100 rows >7.0, not enough for a 2 500-row sample).
+- [x] Expert tier shipped 2026-05-22. Re-bucketed the whole bank: bands are now `[0,1.5) / [1.5,4) / [4,5) / [5,7)` with per-(tier, clue-count) targets. 2,500 puzzles per tier, 10,000 total. See [DECISIONS #0031](DECISIONS.md). A future "evil" tier (rating 7+) is still future work pending a richer source.
 
 ---
 

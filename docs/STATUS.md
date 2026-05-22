@@ -32,7 +32,7 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
   - `check-connectivity.ts` — 4 RLS sanity checks against the live project.
   - `verify-samples.ts` — verifies the bundled sample pack against the solver and the code algorithm.
 - **`supabase/migrations/`** — `0001_initial.sql` → `0007_realtime_publications.sql`, all applied to the live project via `supabase db push --linked`. Schema documented in [ARCHITECTURE.md §4](ARCHITECTURE.md).
-- **Live puzzle data:** 7 500 rows in the `puzzles` table, sourced from `radcliffe/3-million-sudoku-puzzles-with-ratings` on Kaggle. 2 500 each in easy / medium / hard. Expert tier is 0 by design ([DECISIONS #0018](DECISIONS.md)).
+- **Live puzzle data:** **10,000 rows** in the `puzzles` table, sourced from `radcliffe/3-million-sudoku-puzzles-with-ratings` on Kaggle. **2,500 each in easy / medium / hard / expert**, with per-(tier, clue-count) targets so easy leans toward more clues and expert toward fewer. See [DECISIONS #0031](DECISIONS.md) for bands and target distribution. (Older snapshot was 7,500 with no expert — re-bucketed 2026-05-22.)
 - **`apps/web`** — Next.js 15 + React 19 + Tailwind 3.
   - Routes: `/` (home with per-tier "New game" CTAs) and `/play/[code]` (game screen).
   - Components: `SudokuBoard`, `NumberPad`, `KeyboardController`, `Timer`, `SettingsSheet`, `CompletionOverlay`.

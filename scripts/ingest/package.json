@@ -7,6 +7,8 @@
   "scripts": {
     "ingest": "tsx -r dotenv/config src/index.ts dotenv_config_path=../../.env.local",
     "check": "tsx -r dotenv/config src/check-connectivity.ts dotenv_config_path=../../.env.local",
+    "audit:difficulty": "tsx -r dotenv/config src/audit-difficulty.ts dotenv_config_path=../../.env.local",
+    "preflight:3m": "tsx src/preflight-3m.ts",
     "verify:samples": "tsx src/verify-samples.ts",
     "ingest:dry-fixture": "tsx src/index.ts --dry-run --csv fixtures/synthetic.csv",
     "typecheck": "tsc -p tsconfig.json --noEmit",

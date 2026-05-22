@@ -17,6 +17,38 @@ Format:
 
 ---
 
+## 0031 — Re-bucketing the puzzle bank: 4 tiers, per-(tier, clues) targets
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** The original V1 bank was 7,500 puzzles (2,500 easy/medium/hard, 0 expert) sampled by streaming the Kaggle 3M CSV in order and admitting the first 2,500 hits per rating band. An audit found this skewed easy heavily toward rating 0 (53% of easy were exactly rating 0.0) and left expert empty because the old band `rating > 7.0` matches only ~100 of 3M rows. We also wanted a clue-count gradient: easy should have more clues, expert fewer, matching how players think about difficulty.
+
+**Decision.** New bands (half-open `[lo, hi)`), all 2,500 puzzles:
+
+- `easy`   `[0.0, 1.5)`
+- `medium` `[1.5, 4.0)`
+- `hard`   `[4.0, 5.0)`
+- `expert` `[5.0, 7.0)`
+
+Rows with `rating ≥ 7.0` are skipped entirely — they're outside every band, and the old "fall back to clue count" path was silently admitting them to expert. The new `difficultyForRow` returns `null` when the rating doesn't fall in a band, and the loop skips on null.
+
+Within each tier, a per-clue-count target distribution (`TARGET_PER_CELL` in `scripts/ingest/src/index.ts`) biases the bank: easy mode at 27 clues, expert mode at 22–23 clues, both with intentional spread across the dataset's 20–28 clue support. Each (tier, clue) cell's target was confirmed feasible against the 3M source via a preflight scan (`pnpm preflight:3m`).
+
+Resulting bank: 10,000 puzzles, exactly 2,500 per tier. Clue medians shift cleanly: easy 27, medium 25, hard 23, expert 23. Rating medians shift cleanly: easy 0.0, medium 2.2, hard 4.3, expert 5.3.
+
+**Alternatives considered.**
+- **Stronger lean (e.g., expert mode at 21 clues).** Constrained by source: only 87 of 3M rows are 21-clue + rating 5.0+. We take all 87, but going further would require either more total expert rows (which leaves less variance) or padding from outside the rating band (defeats the purpose).
+- **Preserve the raw rating on each `puzzles` row.** Considered for future analytics — would require a migration adding `rating numeric`. Deferred; the bucket label is sufficient for V1 gameplay.
+- **Skip the re-ingest, re-bucket in-place.** Doesn't help: the rating data isn't stored on the row, only the tier label, and the existing rows were heavily biased toward rating 0 inside easy.
+
+**Consequences.**
+- Truncated `puzzles`, `player_completions`, and `rooms` (which cascades through `room_players` and `moves`). No real users yet, so no migration story needed beyond "any in-flight battle room is gone." Acceptable for V1.
+- The `puzzles` row count is now **10,000** (was 7,500). The home page `listPuzzles()` still pages the full set with 1k-page PostgREST batches.
+- Supersedes the old [DECISIONS #0018](DECISIONS.md) reasoning that expert was deferred pending a richer puzzle source — we now have a usable expert tier (5.0–7.0 rating) from the existing 3M dataset. A true "evil" tier (rating 7+) remains future work.
+- New utility scripts: `pnpm --filter @sudoku-squad/ingest preflight:3m` (scan source distribution) and `pnpm --filter @sudoku-squad/ingest audit:difficulty` (audit the live DB). Both are idempotent + read-only (except the live `ingest --truncate` itself).
+
+---
+
 ## 0030 — Return-to-lobby cycle: same room, `has_returned` per player
 **Date:** 2026-05-22
 **Status:** Accepted

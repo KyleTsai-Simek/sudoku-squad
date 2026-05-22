@@ -26,18 +26,42 @@ import { hasUniqueSolution, solve } from './solver';
 type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
 
 const TIERS: Difficulty[] = ['easy', 'medium', 'hard', 'expert'];
-// V1 ingest is easy/medium/hard only. The 3M dataset has very few rows rated
-// >7.0 (~100 of 3M), so an "expert" tier samples poorly today. The raw rows
-// remain in scripts/ingest/data/sudoku-3m.csv — bump this back to 2500 (or
-// lower) once we have a richer high-difficulty source. See STATUS.md.
-const TARGET_PER_TIER: Record<Difficulty, number> = {
-  easy: 2500,
-  medium: 2500,
-  hard: 2500,
-  expert: 0,
+
+/**
+ * Rating bands (half-open: [lo, hi)) applied to the 3M dataset's numeric
+ * `difficulty` column. Picked after auditing the source distribution — see
+ * docs/DECISIONS.md #0031 (re-bucketing).
+ */
+const RATING_BANDS: ReadonlyArray<{ tier: Difficulty; lo: number; hi: number }> = [
+  { tier: 'easy',   lo: 0.0, hi: 1.5 },
+  { tier: 'medium', lo: 1.5, hi: 4.0 },
+  { tier: 'hard',   lo: 4.0, hi: 5.0 },
+  { tier: 'expert', lo: 5.0, hi: 7.0 },
+];
+
+/**
+ * Per-(tier, clue-count) target distribution. Designed so easy leans toward
+ * more clues, expert leans toward fewer, with monotonic shifts across tiers.
+ * Within the 3M dataset's narrow clue-count support (94% of rows are 23-26
+ * clues), these targets are feasible — each cell's source-row availability
+ * was confirmed by the preflight scan. Totals to 2,500 per tier (10,000 total).
+ *
+ * If a cell is unreachable (source rows insufficient), the script will warn
+ * and leave the bucket short rather than fail.
+ */
+const TARGET_PER_CELL: Record<Difficulty, Record<number, number>> = {
+  // Stronger lean toward MORE clues. Mode at 27.
+  easy:   { 23: 50,  24: 100, 25: 250, 26: 600, 27: 1000, 28: 500 },
+  // Roughly balanced around 24-25.
+  medium: { 22: 100, 23: 400, 24: 700, 25: 700, 26: 450,  27: 150 },
+  // Lean toward FEWER clues. Mode at 23.
+  hard:   { 21: 150, 22: 750, 23: 950, 24: 500, 25: 125,  26: 25 },
+  // Strong lean toward fewest clues. Take all available at clue counts 20-21.
+  expert: { 20: 4,   21: 87,  22: 800, 23: 1200, 24: 350, 25: 50, 26: 9 },
 };
-const BATCH_SIZE = 250;
-const PROGRESS_EVERY = 5000;
+
+const BATCH_SIZE = 500;
+const PROGRESS_EVERY = 50000;
 
 const DATA_DIR = resolve(import.meta.dirname, '../data');
 
@@ -119,6 +143,15 @@ function difficultyFromClues(clues: number): Difficulty {
   return 'expert';
 }
 
+/** Classify by numeric rating using the current RATING_BANDS. Returns null
+ *  for ratings outside any band (e.g. ≥ 7.0). */
+function tierForRating(n: number): Difficulty | null {
+  for (const b of RATING_BANDS) {
+    if (n >= b.lo && n < b.hi) return b.tier;
+  }
+  return null;
+}
+
 /** Map a free-form difficulty label from the dataset to one of our four tiers. */
 function normalizeDifficulty(label: string): Difficulty | null {
   const v = label.trim().toLowerCase();
@@ -127,14 +160,9 @@ function normalizeDifficulty(label: string): Difficulty | null {
   if (v === 'medium' || v === 'moderate' || v === '2') return 'medium';
   if (v === 'hard' || v === 'difficult' || v === '3') return 'hard';
   if (v === 'expert' || v === 'evil' || v === 'insane' || v === '4') return 'expert';
-  // Numeric rating: heuristic split.
+  // Numeric rating: use the current bands.
   const n = Number(v);
-  if (Number.isFinite(n)) {
-    if (n <= 2.5) return 'easy';
-    if (n <= 5) return 'medium';
-    if (n <= 7) return 'hard';
-    return 'expert';
-  }
+  if (Number.isFinite(n)) return tierForRating(n);
   return null;
 }
 
@@ -148,10 +176,24 @@ function pickColumns(row: Record<string, string>): CandidateRow | null {
   return { puzzle, solution };
 }
 
+/**
+ * Returns the tier for a row, or null to indicate "skip this row entirely."
+ *
+ * Logic:
+ *  - If a rating/difficulty label is present and parses to one of our tiers,
+ *    use it.
+ *  - If the label is present but the parsed numeric rating falls OUTSIDE
+ *    every configured band (e.g., rating ≥ 7.0 with the current bands),
+ *    return null — never fall through to the clue-count heuristic. The
+ *    explicit rating is authoritative; treating a rating-7.5 puzzle as
+ *    "expert" via clue-count would silently include puzzles harder than
+ *    our top band.
+ *  - Only if NO label is present at all do we fall back to clue count.
+ */
 function difficultyForRow(
   row: Record<string, string>,
   clues: number,
-): Difficulty {
+): Difficulty | null {
   const label =
     row['difficulty'] ??
     row['level'] ??
@@ -159,21 +201,54 @@ function difficultyForRow(
     row['difficulty_rating'] ??
     null;
   if (label) {
-    const norm = normalizeDifficulty(label);
-    if (norm) return norm;
+    return normalizeDifficulty(label); // may be null → skip
   }
   return difficultyFromClues(clues);
 }
 
-function tiersFull(buckets: Record<Difficulty, SampledPuzzle[]>): boolean {
+/** Aggregate target for a given (tier, clues) cell, or 0 if not configured. */
+function targetFor(tier: Difficulty, clues: number): number {
+  return TARGET_PER_CELL[tier][clues] ?? 0;
+}
+
+/** Sum of every cell's target across all tiers. */
+function totalTarget(): number {
+  let n = 0;
   for (const t of TIERS) {
-    if (buckets[t].length < TARGET_PER_TIER[t]) return false;
+    for (const v of Object.values(TARGET_PER_CELL[t])) n += v;
+  }
+  return n;
+}
+
+interface CellCounter {
+  filled: number;
+  target: number;
+}
+
+function buildCellCounters(): Record<Difficulty, Map<number, CellCounter>> {
+  const out = {} as Record<Difficulty, Map<number, CellCounter>>;
+  for (const t of TIERS) {
+    const m = new Map<number, CellCounter>();
+    for (const [clueStr, target] of Object.entries(TARGET_PER_CELL[t])) {
+      m.set(Number(clueStr), { filled: 0, target });
+    }
+    out[t] = m;
+  }
+  return out;
+}
+
+function allCellsFull(counters: Record<Difficulty, Map<number, CellCounter>>): boolean {
+  for (const t of TIERS) {
+    for (const c of counters[t].values()) {
+      if (c.filled < c.target) return false;
+    }
   }
   return true;
 }
 
 async function main(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run');
+  const truncate = process.argv.includes('--truncate');
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!dryRun && (!url || !serviceKey)) {
@@ -185,9 +260,11 @@ async function main(): Promise<void> {
   const explicitCsv = parseFlag('--csv');
   const path = findCsv(explicitCsv);
   console.log(`Reading ${path}`);
-  console.log(
-    `Target per tier: ${TIERS.map((t) => `${t}=${TARGET_PER_TIER[t]}`).join(', ')}`,
-  );
+  console.log('Rating bands:');
+  for (const b of RATING_BANDS) {
+    console.log(`  ${b.tier.padEnd(7)} [${b.lo.toFixed(1)}, ${b.hi.toFixed(1)})`);
+  }
+  console.log(`Total target across all (tier, clues) cells: ${totalTarget()}`);
 
   const admin = dryRun
     ? null
@@ -201,21 +278,44 @@ async function main(): Promise<void> {
       .select('*', { count: 'exact', head: true });
     if (countErr) throw countErr;
     console.log(`Existing puzzles row count: ${existing ?? 0}`);
-    if ((existing ?? 0) > 0) {
+    if (truncate) {
       console.log(
-        'Note: appending to existing rows. Truncate manually if you want a clean slate.',
+        '\n--truncate set: wiping puzzles + everything that references it (player_completions, rooms — which cascades to room_players + moves).',
+      );
+      // Service-role bypasses RLS. Delete in dependency order. We use a
+      // `.neq()` filter because PostgREST refuses unfiltered DELETE; the
+      // sentinel value (zero UUID / empty string) can't legitimately match
+      // any real row, so the filter is effectively a no-op and we hit every
+      // row. room_players + moves get cleared via `on delete cascade` when
+      // rooms goes.
+      const zeroUuid = '00000000-0000-0000-0000-000000000000';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const a = admin as any;
+      const deleters: Array<{ table: string; whereCol: string; whereVal: string }> = [
+        { table: 'player_completions', whereCol: 'puzzle_code', whereVal: '___sentinel___' },
+        { table: 'rooms',              whereCol: 'id',          whereVal: zeroUuid },
+        { table: 'puzzles',            whereCol: 'id',          whereVal: zeroUuid },
+      ];
+      for (const d of deleters) {
+        const before = await a.from(d.table).select('*', { count: 'exact', head: true });
+        const { error } = await a.from(d.table).delete().neq(d.whereCol, d.whereVal);
+        if (error) {
+          throw new Error(`Could not clear ${d.table}: ${error.message}`);
+        }
+        const after = await a.from(d.table).select('*', { count: 'exact', head: true });
+        console.log(`  ${d.table}: ${before.count ?? 0} → ${after.count ?? 0}`);
+      }
+    } else if ((existing ?? 0) > 0) {
+      console.log(
+        'Note: appending to existing rows. Pass --truncate to wipe and rebuild from scratch.',
       );
     }
   } else {
     console.log('Dry-run mode: Supabase writes disabled.');
   }
 
-  const buckets: Record<Difficulty, SampledPuzzle[]> = {
-    easy: [],
-    medium: [],
-    hard: [],
-    expert: [],
-  };
+  const counters = buildCellCounters();
+  const buckets: Record<Difficulty, SampledPuzzle[]> = { easy: [], medium: [], hard: [], expert: [] };
   const rejects = { parse: 0, nonUnique: 0, mismatch: 0 };
   let scanned = 0;
 
@@ -242,10 +342,15 @@ async function main(): Promise<void> {
       continue;
     }
 
-    const tier = difficultyForRow(row, countClues(givens));
-    if (buckets[tier].length >= TARGET_PER_TIER[tier]) continue;
+    const clues = countClues(givens);
+    const tier = difficultyForRow(row, clues);
+    if (!tier) continue; // rating present but outside every band
+    // Skip cells that don't have a target (e.g., clue count outside the
+    // configured range) or are already full.
+    const cell = counters[tier].get(clues);
+    if (!cell || cell.filled >= cell.target) continue;
 
-    // Verify uniqueness — this is the load-bearing check per DECISIONS.md #0011/#0012.
+    // Verify uniqueness — load-bearing per DECISIONS.md #0011/#0012.
     if (!hasUniqueSolution(givens)) {
       rejects.nonUnique++;
       continue;
@@ -273,9 +378,10 @@ async function main(): Promise<void> {
       givens,
       solution: solved,
     });
+    cell.filled++;
 
-    if (tiersFull(buckets)) {
-      console.log(`All tiers reached target after ${scanned} rows.`);
+    if (allCellsFull(counters)) {
+      console.log(`All (tier, clues) cells reached target after ${scanned} rows.`);
       break;
     }
   }
@@ -285,6 +391,19 @@ async function main(): Promise<void> {
   console.log(
     `Rejects — parse:${rejects.parse} non-unique:${rejects.nonUnique} mismatch:${rejects.mismatch}`,
   );
+
+  // Per-cell achievement report — flag any unfilled cells.
+  console.log('\nPer-cell achievement:');
+  for (const t of TIERS) {
+    const parts: string[] = [];
+    let short = false;
+    for (const [clues, c] of [...counters[t].entries()].sort((a, b) => a[0] - b[0])) {
+      const tag = c.filled < c.target ? ` (SHORT: target ${c.target})` : '';
+      if (c.filled < c.target) short = true;
+      parts.push(`${clues}c=${c.filled}${tag}`);
+    }
+    console.log(`  ${t.padEnd(7)} ${parts.join(', ')}${short ? '  ← under target' : ''}`);
+  }
 
   const total = TIERS.reduce((acc, t) => acc + buckets[t].length, 0);
   if (total === 0) {
