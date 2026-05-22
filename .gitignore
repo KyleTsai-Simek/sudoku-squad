@@ -46,6 +46,8 @@ scripts/ingest/data/
 *.csv
 # Small in-repo CSV fixtures are OK
 !scripts/ingest/fixtures/*.csv
+# Kaggle notebooks pulled for reference — never source-of-truth
+scripts/ingest/notebooks/
 
 # Supabase local dev
 supabase/.branches

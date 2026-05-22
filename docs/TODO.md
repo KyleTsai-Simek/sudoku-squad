@@ -40,11 +40,12 @@ Working task list. Checkboxes get checked as work completes. New items added as 
 - [x] Sample puzzle pack bundled in `apps/web/lib/sample-puzzles.ts` (5 puzzles, solver-verified) — unblocks single-player UI until the real ingest lands. See [DECISIONS.md #0017](DECISIONS.md).
 - [x] `verify-samples.ts` script + `pnpm verify:samples` — solver checks the bundled pack for uniqueness and matching solutions.
 - [x] CSV streamer (`src/csv.ts`), bucketed sampler + solver-verified ingest in `src/index.ts`. Auto-detects header layout, buckets by `difficulty` column when present else by clue count, targets 2500 per tier (10000 total). `--dry-run` and `--csv <path>` flags for safe iteration. Repeatable fixture-based dry-run via `pnpm ingest:dry-fixture`.
-- [ ] **User action:** download the Kaggle 1M CSV to `scripts/ingest/data/` (see README).
-- [ ] Run `pnpm --filter @sudoku-squad/ingest ingest` against the real dataset; verify counts come back near targets.
-- [ ] After ingest: re-run `pnpm --filter @sudoku-squad/ingest check` — should show non-zero rows and become a stronger RLS test.
-- [ ] Tighten `check-connectivity.ts` to verify anon canNOT read `puzzles.solution` even when rows exist (insert test row → query as anon → confirm empty result).
-- [ ] Swap `apps/web` single-player to fetch from Supabase `puzzles_public` instead of the bundled pack; keep the pack as an offline fallback. (Will need an Edge Function for the hint/completion path so the solution stays server-side. Phase 2 prep.)
+- [x] Downloaded the Kaggle 3M CSV (`radcliffe/3-million-sudoku-puzzles-with-ratings`) to `scripts/ingest/data/sudoku-3m.csv`. Stored locally; gitignored.
+- [x] Ran the ingest against the real dataset. 7500 rows in Supabase (2500 each easy/medium/hard, 0 expert by design).
+- [x] Migration 0002 applied — `puzzles_public` is now a security-definer view (anon can read), `solution` still hidden.
+- [x] `check-connectivity.ts` tightened: now asserts (a) anon reads `puzzles_public`, (b) anon's direct read of `puzzles` returns 0 rows despite 7500 existing, (c) anon cannot request `solution` from `puzzles_public`.
+- [ ] Swap `apps/web` single-player to fetch from Supabase `puzzles_public` instead of the bundled pack; keep the pack as an offline fallback. (Hint/completion check needs an Edge Function so the solution stays server-side. Phase 2 prep.)
+- [ ] Revisit expert tier when we have a high-difficulty source (the 3M dataset has only ~100 puzzles rated >7.0; insufficient for a 2500-row sample).
 
 ### `apps/web` — single player UI ✅ (modulo mobile audit)
 - [x] Replace placeholder home page with "New Game" CTA + Quick Start grid (5 sample puzzles)

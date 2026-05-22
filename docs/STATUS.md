@@ -1,7 +1,7 @@
 # Status
 
-**Last updated:** 2026-05-21
-**Current phase:** Phase 1 (single-player web) — most of the vertical slice is playable; Kaggle ingest + CI/deploy remain.
+**Last updated:** 2026-05-22
+**Current phase:** Phase 1 (single-player web) — vertical slice playable, puzzles in Supabase, CI green locally. Deploy + web→Supabase swap remain.
 **Branch:** `main`
 
 This doc captures *where we actually are*. Update it whenever a phase milestone lands or the current focus shifts. If you're a new agent or contributor picking this up cold, this is the single best starting place.
@@ -35,7 +35,8 @@ This doc captures *where we actually are*. Update it whenever a phase milestone 
   - Sample puzzle pack lives in `lib/sample-puzzles.ts` (5 puzzles, solver-verified). Replace with Supabase fetch once ingest lands. See [DECISIONS.md #0017](DECISIONS.md).
   - Interaction verified in-browser (Claude Preview): cell selection, row/col/box + same-value highlights, conflict highlighting (rule-based, no solution leak), notes mode (UI wired), keyboard input, undo/redo, hint (reveals correct value from solution; locally OK in single-player), timer, settings, completion overlay with elapsed time + hint count.
   - Build green (`pnpm --filter @sudoku-squad/web build`), zero console errors at runtime.
-- **`supabase/migrations/0001_initial.sql`** — applied. `puzzles`, `rooms`, `room_players`, `moves`, `puzzles_public` view, first cut of RLS policies.
+- **`supabase/migrations/0001_initial.sql` + `0002_puzzles_public_security_definer.sql`** — both applied to the live project. 0002 fixed a latent bug in the `puzzles_public` view (`security_invoker = true` made it inherit anon's lack of RLS allow on `puzzles`, returning 0 rows even when the table was full).
+- **Live puzzle data:** 7500 puzzles ingested from the Kaggle 3M dataset (`radcliffe/3-million-sudoku-puzzles-with-ratings`). 2500 each in easy/medium/hard tiers — see [DECISIONS.md #0018](DECISIONS.md). Expert is currently 0 (the dataset has only ~100 puzzles rated >7.0; we'll revisit when we have a richer high-difficulty source).
 - **Deployment scaffolding:** Supabase project `enaavxfrjlqqslziyypq.supabase.co`. GitHub `KyleTsai-Simek/sudoku-squad`. Vercel not yet wired. Domain not registered.
 
 ### Verified working end-to-end
@@ -49,7 +50,7 @@ This doc captures *where we actually are*. Update it whenever a phase milestone 
 | Core lint (purity rules) | `pnpm --filter @sudoku-squad/core lint` | clean; rules verified to fire on injected violations |
 | Web lint (next) | `pnpm --filter @sudoku-squad/web lint` | clean |
 | Playwright smoke | `pnpm --filter @sudoku-squad/web test:e2e` | 1/1 passing (~4 s) |
-| Supabase connectivity + RLS | `pnpm --filter @sudoku-squad/ingest check` | 3/3 (yellow note expected while `puzzles` is empty) |
+| Supabase connectivity + RLS | `pnpm --filter @sudoku-squad/ingest check` | 4/4 — anon reads `puzzles_public`, can't read `puzzles.solution` directly, and can't request `solution` via the view |
 | Web typecheck | `pnpm --filter @sudoku-squad/web typecheck` | clean |
 | Web production build | `pnpm --filter @sudoku-squad/web build` | clean |
 | Dev server | `pnpm dev` → `localhost:3000` (or `3001` if taken) | renders, plays through to completion |
@@ -58,7 +59,7 @@ This doc captures *where we actually are*. Update it whenever a phase milestone 
 
 ## What does NOT yet exist
 
-- **Real puzzles in Supabase** — the ingest pipeline is written and dry-run-tested, but the `puzzles` table is still empty until someone drops the Kaggle CSV into `scripts/ingest/data/` and runs `pnpm --filter @sudoku-squad/ingest ingest`. See `scripts/ingest/README.md`. Single-player uses the bundled `apps/web/lib/sample-puzzles.ts` until that happens.
+- **Web app fetching from Supabase** — single-player still uses the bundled `apps/web/lib/sample-puzzles.ts`. The `puzzles` table now has real data, so the next step is swapping the fetch and (for Phase 2 cleanliness) keeping the hint/completion check server-side. Tracked in TODO.
 - **Auto-eliminate notes** — Setting exposed in the sheet but disabled (placeholder for V2).
 - **ESLint rules** for `packages/core` purity — wired. `no-restricted-imports` blocks `next/*`, `react-dom/*`, `react-native/*`, `expo/*`, and any path into `scripts/ingest`; `no-restricted-globals` blocks DOM globals (`window`, `document`, `localStorage`, etc.). Run via `pnpm --filter @sudoku-squad/core lint`. Web still uses `next lint` (deprecated but currently green).
 - **Playwright** — config + first smoke landed (`apps/web/e2e/single-player.spec.ts`). The smoke loads `/`, navigates to `/play?seed=sample-1`, mashes the Hint button to fill the board, and asserts the completion overlay. Run via `pnpm --filter @sudoku-squad/web test:e2e` (~4 s locally).

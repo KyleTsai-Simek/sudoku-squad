@@ -17,6 +17,34 @@ Format:
 
 ---
 
+## 0018 — V1 puzzle pool: 7 500 rows from the Kaggle 3M dataset, no expert tier yet
+**Date:** 2026-05-22
+**Status:** Accepted (supersedes parts of [#0011](#0011))
+
+**Context.** The actual ingest had to choose: (a) which Kaggle variant to mine, (b) how many puzzles to take, (c) what difficulty mix. We dry-ran against the user-selected dataset, `radcliffe/3-million-sudoku-puzzles-with-ratings`, before committing to an insert.
+
+**Decision.** Ingest 7 500 puzzles — 2 500 each in `easy` / `medium` / `hard`. Expert tier target is **0** for now. Difficulty is read from the dataset's numeric rating with these cut points:
+
+| Tier | Rating |
+|---|---|
+| easy | ≤ 2.5 |
+| medium | 2.5 – 5.0 |
+| hard | 5.0 – 7.0 |
+| expert | > 7.0 |
+
+**Alternatives considered.**
+- Use the 1M Kaggle dataset (`bryanpark/sudoku`). Smaller, no difficulty column — we'd have to derive difficulty from clue count. The 3M dataset has both rating and clue count, so it's a strict superset of useful signal.
+- Target 10 000 puzzles (2 500 × 4 tiers). Rejected because the 3M dataset only has ~100 puzzles rated > 7.0 — not enough for a meaningful expert sample. Sampling forced rebucketing of "expert" to mean something looser than the standard sudoku-app definition, which we'd rather not do.
+- Skip the rating column and bucket purely by clue count. Rejected because this dataset's clue counts cluster in 22–26, so clue-count buckets all collapse into hard/expert — wouldn't give us an easy tier at all.
+
+**Consequences.**
+- Live `puzzles` table has 7 500 rows. Web single-player still uses the bundled pack until the Supabase fetch lands.
+- Expert tier is empty in V1. If/when we want one, we either (a) source from a different high-difficulty pack and re-run with `expert = 2500`, or (b) loosen the threshold (would re-bucket what "expert" means).
+- The 535 MB source CSV is gitignored in `scripts/ingest/data/sudoku-3m.csv`. Re-running the ingest later picks up wherever it left off (it appends; truncate manually for a clean slate).
+- The `puzzles_public` view had to be re-created in migration 0002 to make this useful — the original `security_invoker = true` setting made the view return zero rows to anon.
+
+---
+
 ## 0017 — Bundled sample-puzzle pack as the single-player source until ingest lands
 **Date:** 2026-05-21
 **Status:** Accepted

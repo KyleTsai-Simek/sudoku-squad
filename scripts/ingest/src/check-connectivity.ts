@@ -41,8 +41,11 @@ async function main(): Promise<void> {
   const admin = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
   // 1. URL reachable + 2. anon can read puzzles_public
+  let anonViewCount = 0;
   {
-    const { data, error } = await anon.from('puzzles_public').select('id').limit(1);
+    const { data, error } = await anon
+      .from('puzzles_public')
+      .select('id', { count: 'exact' });
     if (error) {
       if (error.message.includes('relation') || error.code === '42P01') {
         fail('puzzles_public view not found. Did you apply supabase/migrations/0001_initial.sql?');
@@ -51,10 +54,25 @@ async function main(): Promise<void> {
       fail(`Unexpected error reading puzzles_public: ${error.message}`);
       process.exit(1);
     }
-    ok(`Anon client connected. puzzles_public returned ${data?.length ?? 0} row(s).`);
+    anonViewCount = data?.length ?? 0;
+    ok(`Anon client connected. puzzles_public returned ${anonViewCount} row(s).`);
   }
 
-  // 3. Anon must NOT be able to read the underlying puzzles table (which contains `solution`).
+  // 3. Service role can read puzzles (gets the ground-truth row count).
+  let trueCount = 0;
+  {
+    const { error, count } = await admin.from('puzzles').select('*', { count: 'exact', head: true });
+    if (error) {
+      fail(`Service role cannot read puzzles: ${error.message}`);
+      process.exit(1);
+    }
+    trueCount = count ?? 0;
+    ok(`Service role connected. puzzles table has ${trueCount} row(s).`);
+  }
+
+  // 4. Anon must NOT be able to read the underlying puzzles table (which contains `solution`).
+  // Now that we have ground-truth row count, this is a real test: if the table has rows but
+  // anon sees zero, RLS is doing its job. Empty table makes the check inconclusive.
   {
     const { data, error } = await anon.from('puzzles').select('solution').limit(1);
     if (error) {
@@ -62,21 +80,28 @@ async function main(): Promise<void> {
     } else if (data && data.length > 0) {
       fail('SECURITY: anon was able to read puzzles.solution. RLS is wrong.');
       process.exit(2);
+    } else if (trueCount > 0) {
+      ok(`Anon correctly got 0 rows from puzzles despite ${trueCount} real rows (RLS deny).`);
     } else {
-      // No error and empty array — depending on Supabase config this can happen when the table
-      // is empty AND RLS denies; either way, we should ensure RLS is in fact enabled.
-      warn('Anon got an empty response (no rows) from puzzles. Verify the table is empty AND RLS is enabled.');
+      warn('Anon got 0 rows from puzzles, but the table is also empty — this is inconclusive. Re-run after ingest.');
     }
   }
 
-  // 4. Service role can read puzzles
+  // 5. anon's puzzles_public view must NOT expose the `solution` column.
   {
-    const { error, count } = await admin.from('puzzles').select('*', { count: 'exact', head: true });
+    const { data, error } = await anon
+      .from('puzzles_public')
+      // PostgREST: requesting a column not in the view returns a 400-ish error.
+      .select('solution')
+      .limit(1);
     if (error) {
-      fail(`Service role cannot read puzzles: ${error.message}`);
-      process.exit(1);
+      ok(`Anon correctly cannot select \`solution\` from puzzles_public (${error.code ?? 'denied'}).`);
+    } else if (data && data.length > 0 && Object.prototype.hasOwnProperty.call(data[0], 'solution')) {
+      fail('SECURITY: puzzles_public exposes the solution column.');
+      process.exit(2);
+    } else {
+      ok('puzzles_public does not expose solution.');
     }
-    ok(`Service role connected. puzzles table has ${count ?? 0} row(s).`);
   }
 
   console.log('\nAll checks passed.');

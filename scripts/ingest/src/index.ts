@@ -25,11 +25,15 @@ import { hasUniqueSolution, solve } from './solver';
 type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
 
 const TIERS: Difficulty[] = ['easy', 'medium', 'hard', 'expert'];
+// V1 ingest is easy/medium/hard only. The 3M dataset has very few rows rated
+// >7.0 (~100 of 3M), so an "expert" tier samples poorly today. The raw rows
+// remain in scripts/ingest/data/sudoku-3m.csv — bump this back to 2500 (or
+// lower) once we have a richer high-difficulty source. See STATUS.md.
 const TARGET_PER_TIER: Record<Difficulty, number> = {
   easy: 2500,
   medium: 2500,
   hard: 2500,
-  expert: 2500,
+  expert: 0,
 };
 const BATCH_SIZE = 250;
 const PROGRESS_EVERY = 5000;
