@@ -1,7 +1,7 @@
 # Status
 
 **Last updated:** 2026-05-22
-**Current phase:** Phase 2 in progress. Lobby + game start + move submission + winner detection all wired end-to-end. Hint Edge Function and a few polish items remain.
+**Current phase:** Phase 2 in progress. Lobby + game start + move submission + winner detection all wired end-to-end. UX expansion in flight (8-player cap, lobby settings, public lobbies, return-to-lobby cycle, persistent completion count) — see [DECISIONS.md #0026–#0030](DECISIONS.md) and TODO chunks A–H.
 **Branch:** `main`
 **Live:** https://sudoku-squad-web.vercel.app/
 

@@ -39,7 +39,7 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope.
 - [x] Edge Function `join-room({code, username}) → {room_id, room_code, player_id, color, is_host, rejoined, ...}`. Enforces mid-game-join policy per [DECISIONS #0024](DECISIONS.md). Rejoin is idempotent.
 - [x] Edge Function `start-game({room_id})` — host-only. Transitions room.status `lobby → playing`. Sets `started_at`. Realtime broadcast fires automatically via the rooms publication.
 - [x] Edge Function `submit-move({room_id, cell, kind, value})` — validates, assigns next per-room `seq` (retries on unique-violation), inserts into `moves`, recomputes progress_pct, on progress=100 atomically transitions room → finished with winner. Server-side completion is fully inline; no separate `check-completion`.
-- [ ] Edge Function `hint({room_id, player_id, cell}) → {value}` — multiplayer hint path. Counts toward visible "X used a hint" indicator in battle. Currently SP only has hint (via `sp_get_puzzle`); battle pad omits it.
+- [ ] **Hint removed for V1.** Per the May 22 product changes, the SP Hint button is being dropped (Chunk A below). The `sp_get_puzzle` RPC stays for auto-check. The multiplayer `hint` Edge Function is no longer planned.
 
 ### `packages/core` — sync (new module, lands in this phase)
 - [~] **Deferred for V1.** The web client's `lib/battle-store.ts` does optimistic apply directly (no reconciler) and the server is authoritative — move rejection is rare enough that we don't roll back, just surface an error. When iOS lands or when coop's LWW forces the issue, lift this into `packages/core/src/sync/` with the reconciler design from ROADMAP.
@@ -57,7 +57,20 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope.
 - [ ] Play-again flow ("create a fresh room with the same players").
 - [ ] Polish: losers can keep solving their own board after a winner is declared. Currently the board freezes when room.status='finished' broadcasts.
 
-### Testing
+### Phase 2 UX expansion (May 22 product changes — chunks A–H)
+
+Sequenced so each chunk leaves the app working. ADRs [#0026](DECISIONS.md)–[#0030](DECISIONS.md) capture the design.
+
+- [ ] **Chunk A — hint removal + winner copy + confetti.** Drop the SP Hint button. Winner overlay: self → "You won!"; other → "[username] won"; remove "Better luck next time". Add `canvas-confetti` and fire on SP completion + battle winner overlay.
+- [ ] **Chunk B — persistent username from CSV.** User drops `apps/web/lib/data/usernames.csv` (two columns: adjective, noun). Add `scripts/build-word-lists.ts` to convert → `word-lists.generated.ts` (committed). `lib/username.ts` uses the larger pool. Drop the `-NN` suffix unless wordlist is too small.
+- [ ] **Chunk C — 8-player palette + cap.** `room-code.ts` palette: 8 hex values per [#0026](DECISIONS.md). `join-room` cap 4 → 8. Player count copy updated.
+- [ ] **Chunk D — lobby settings panel.** Host toggles show conflicts / auto-check / highlight same value. Stored in `rooms.settings`. New `update-room-settings` Edge Function (lobby-only, host-only). Lock at Start. `submit-move` returns `cell_correct` when `settings.autoCheck` is on so the client can flag wrong entries.
+- [ ] **Chunk E — synced 5-second countdown.** Clients compute the countdown from `rooms.started_at`. Board visible but locked during. Elapsed timer starts at zero after countdown.
+- [ ] **Chunk F — persistent puzzle count.** Migration 0008: `player_completions` table. `submit-move` inserts on multiplayer win. New `record_completion` RPC for SP (called from CompletionOverlay). New `get_completion_count` RPC for home page. Replace localStorage `solved-tracker` reads.
+- [ ] **Chunk G — public lobbies + host kick.** Migration 0009: `rooms.is_public boolean`. Home page "Public lobbies" list with Realtime updates. `update-room-settings` toggles is_public. New `kick-player` Edge Function (host-only). Lobby UI: host gets kick buttons; kicked player redirects home.
+- [ ] **Chunk H — return-to-lobby cycle.** Migration 0010: `room_players.has_returned`. `playing → finished` flips all to false. New `return-to-lobby` Edge Function flips caller true + room status finished → lobby. Lobby UI: non-returned players greyed with 3-dot animation; host can kick. `start-game` on a previously-played room: clear `moves`, pick a new puzzle, reset progress/winner/finished_at, new `started_at`. Winner overlay: "Back to menu" → "Return to lobby" (secondary back-to-menu kept).
+
+### Phase 2 testing
 - [ ] Two-browser manual test: both join, both play, one finishes, winner declared correctly.
 - [ ] Race-condition test: both submit a completing move within milliseconds — exactly one wins.
 - [ ] Playwright two-context smoke ([DECISIONS #0013](DECISIONS.md)) — the harness lands here so Phase 3 inherits it.

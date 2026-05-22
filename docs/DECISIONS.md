@@ -17,6 +17,127 @@ Format:
 
 ---
 
+## 0030 — Return-to-lobby cycle: same room, `has_returned` per player
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** After a battle/coop ends, players want to play again with the same group. Two natural shapes: cycle the same room (status `lobby → playing → finished → lobby`) or create a fresh room each round. Players might also be at different rates — the winner is done immediately but a losing player may want to finish solving their own board first.
+
+**Decision.** Same room cycles. Add `room_players.has_returned boolean default true`. When `room.status` transitions `playing → finished`, server flips every player's `has_returned = false`. A `return-to-lobby` Edge Function flips the caller's `has_returned = true` and transitions `room.status → lobby` if it isn't already. Players who haven't returned render greyed-out with a 3-dot waiting animation; the host can kick non-returned players to start sooner.
+
+The host's "Start new game" succeeds only when every player has `has_returned = true`. The same `start-game` Edge Function does the reset: clears moves, picks a new random puzzle for the room, resets every `progress_pct` to 0, clears `winner_player_id` + `finished_at`, sets a new `started_at`.
+
+**Alternatives considered.**
+- **New room each round.** Cleaner per-game state; cheaper to reason about. Rejected because URL changes mid-flow feel less like "same room" and we'd need to broadcast the new room code to all current players.
+- **Force everyone to finish before lobby reopens.** Stricter; punishes the winner with a wait.
+- **Just navigate back to home and have everyone manually rejoin the same code.** Works, but it's friction.
+
+**Consequences.**
+- Two new state transitions on `rooms`: `finished → lobby` (idempotent) and `lobby → playing` (already exists but now usable on a previously-played room — the function clears prior state). Both must be atomic with respect to other writers.
+- `moves` is wiped on each new game. That's fine — the move log is per-game; we don't yet have a "match history" feature that needs to keep it.
+- This subsumes the "losers can keep solving" item ([previously task #27](TODO.md)): the loser sees the same finished-game UI until they explicitly click "Return to lobby". They can keep typing into their board until then. The server already refuses `submit-move` on `status='finished'`, so late typing is local-only; a later polish pass can make `submit-move` permissive for losers on finished rooms.
+
+---
+
+## 0029 — Public lobbies + host kick
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** Friend-and-family invites work via shared link, but discovery is also useful — open a room so anyone can join. Hosts need a kick to handle griefers or no-shows.
+
+**Decision.** Two related additions:
+
+- **`rooms.is_public boolean default false`.** Host toggles in the lobby. Public rooms appear in a new "Public lobbies" list on the home page (rooms whose `is_public = true` AND `status IN ('lobby', 'playing')`). The list refreshes via a Realtime subscription on `rooms`.
+- **`kick-player({room_id, player_id})` Edge Function.** Host-only. Deletes the target row from `room_players`. The target's existing `room_players` subscription sees the delete and the client redirects them home with a message.
+
+**Alternatives considered.**
+- **Always-private; friend invites only.** Simpler but loses the discovery vibe that makes the multiplayer feel like a community.
+- **Ban list per room.** Would let a kicked player not rejoin. Defer — repeat kick is acceptable for V1.
+
+**Consequences.**
+- No RLS change is needed for public listing — `rooms_read_all` already lets anon read every room. The home page just filters by `is_public = true`.
+- Kick is destructive. The Edge Function is the authority — RLS doesn't need to grant the delete to clients.
+- Public lobbies need light moderation later (username profanity filter — see Open Questions). Not blocking V1 since the kick is host-controlled.
+
+---
+
+## 0028 — Per-player puzzle completions stored server-side
+**Date:** 2026-05-22
+**Status:** Accepted (supersedes the localStorage-only solved tracker in `lib/solved-tracker.ts`)
+
+**Context.** Today, "don't re-serve solved puzzles" lives in `localStorage` (`sudokusquad:solved`). It works for SP but doesn't survive a cleared cache, doesn't sync across devices, and doesn't count completions earned in multiplayer toward the same player. We also want a public-facing "you've solved N puzzles" count on the home page.
+
+**Decision.** New table `player_completions(player_id uuid, puzzle_code text, mode text, completed_at timestamptz, primary key (player_id, puzzle_code))`. Server is the source of truth:
+
+- `submit-move` inserts on the player's first win (multiplayer). `on conflict do nothing` so re-solves don't duplicate.
+- New RPC `record_completion(p_code text, p_mode text)` for single-player. Called by `CompletionOverlay` once `isCompleteWithSolution` returns true. Same `on conflict do nothing`.
+- Loser late-finishes (per [#0030](#0030)) also fire `record_completion`.
+- New RPC `get_completion_count()` for the home page count. SECURITY DEFINER — reads only the caller's own rows via `auth.uid()`.
+- "Don't re-serve solved" filter now reads from this table.
+
+The local `solved-tracker.ts` can stay as a short-lived optimistic cache (avoids round-trip on the home page), but the DB is authoritative.
+
+**Alternatives considered.**
+- **localStorage only.** What we have today. Discarded for the reasons above.
+- **A counter column on `auth.users`.** Cheaper read; can't distinguish which puzzles are solved (we'd lose dedupe).
+- **One row per player+mode.** Doesn't dedupe across modes.
+
+**Consequences.**
+- Anonymous user identity is stable enough that this works in practice; if a player clears storage they get a new `auth.uid()` and the count restarts (acknowledged limitation of anon auth per [#0006](#0006)).
+- Realtime subscription on `player_completions` could power a live count badge, but the home-page count is fetched once on mount.
+
+---
+
+## 0027 — Persistent client-generated username from a bundled wordlist
+**Date:** 2026-05-22
+**Status:** Accepted (supersedes the inline `adj-noun-NN` generator in `lib/username.ts`)
+
+**Context.** The initial implementation generated names client-side from a small inline 15-adjective × 15-noun list with a numeric suffix. We want a much larger wordlist for variety and to drop the numeric suffix when there's enough alphabetic uniqueness.
+
+**Decision.** A two-column CSV at `apps/web/lib/data/usernames.csv` (one row per pair slot; columns may be different lengths — short ones padded blank). A build-time script `scripts/build-word-lists.ts` converts the CSV into `apps/web/lib/data/word-lists.generated.ts` (committed). `lib/username.ts` imports the two arrays from that module; first-time visitors get a random `adj-noun` (no suffix unless wordlist size is small enough that collisions matter at our scale). localStorage continues to cache the chosen name.
+
+**Alternatives considered.**
+- **Server-generated names.** Round-trip on first visit; would require an Edge Function. Overkill.
+- **Bundle the CSV as a raw asset.** Wordlists are small enough that a generated TS module is fine and avoids a runtime CSV parser in the bundle.
+- **Numeric suffix always.** Loses the "real name" vibe. We'll add it back only if collisions become observable.
+
+**Consequences.**
+- The committed `.generated.ts` is the source the bundle reads; the raw CSV is for editability. Gitignore the CSV only if it's large (the build script regenerates from it).
+- Future: optional "rename" Edge Function with profanity filter for public-launch hygiene ([open question #1](DECISIONS.md)).
+
+---
+
+## 0026 — Multiplayer max-players = 8 + 8-color palette
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** Original schema had no explicit max-player cap; the `join-room` Edge Function caps at 4. We're bumping the cap and the color palette together because the per-player color is allocated from the palette.
+
+**Decision.** Cap = 8 in `join-room`. Color palette = 8 hex values chosen for visual distinctness at the 9 × 9 grid scale and reasonable accessibility contrast on white:
+
+```
+amber-500   #f59e0b   (warm yellow-orange)
+sky-500     #0ea5e9   (light blue)
+emerald-500 #10b981   (green)
+rose-500    #f43f5e   (red-pink)
+violet-500  #8b5cf6   (purple)
+orange-600  #ea580c   (deep orange, distinct from amber)
+teal-500    #14b8a6   (blue-green, distinct from sky/emerald)
+fuchsia-500 #d946ef   (magenta)
+```
+
+**Alternatives considered.**
+- **Stay at 4.** Simple, but limits coop discovery and public-lobby filling. 8 still feels manageable for cursor crowding in coop.
+- **Cap at 6.** Common in similar apps (Down for a Cross, etc.). Reasonable but doesn't add much over 8 if the palette can sustain 8.
+- **Dynamic palette / user-picked colors.** Adds friction; deferred to a hypothetical "customize your appearance" flow much later.
+
+**Consequences.**
+- `join-room` rejects the 9th joiner with `room_full`.
+- The palette lives in `supabase/functions/_shared/room-code.ts` (`nextColor` picks the first unused). Same list referenced by the lobby UI for legend purposes.
+- Battle-mode opponent progress bars work fine with up to 8 stacked rows.
+
+---
+
 ## 0025 — Disconnect grace period: 2 minutes
 **Date:** 2026-05-22
 **Status:** Accepted

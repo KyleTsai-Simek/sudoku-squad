@@ -113,12 +113,13 @@ A multiplayer session. Created when a host clicks "Battle" or "Coop" and gets a 
 | `id` | uuid PK | Internal DB key, used by `moves.room_id` and channel naming. |
 | `code` | text unique not null | Short shareable code in the URL (`/r/[code]`). 6 chars lowercase base36, randomly generated — see [DECISIONS.md #0021](DECISIONS.md). |
 | `mode` | text | `battle` / `coop`. (`single` was dropped in migration 0004 — single-player doesn't use rooms; see [#0022](DECISIONS.md).) |
-| `puzzle_code` | text FK → `puzzles(code)` | The puzzle this room is playing. Per [DECISIONS.md #0020](DECISIONS.md) — referenced by code, not by UUID. |
-| `status` | text | `lobby` / `playing` / `finished` |
-| `winner_player_id` | uuid nullable | Battle mode only. |
-| `settings` | jsonb not null default `{}` | Host-edited room settings (locks at Start). |
+| `puzzle_code` | text FK → `puzzles(code)` | The puzzle this room is playing. Per [DECISIONS.md #0020](DECISIONS.md). Rotates on every round of a same-room replay cycle ([#0030](DECISIONS.md)). |
+| `status` | text | `lobby` / `playing` / `finished`. Cycles back to `lobby` when players "Return to lobby" ([#0030](DECISIONS.md)). |
+| `is_public` | boolean default false | Host toggle. Public rooms appear in the home page list ([#0029](DECISIONS.md)). |
+| `winner_player_id` | uuid nullable | Battle mode only. Cleared on next-round start. |
+| `settings` | jsonb not null default `{}` | Host-edited room settings (`showConflicts`, `autoCheck`, `highlightSameValue`); locks at Start. |
 | `started_at` | timestamptz nullable | |
-| `finished_at` | timestamptz nullable | |
+| `finished_at` | timestamptz nullable | Cleared on next-round start. |
 | `created_at` | timestamptz | |
 
 ### `room_players`
@@ -128,11 +129,12 @@ A player's membership in a room. Anonymous; identified by `(room_id, player_id)`
 |---|---|---|
 | `room_id` | uuid FK | |
 | `player_id` | uuid | Supabase anon user ID. |
-| `username` | text | User-chosen, scoped to this room. |
-| `color` | text | Auto-assigned for cursor/UI. |
+| `username` | text | User-chosen (defaults to a generated `adjective-noun`, persisted in localStorage; see [#0027](DECISIONS.md)). |
+| `color` | text | Auto-assigned from the 8-color palette ([#0026](DECISIONS.md)). |
 | `joined_at` | timestamptz | |
 | `is_host` | boolean | |
-| `progress_pct` | smallint | Battle mode: cached % of cells correctly filled. |
+| `progress_pct` | smallint | Cached % of cells correctly filled. Reset to 0 on each new round. |
+| `has_returned` | boolean default true | Used by the return-to-lobby cycle ([#0030](DECISIONS.md)). Flipped to false when the room transitions `playing → finished`; flipped back to true when the player clicks "Return to lobby". The next-round Start blocks until all surviving members are `true`. |
 | PK | (`room_id`, `player_id`) | |
 
 ### `moves`
@@ -150,6 +152,19 @@ The append-only log of player actions. This is the durable record; clients recon
 | `created_at` | timestamptz | |
 
 In **battle mode**, each player has their own private board, so `moves` is partitioned by `player_id`. In **coop mode**, all moves apply to a single shared board.
+
+### `player_completions`
+One row per (player, puzzle) the player has ever completed. Source of truth for the home page "you've solved N puzzles" count and the "don't re-serve solved" filter. Per [DECISIONS #0028](DECISIONS.md).
+
+| col | type | notes |
+|---|---|---|
+| `player_id` | uuid | Supabase anon user ID. |
+| `puzzle_code` | text FK → `puzzles(code)` | |
+| `mode` | text | `single` / `battle` / `coop` — the mode the player completed in. |
+| `completed_at` | timestamptz not null default now() | |
+| PK | (`player_id`, `puzzle_code`) | Dedupes re-solves. |
+
+Inserted by `submit-move` on first multiplayer win and by an RPC `record_completion(p_code, p_mode)` for single-player. `on conflict do nothing` everywhere; we don't re-stamp the timestamp.
 
 ### `board_snapshots` (optional optimization)
 For fast rejoin, we can persist the current materialized board state per room (coop) or per `(room_id, player_id)` (battle). Not required for V1 — we can always replay `moves` on join. Add if reconnect times feel slow.
@@ -277,13 +292,18 @@ Per [DECISIONS.md #0023](DECISIONS.md), multiplayer mutations go through TypeScr
 
 | Function | Input | Output | Status |
 |---|---|---|---|
-| `create-room` | `{mode, difficulty, username}` | `{room_id, room_code, player_id, color, mode, puzzle_code}` | ✅ deployed |
+| `create-room` | `{mode, difficulty, username, is_public?}` | `{room_id, room_code, player_id, color, mode, puzzle_code}` | ✅ deployed |
 | `join-room` | `{code, username}` | `{room_id, room_code, mode, status, puzzle_code, player_id, color, is_host, rejoined}` | ✅ deployed |
-| `start-game` | `{room_id}` | `{status: 'playing', started_at}` | ✅ deployed |
-| `submit-move` | `{room_id, cell, kind, value}` | `{seq, accepted, progress_pct, won, is_winner}` | ✅ deployed |
-| `hint` | `{room_id, player_id, cell}` | `{value}` | pending |
+| `start-game` | `{room_id}` | `{status: 'playing', started_at, puzzle_code}` | ✅ deployed — extended to handle next-round reset per [#0030](DECISIONS.md) |
+| `submit-move` | `{room_id, cell, kind, value}` | `{seq, accepted, progress_pct, won, is_winner, cell_correct?}` | ✅ deployed — `cell_correct` returned only when `settings.autoCheck` is on |
+| `update-room-settings` | `{room_id, settings}` | `{settings}` | pending (host-only, lobby-only) |
+| `kick-player` | `{room_id, player_id}` | `{kicked: true}` | pending (host-only) |
+| `return-to-lobby` | `{room_id}` | `{status, has_returned: true}` | pending |
+| `record-completion` (RPC) | `(p_code, p_mode)` → bool | inserts `player_completions` with `on conflict do nothing`. SECURITY DEFINER. | pending |
+| `get-completion-count` (RPC) | `()` → int | reads caller's row count. SECURITY DEFINER. | pending |
+| `hint` | (removed for V1) | — | dropped per the May 22 product changes |
 
-`submit-move` does the work that `check-completion` was originally going to do — it inline-recomputes the player's progress on every move and, when progress hits 100, atomically promotes the caller to `room.winner_player_id` with a `where status = 'playing'` guard. The atomic check is the tiebreak for two players' winning moves arriving microseconds apart.
+`submit-move` does the work that `check-completion` was originally going to do — inline progress + atomic winner update. The `where status = 'playing'` guard is the tiebreak for near-simultaneous winning moves.
 
 Shared helpers in `supabase/functions/_shared/`:
 - `cors.ts` — preflight + headers
