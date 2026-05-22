@@ -3,14 +3,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
+  fetchRoom,
   fetchRoomPlayers,
   joinRoom,
+  startGame,
+  subscribeToRoom,
   subscribeToRoomPlayers,
   type RoomError,
-  type RoomPlayer,
+  type RoomPlayerProgress,
+  type RoomRow,
   type RoomState,
 } from '@/lib/rooms';
 import { getOrCreateUsername, setUsername } from '@/lib/username';
+import { BattleGame } from './battle-game';
 
 type Phase =
   | { kind: 'joining' }
@@ -23,10 +28,13 @@ function cn(...parts: Array<string | false | null | undefined>): string {
 
 export function LobbyClient({ code }: { code: string }) {
   const [phase, setPhase] = useState<Phase>({ kind: 'joining' });
-  const [players, setPlayers] = useState<RoomPlayer[]>([]);
+  const [players, setPlayers] = useState<RoomPlayerProgress[]>([]);
+  const [roomRow, setRoomRow] = useState<RoomRow | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState('');
+  const [startError, setStartError] = useState<string | null>(null);
+  const [startPending, setStartPending] = useState(false);
 
   // 1. Join (or rejoin) the room on mount.
   useEffect(() => {
@@ -46,27 +54,34 @@ export function LobbyClient({ code }: { code: string }) {
     };
   }, [code]);
 
-  // 2. Once joined, fetch the player list + subscribe to changes.
+  // 2. Once joined, fetch initial player + room state, and subscribe.
   useEffect(() => {
     if (phase.kind !== 'in_lobby') return;
     const roomId = phase.room.room_id;
     let cancelled = false;
 
-    async function refresh() {
+    async function refreshPlayers() {
       const list = await fetchRoomPlayers(roomId);
       if (!cancelled) setPlayers(list);
     }
+    async function refreshRoom() {
+      const r = await fetchRoom(roomId);
+      if (!cancelled) setRoomRow(r);
+    }
 
-    let unsub: (() => void) | null = null;
+    let unsubPlayers: (() => void) | null = null;
+    let unsubRoom: (() => void) | null = null;
     (async () => {
-      await refresh();
+      await Promise.all([refreshPlayers(), refreshRoom()]);
       if (cancelled) return;
-      unsub = await subscribeToRoomPlayers(roomId, refresh);
+      unsubPlayers = await subscribeToRoomPlayers(roomId, refreshPlayers);
+      unsubRoom = await subscribeToRoom(roomId, refreshRoom);
     })();
 
     return () => {
       cancelled = true;
-      if (unsub) unsub();
+      unsubPlayers?.();
+      unsubRoom?.();
     };
   }, [phase]);
 
@@ -79,6 +94,15 @@ export function LobbyClient({ code }: { code: string }) {
       // ignore
     }
   }, []);
+
+  const onStart = useCallback(async () => {
+    if (phase.kind !== 'in_lobby') return;
+    setStartPending(true);
+    setStartError(null);
+    const res = await startGame(phase.room.room_id);
+    setStartPending(false);
+    if (!res.ok) setStartError(res.error.message);
+  }, [phase]);
 
   if (phase.kind === 'joining') {
     return (
@@ -107,8 +131,24 @@ export function LobbyClient({ code }: { code: string }) {
   }
 
   const { room } = phase;
+
+  // Status routing: lobby → render lobby; playing → render game; finished → game w/ winner overlay.
+  const status = roomRow?.status ?? room.status;
+  const winnerPlayerId = roomRow?.winner_player_id ?? null;
+
+  if (status === 'playing' || status === 'finished') {
+    return (
+      <BattleGame
+        room={room}
+        players={players}
+        winnerPlayerId={status === 'finished' ? winnerPlayerId : null}
+      />
+    );
+  }
+
   const isHost = room.own_is_host;
-  const otherPlayers = players.filter((p) => p.player_id !== room.own_player_id);
+  const enoughPlayers = players.length >= 2;
+  const otherHost = players.find((p) => p.is_host && p.player_id !== room.own_player_id);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center gap-8 px-6 py-10">
@@ -117,7 +157,7 @@ export function LobbyClient({ code }: { code: string }) {
           ← Menu
         </Link>
         <span className="text-xs font-medium uppercase tracking-widest text-stone-500">
-          {room.mode} · {room.status}
+          {room.mode} · lobby
         </span>
       </header>
 
@@ -201,9 +241,6 @@ export function LobbyClient({ code }: { code: string }) {
               onClick={() => {
                 setUsername(usernameDraft);
                 setEditingUsername(false);
-                // For V1 we just persist locally — the lobby still shows the
-                // username we sent at join time. A future rename Edge Function
-                // can update the room_players row.
               }}
               className="rounded-md bg-stone-900 px-3 py-1.5 text-sm font-medium text-white"
             >
@@ -222,27 +259,33 @@ export function LobbyClient({ code }: { code: string }) {
 
       <section className={cn('w-full text-center', !isHost && 'text-stone-500')}>
         {isHost ? (
-          <button
-            type="button"
-            disabled
-            title="Phase 2 — coming soon"
-            className="w-full cursor-not-allowed rounded-xl border border-dashed border-stone-300 px-5 py-4 text-base font-semibold text-stone-400"
-          >
-            Start battle (coming soon)
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={onStart}
+              disabled={startPending || !enoughPlayers}
+              className="w-full rounded-xl bg-stone-900 px-5 py-4 text-base font-semibold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {startPending
+                ? 'Starting…'
+                : !enoughPlayers
+                  ? 'Waiting for at least 2 players…'
+                  : 'Start battle'}
+            </button>
+            {startError ? (
+              <p className="mt-2 text-xs text-red-600">{startError}</p>
+            ) : null}
+          </>
         ) : (
           <p className="text-sm">
-            Waiting for the host{' '}
-            {otherPlayers.find((p) => p.is_host)?.username
-              ? `(${otherPlayers.find((p) => p.is_host)!.username}) `
-              : ''}
-            to start…
+            Waiting for the host
+            {otherHost ? ` (${otherHost.username})` : ''} to start…
           </p>
         )}
       </section>
 
       <p className="text-xs text-stone-400">
-        Lobby is live. Game start lands in the next session.
+        Share the room code with friends. Game begins when the host clicks Start.
       </p>
     </main>
   );

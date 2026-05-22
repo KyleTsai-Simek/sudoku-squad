@@ -279,10 +279,11 @@ Per [DECISIONS.md #0023](DECISIONS.md), multiplayer mutations go through TypeScr
 |---|---|---|---|
 | `create-room` | `{mode, difficulty, username}` | `{room_id, room_code, player_id, color, mode, puzzle_code}` | ✅ deployed |
 | `join-room` | `{code, username}` | `{room_id, room_code, mode, status, puzzle_code, player_id, color, is_host, rejoined}` | ✅ deployed |
-| `start-game` | `{room_id}` | `{status: 'playing', started_at}` | pending |
-| `submit-move` | `{room_id, cell, kind, value}` | `{seq, accepted: true}` (rejected → 4xx) | pending |
-| `check-completion` | `{room_id, player_id}` | `{state: 'win' | 'not_yet'}` | pending |
+| `start-game` | `{room_id}` | `{status: 'playing', started_at}` | ✅ deployed |
+| `submit-move` | `{room_id, cell, kind, value}` | `{seq, accepted, progress_pct, won, is_winner}` | ✅ deployed |
 | `hint` | `{room_id, player_id, cell}` | `{value}` | pending |
+
+`submit-move` does the work that `check-completion` was originally going to do — it inline-recomputes the player's progress on every move and, when progress hits 100, atomically promotes the caller to `room.winner_player_id` with a `where status = 'playing'` guard. The atomic check is the tiebreak for two players' winning moves arriving microseconds apart.
 
 Shared helpers in `supabase/functions/_shared/`:
 - `cors.ts` — preflight + headers

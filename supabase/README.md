@@ -54,9 +54,8 @@ Live in `supabase/functions/`. Each function lives in its own directory; `_share
 |---|---|---|
 | `create-room` | Deployed | Pick a random puzzle, generate a room code, insert the room + host as the first player. |
 | `join-room` | Deployed | Look up by code; enforce mid-game-join policy ([#0024](../docs/DECISIONS.md)); assign color; idempotent on rejoin. |
-| `start-game` | Pending | Host-only transition `lobby → playing`. |
-| `submit-move` | Pending | Validate, assign `seq`, insert + broadcast. |
-| `check-completion` | Pending | Server-side win check. |
+| `start-game` | Deployed | Host-only transition `lobby → playing`. Validates ≥ 2 players in battle. |
+| `submit-move` | Deployed | Validate input + game state, assign next per-room `seq`, insert into `moves`. Replays the caller's moves to compute progress %, caches it, and atomically promotes them to winner if their board now matches the solution (with a `where status='playing'` guard for ties). |
 | `hint` | Pending | Per-cell reveal for multiplayer. |
 
 ### Deploying

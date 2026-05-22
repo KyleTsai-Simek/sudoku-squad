@@ -29,10 +29,13 @@ export interface RoomError {
   code:
     | 'unauthenticated'
     | 'bad_request'
+    | 'forbidden'
     | 'not_found'
     | 'room_in_progress'
     | 'room_finished'
     | 'room_full'
+    | 'too_few_players'
+    | 'invalid_move'
     | 'internal'
     | 'no_supabase';
   message: string;
@@ -170,12 +173,16 @@ export async function subscribeToRoomPlayers(
   };
 }
 
-export async function fetchRoomPlayers(roomId: string): Promise<RoomPlayer[]> {
+export interface RoomPlayerProgress extends RoomPlayer {
+  progress_pct: number;
+}
+
+export async function fetchRoomPlayers(roomId: string): Promise<RoomPlayerProgress[]> {
   const client = await ensureAuthClient();
   if (!client) return [];
   const { data, error } = await client
     .from('room_players')
-    .select('player_id, username, color, is_host')
+    .select('player_id, username, color, is_host, progress_pct')
     .eq('room_id', roomId)
     .order('joined_at', { ascending: true });
   if (error) {
@@ -183,4 +190,92 @@ export async function fetchRoomPlayers(roomId: string): Promise<RoomPlayer[]> {
     return [];
   }
   return data ?? [];
+}
+
+export interface RoomRow {
+  id: string;
+  code: string;
+  mode: RoomMode;
+  status: RoomStatus;
+  puzzle_code: string;
+  winner_player_id: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export async function fetchRoom(roomId: string): Promise<RoomRow | null> {
+  const client = await ensureAuthClient();
+  if (!client) return null;
+  const { data, error } = await client
+    .from('rooms')
+    .select('id, code, mode, status, puzzle_code, winner_player_id, started_at, finished_at')
+    .eq('id', roomId)
+    .maybeSingle();
+  if (error) {
+    console.error('fetchRoom error', error);
+    return null;
+  }
+  return data;
+}
+
+export async function subscribeToRoom(
+  roomId: string,
+  onChange: () => void,
+): Promise<() => void> {
+  const client = await ensureAuthClient();
+  if (!client) return () => {};
+  const channel = client
+    .channel(`rooms:${roomId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
+      onChange,
+    )
+    .subscribe();
+  return () => {
+    client.removeChannel(channel);
+  };
+}
+
+export interface PuzzleGivens {
+  code: string;
+  givens: number[];
+}
+
+/** Battle/coop puzzle fetch — uses puzzles_public, no solution. */
+export async function fetchPuzzleGivens(code: string): Promise<PuzzleGivens | null> {
+  const client = await ensureAuthClient();
+  if (!client) return null;
+  const { data, error } = await client
+    .from('puzzles_public')
+    .select('code, givens')
+    .eq('code', code)
+    .maybeSingle();
+  if (error || !data) return null;
+  return { code: data.code, givens: data.givens };
+}
+
+export async function startGame(roomId: string): Promise<Result<void>> {
+  const res = await invoke<{ room_id: string; status: string }>('start-game', {
+    room_id: roomId,
+  });
+  if (!res.ok) return res;
+  return { ok: true, value: undefined };
+}
+
+export interface SubmitMoveResponse {
+  seq: number;
+  accepted: boolean;
+  progress_pct: number;
+  won: boolean;
+  is_winner: boolean;
+}
+
+export async function submitMove(args: {
+  room_id: string;
+  cell: number;
+  kind: 'value' | 'clear' | 'note_toggle';
+  value?: number | null;
+}): Promise<Result<SubmitMoveResponse>> {
+  return invoke<SubmitMoveResponse>('submit-move', args);
 }

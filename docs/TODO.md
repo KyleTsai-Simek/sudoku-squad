@@ -37,16 +37,12 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope.
 - [x] Migrations 0005 (`pick_random_puzzle_code`), 0006 (RLS recursion fix via `is_room_member`), 0007 (Realtime publications).
 - [x] Edge Function `create-room({mode, difficulty, username}) → {room_id, room_code, player_id, color, mode, puzzle_code}`.
 - [x] Edge Function `join-room({code, username}) → {room_id, room_code, player_id, color, is_host, rejoined, ...}`. Enforces mid-game-join policy per [DECISIONS #0024](DECISIONS.md). Rejoin is idempotent.
-- [ ] Edge Function `start-game({room_id})` — host-only. Transitions room.status `lobby → playing`. Sets `started_at`. Broadcasts `game_event: game_started`.
-- [ ] Edge Function `submit-move({room_id, cell, kind, value})` — validates, assigns `seq`, inserts into `moves`, broadcasts.
-- [ ] Edge Function `check-completion({room_id, player_id})` — server-side win check against `puzzles.solution`. Returns `win` / `not yet` without revealing which cells are wrong. On win in battle: set `room.winner_player_id`, transition `room.status` to `finished`, broadcast.
-- [ ] Edge Function `hint({room_id, player_id, cell}) → {value}` — multiplayer hint path. Counts toward visible "X used a hint" indicator in battle.
+- [x] Edge Function `start-game({room_id})` — host-only. Transitions room.status `lobby → playing`. Sets `started_at`. Realtime broadcast fires automatically via the rooms publication.
+- [x] Edge Function `submit-move({room_id, cell, kind, value})` — validates, assigns next per-room `seq` (retries on unique-violation), inserts into `moves`, recomputes progress_pct, on progress=100 atomically transitions room → finished with winner. Server-side completion is fully inline; no separate `check-completion`.
+- [ ] Edge Function `hint({room_id, player_id, cell}) → {value}` — multiplayer hint path. Counts toward visible "X used a hint" indicator in battle. Currently SP only has hint (via `sp_get_puzzle`); battle pad omits it.
 
 ### `packages/core` — sync (new module, lands in this phase)
-- [ ] `useRoom(roomCode)` hook (or `subscribeToRoom` helper if hooks feel premature): subscribes to `room_players` + `moves` + `rooms`, returns `{ room, players, ownPlayerId, ownBoard }`.
-- [ ] Optimistic move apply: take a `Move` from the local reducer, send to `submit-move`, reconcile when the server echo arrives. Rollback on rejection.
-- [ ] Move log replay on rejoin.
-- [ ] Tests for the reconciler (deterministic).
+- [~] **Deferred for V1.** The web client's `lib/battle-store.ts` does optimistic apply directly (no reconciler) and the server is authoritative — move rejection is rare enough that we don't roll back, just surface an error. When iOS lands or when coop's LWW forces the issue, lift this into `packages/core/src/sync/` with the reconciler design from ROADMAP.
 
 ### `apps/web` — battle UI
 - [x] Home page sections: Solo / Battle a friend / Have a code? Battle CTAs call `create-room`, code input calls `join-room`.
@@ -54,11 +50,12 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope.
 - [x] `lib/rooms.ts` — `createRoom`, `joinRoom`, `fetchRoomPlayers`, `subscribeToRoomPlayers` with typed errors.
 - [x] `lib/username.ts` — localStorage-backed handle with random `adj-noun-NN` default.
 - [x] `/r/[code]` lobby route: room code display, copy share link button, player list with realtime updates, rename (local), error states (not found / full / over / in progress).
-- [ ] Host "Start" button — wires up `start-game` Edge Function. Disabled when fewer than 2 players in battle mode.
+- [x] Host "Start" button — wires up `start-game`. Disabled when < 2 players in battle.
+- [x] Battle game view: own board (`BattleBoard`) + opponent progress bars (`OpponentProgress`) + own number pad (`BattleNumberPad`, hint omitted) + keyboard controller. Duplicates the SP components rather than refactoring them; revisit in Phase 3.
+- [x] Server-broadcast Win overlay (announces winner; dismissible). Losers can dismiss but their board stays locked — full "keep solving" support is task #27.
 - [ ] Lobby settings panel (host-editable, locks at Start): show conflicts, auto-check, hints availability.
-- [ ] Battle game view: own board + opponent progress bars (sidebar or top strip). Reuses `SudokuBoard` + `NumberPad`.
-- [ ] Server-broadcast Win overlay (announces winner; dismissible; losers can continue solving per [DECISIONS #0008](DECISIONS.md)).
-- [ ] Play-again flow.
+- [ ] Play-again flow ("create a fresh room with the same players").
+- [ ] Polish: losers can keep solving their own board after a winner is declared. Currently the board freezes when room.status='finished' broadcasts.
 
 ### Testing
 - [ ] Two-browser manual test: both join, both play, one finishes, winner declared correctly.

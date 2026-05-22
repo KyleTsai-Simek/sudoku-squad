@@ -1,7 +1,7 @@
 # Status
 
 **Last updated:** 2026-05-22
-**Current phase:** Phase 2 in progress. Lobby + room create/join landed; game start, move sync, and winner detection are next.
+**Current phase:** Phase 2 in progress. Lobby + game start + move submission + winner detection all wired end-to-end. Hint Edge Function and a few polish items remain.
 **Branch:** `main`
 **Live:** https://sudoku-squad-web.vercel.app/
 
@@ -69,29 +69,32 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
 ### Phase 2 — Battle mode 🔄 (in progress)
 
 What's landed:
-- **Edge Functions** in `supabase/functions/` (deployed to the linked project, `--use-api` bundling):
-  - `_shared/cors.ts`, `_shared/errors.ts`, `_shared/supabase.ts` (service-role + caller clients, `getCallerUserId`), `_shared/room-code.ts` (random 6-char base36 + color palette helpers).
-  - `create-room({mode, difficulty, username})` — picks a random puzzle via `pick_random_puzzle_code` RPC, generates a unique room code (retry on conflict), inserts the room + host as the first `room_players` row.
-  - `join-room({code, username})` — looks up the room, enforces mid-game-join policy ([#0024](DECISIONS.md)), assigns a color from the unused-slots palette, inserts the row. Rejoin (same `auth.uid()`) is idempotent.
-- **SQL helpers / RLS fixes:**
-  - `pick_random_puzzle_code(difficulty)` — SECURITY DEFINER RPC. Returns just the code; no solution leak.
-  - `is_room_member(room_id)` — SECURITY DEFINER helper used by `room_players` and `moves` RLS policies. Fixes the self-referential recursion bug in 0001.
-- **Realtime publication** — `room_players`, `moves`, `rooms` added to `supabase_realtime` so the lobby (and gameplay) can subscribe to `postgres_changes`.
+- **Edge Functions** in `supabase/functions/` (deployed to the linked project):
+  - `_shared/`: cors, errors, supabase clients (service-role + caller-scoped), random room-code + color-palette helpers.
+  - `create-room({mode, difficulty, username})` — picks a random puzzle via `pick_random_puzzle_code` RPC, generates a unique room code (retry on conflict), inserts room + host room_player.
+  - `join-room({code, username})` — looks up by code, enforces mid-game-join ([#0024](DECISIONS.md)), assigns next-free color, idempotent rejoin.
+  - **`start-game({room_id})`** — host-only. Validates ≥ 2 players in battle. Transitions `lobby → playing`, sets `started_at`. Realtime broadcasts the row update.
+  - **`submit-move({room_id, cell, kind, value})`** — server-authoritative. Validates input + game state, assigns next per-room `seq` (retries on unique-violation), inserts into `moves`, replays the caller's moves to compute progress %, caches it on `room_players.progress_pct`. If progress = 100 and mode = battle: atomically promotes caller to `room.winner_player_id` and transitions `status → finished` (the `where status = 'playing'` guard makes a near-simultaneous "winning move" from another player a clean loss).
+- **SQL helpers:**
+  - `pick_random_puzzle_code(difficulty)` (SECURITY DEFINER) — never leaks solution.
+  - `is_room_member(room_id)` (SECURITY DEFINER) — used by `room_players` + `moves` RLS to avoid self-referential recursion.
+- **Realtime publication** — `room_players`, `moves`, `rooms` (so the lobby + game can subscribe to `postgres_changes`).
 - **Web app:**
-  - Home page now has three sections: Solo / Battle a friend / Have a code? Battle tier buttons call `create-room` and navigate to `/r/[code]`. Code input calls `join-room` and navigates on success.
-  - `apps/web/lib/supabase.ts` — `getSupabase()` (read-only) and `ensureAuthClient()` (signs in anonymously, persists the session in localStorage so refreshes keep the same player).
-  - `apps/web/lib/rooms.ts` — `createRoom`, `joinRoom`, `fetchRoomPlayers`, `subscribeToRoomPlayers`. Result-type error shape (`{ ok, value | error }`).
-  - `apps/web/lib/username.ts` — localStorage-backed username with random `adj-noun-NN` default for first-time visitors.
-  - `apps/web/app/r/[code]/page.tsx` + `lobby-client.tsx` — joins on mount, fetches initial player list, subscribes to changes. Renames stay client-side for now (no UPDATE Edge Function yet). Errors render a dedicated "this room is full / over / not found" screen.
+  - Home page: Solo / Battle a friend / Have a code? sections. Battle tier buttons call `create-room`. Code input calls `join-room`.
+  - `lib/supabase.ts` — `ensureAuthClient()` signs visitors in anonymously, persists the session so refreshes preserve `auth.uid()`.
+  - `lib/rooms.ts` — `createRoom`, `joinRoom`, `startGame`, `submitMove`, `fetchRoom`, `fetchRoomPlayers`, `fetchPuzzleGivens`, `subscribeToRoom`, `subscribeToRoomPlayers`. Result-type errors.
+  - `lib/username.ts` — localStorage handle with `adj-noun-NN` default.
+  - `lib/battle-store.ts` — Zustand store for battle mode. Optimistic local apply on each move; submit-move fires in the background. No solution client-side (battle ≠ SP).
+  - `/r/[code]` route — single page that switches between lobby and game based on `room.status`:
+    - **Lobby**: room code, copy-share-link, live player list, host's Start button (disabled until ≥ 2 players), rename, error states (not found / full / over / in progress).
+    - **Game** (battle): opponent progress bars, own board (`BattleBoard`), number pad (`BattleNumberPad`, hint omitted), keyboard controller, winner overlay (dismissible per [#0008](DECISIONS.md)).
 
 What does NOT yet exist (Phase 2 remainder):
-- **Edge Function `submit_move`** — validates a move, assigns `seq`, inserts into `moves`, broadcasts.
-- **Edge Function `check_completion`** — server-side win check, returns win/not-yet without leaking which cells are wrong.
-- **Edge Function `hint`** — per-cell reveal for the multiplayer hint path (so SP's `sp_get_puzzle` isn't reachable from battle/coop).
-- **`packages/core/src/sync/`** — `useRoom(roomCode)` hook, optimistic apply + reconciliation.
-- **Battle gameplay UI** — own board + opponent progress bars + winner overlay.
-- **Host "Start" button wiring** — currently a disabled stub in the lobby.
-- **Mid-game join "already started" screen** — error state exists; copy is generic; can be polished.
+- **Edge Function `hint`** — per-cell reveal for the multiplayer hint path (so SP's `sp_get_puzzle` isn't reachable from battle/coop). Battle number pad omits Hint until this lands.
+- **Lobby settings panel** (host-editable, locks at Start): show conflicts, auto-check, hints availability. Today both clients use the same hard-coded defaults.
+- **Late solving for losers** — once a winner is declared, losers' boards lock. Per [#0008](DECISIONS.md) the loser should be able to dismiss the overlay and keep solving their own board; deferred (see TODO #27 in-session).
+- **Play-again flow** — winner overlay only offers "Back to menu". A "create a fresh room with the same players" flow lands later.
+- **Battle game UI polish** — opponent progress bars are minimal; the same-page lobby→game transition could be smoother.
 
 ### Beyond Phase 2
 
