@@ -21,7 +21,7 @@ import { createClient } from '@supabase/supabase-js';
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const TIERS = ['easy', 'medium', 'hard', 'expert'] as const;
+const TIERS = ['warmup', 'beginner', 'easy', 'medium', 'hard', 'expert'] as const;
 type Tier = (typeof TIERS)[number];
 
 function countClues(givens: ReadonlyArray<number>): number {

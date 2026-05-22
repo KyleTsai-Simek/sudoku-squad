@@ -14,9 +14,20 @@ interface TierState {
   unsolved: number;
 }
 
-const TIERS: Difficulty[] = ['easy', 'medium', 'hard', 'expert'];
+const TIERS: Difficulty[] = ['warmup', 'beginner', 'easy', 'medium', 'hard', 'expert'];
+
+const TIER_LABEL: Record<Difficulty, string> = {
+  warmup: 'Warm-up',
+  beginner: 'Beginner',
+  easy: 'Easy',
+  medium: 'Medium',
+  hard: 'Hard',
+  expert: 'Expert',
+};
 
 const TIER_BLURB: Record<Difficulty, string> = {
+  warmup: 'Almost done already.',
+  beginner: 'Gentle introduction.',
   easy: 'Warm up.',
   medium: 'Standard.',
   hard: 'Real work.',
@@ -144,7 +155,7 @@ export function HomeClient() {
                 }
               >
                 <span className="text-xs font-medium uppercase tracking-widest">
-                  {tier}
+                  {TIER_LABEL[tier]}
                 </span>
                 <span className="text-lg font-semibold">
                   {empty

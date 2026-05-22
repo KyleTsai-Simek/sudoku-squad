@@ -6,6 +6,7 @@
   "description": "One-off scripts for ingesting puzzles from the Kaggle 9M dataset. NOT shipped to clients.",
   "scripts": {
     "ingest": "tsx -r dotenv/config src/index.ts dotenv_config_path=../../.env.local",
+    "ingest:qqwing": "tsx -r dotenv/config src/ingest-qqwing.ts dotenv_config_path=../../.env.local",
     "check": "tsx -r dotenv/config src/check-connectivity.ts dotenv_config_path=../../.env.local",
     "audit:difficulty": "tsx -r dotenv/config src/audit-difficulty.ts dotenv_config_path=../../.env.local",
     "check:puzzle": "tsx -r dotenv/config src/check-puzzle.ts dotenv_config_path=../../.env.local",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "qqwing": "^1.3.4",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^3.0.0"

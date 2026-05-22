@@ -17,6 +17,60 @@ Format:
 
 ---
 
+## 0033 — Two easier-than-easy tiers via QQWing generation, rated in [-10, 0)
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** Even after #0032 narrowed easy to `[0, 0.75)`, players reported the entry-point puzzles still felt too hard. The 3M Kaggle dataset's natural floor is rating-0.0 with clue counts in the 24–28 range — there isn't a population of "almost-done" puzzles in there. To support truly trivial puzzles (kids/learners, warm-up mode), we need a separate source. We chose to *extend* the rating scale below 0 rather than re-tier the existing easy.
+
+**Decision.** Two new tiers below easy, both populated via local **QQWing generation** (npm `qqwing@1.3.4`, wrapping Stephen Ostermiller's solver/generator):
+
+- `warmup`   rating `[-10, -5)`, clue counts 35–40
+- `beginner` rating `[-5, 0)`,   clue counts 29–34
+
+Pipeline (`scripts/ingest/src/ingest-qqwing.ts`):
+1. Generate via `QQWing.generatePuzzle()`.
+2. `setRecordHistory(true)` then `solve()` to populate technique counters.
+3. Keep only `getDifficulty() === SIMPLE` (naked-singles-only). ~3% acceptance rate from raw generation; effective throughput ~1.3 kept/sec single-threaded.
+4. Pick a target clue count from a per-(tier, clues) weighted distribution (only cells with remaining target are considered).
+5. **Augment** by adding random correct cells from the solution until the target clue count is reached. Adding correct givens can only constrain further, so the puzzle stays SIMPLE; we re-verify with the solver to be paranoid.
+6. Solver-verify uniqueness (mirroring radcliffe ingest) and dedupe by puzzle code.
+
+Rating formula: `rating = -((clues - 28) / 12) * 10`, clamped to `[-10, 0]`. 28 clues → 0 (boundary, doesn't enter the negative band), 34 clues → -5 (warmup/beginner boundary), 40 clues → -10.
+
+Per-(tier, clues) targets (sum 2,500 each, 5,000 total):
+
+| clues | warmup | beginner |
+|---|---|---|
+| 29 | — | 700 |
+| 30 | — | 700 |
+| 31 | — | 400 |
+| 32 | — | 300 |
+| 33 | — | 250 |
+| 34 | — | 150 |
+| 35 | 100 | — |
+| 36 | 200 | — |
+| 37 | 300 | — |
+| 38 | 500 | — |
+| 39 | 700 | — |
+| 40 | 700 | — |
+
+**Alternatives considered.**
+- **Bryan Park's 1M Kaggle dataset** (avg ~33 clues): easier to wire up, but no technique metadata, uniqueness not guaranteed, and clue counts don't necessarily mean "naked-singles-only." Rejected — quality signal too weak.
+- **grantm/sudoku-exchange-puzzle-bank** (pre-graded, QQWing-generated, uniqueness guaranteed): viable runner-up but requires downloading a large repo and parsing a custom format, and we'd still need to re-run technique checks to filter to naked-singles-only. Rejected because in-process QQWing generation is simpler.
+- **Don't add a negative band; just re-bucket again.** Doesn't solve the actual problem — the 3M source genuinely doesn't have puzzles below rating 0.
+- **`dokusan` Python generator** with technique-aware difficulty: better controllability but slower (~700ms each) and adds a Python dependency to the JS-only ingest pipeline. Rejected.
+
+**Consequences.**
+- Migration 0012 extends `puzzles.difficulty` check constraint to include `warmup` and `beginner`.
+- `Difficulty` type in `packages/core/src/types/index.ts` adds the two new labels. Added `DIFFICULTIES_ORDERED` constant for UI lists.
+- Home page picker (`apps/web/app/home-client.tsx`) now shows six tier buttons (Warm-up / Beginner / Easy / Medium / Hard / Expert).
+- **Battle mode stays at easy/medium/hard** — warmup and beginner are intentionally SP-only since a 30+ clue puzzle would be over in seconds and not competitive.
+- New ingest tool: `pnpm --filter @sudoku-squad/ingest ingest:qqwing`. Bypasses the radcliffe CSV. ~60 minutes for 5,000 puzzles single-threaded.
+- The existing radcliffe-rated bank is untouched — these are additive rows.
+
+---
+
 ## 0032 — Narrowing easy: rebucket to [0, 0.75) / [0.75, 2.5) / [2.5, 5) / [5, 7)
 **Date:** 2026-05-22
 **Status:** Accepted (supersedes the band choice in #0031; per-(tier, clue-count) targets unchanged)

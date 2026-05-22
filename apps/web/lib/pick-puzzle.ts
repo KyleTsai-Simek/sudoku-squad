@@ -43,6 +43,8 @@ export async function getTierCounts(): Promise<
   const all = await getManifest();
   const solved = await getCompletedSet();
   const out: Record<Difficulty, { total: number; unsolved: number }> = {
+    warmup: { total: 0, unsolved: 0 },
+    beginner: { total: 0, unsolved: 0 },
     easy: { total: 0, unsolved: 0 },
     medium: { total: 0, unsolved: 0 },
     hard: { total: 0, unsolved: 0 },

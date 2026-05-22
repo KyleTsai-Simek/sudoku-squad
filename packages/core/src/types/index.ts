@@ -45,7 +45,17 @@ export type RoomId = string;
 /** Short shareable code for a multiplayer room. Format per docs/DECISIONS.md #0021. */
 export type RoomCode = string;
 
-export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
+export type Difficulty = 'warmup' | 'beginner' | 'easy' | 'medium' | 'hard' | 'expert';
+
+/** Ordered easiest-to-hardest. Useful for UI lists. */
+export const DIFFICULTIES_ORDERED: ReadonlyArray<Difficulty> = [
+  'warmup',
+  'beginner',
+  'easy',
+  'medium',
+  'hard',
+  'expert',
+];
 
 export interface Puzzle {
   readonly id: PuzzleId;

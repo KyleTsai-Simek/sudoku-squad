@@ -26,6 +26,7 @@ Live at https://sudoku-squad-web.vercel.app/. Engine + UI + ingest + tests + CI 
 - [ ] Register `sudokusquad.com` and point at Vercel.
 - [ ] Decide on Vercel preview environment vs. Supabase isolation (today previews hit prod Supabase — fine for V1, revisit before more users).
 - [x] Expert tier shipped 2026-05-22. Re-bucketed the whole bank twice that day: first to `[0,1.5) / [1.5,4) / [4,5) / [5,7)` ([DECISIONS #0031](DECISIONS.md)), then narrowed easy to `[0, 0.75) / [0.75, 2.5) / [2.5, 5) / [5, 7)` ([#0032](DECISIONS.md)) when easy still felt too hard. 2,500 puzzles per tier, 10,000 total. A future "evil" tier (rating 7+) is still pending a richer source.
+- [x] **warmup + beginner tiers** shipped 2026-05-22. Generated 5,000 naked-singles-only puzzles via QQWing, augmented to 29-40 clues. Ratings in [-10, 0). Migration 0012 extends `puzzles.difficulty` check constraint. Home page exposes Warm-up + Beginner buttons. Battle mode intentionally still easy/medium/hard. See [DECISIONS #0033](DECISIONS.md).
 
 ---
 

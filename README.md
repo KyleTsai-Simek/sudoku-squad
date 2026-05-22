@@ -7,7 +7,7 @@ A multiplayer sudoku web app. Single-player + battle mode live; coop in flight.
   - **Single player** — pick a tier, solve a random unsolved puzzle.
   - **Battle** — up to 8 players race to finish the same puzzle (live).
   - **Coop** — 2–4 players collaboratively solve one shared board (Phase 3, planned).
-- **Live features:** 10,000 puzzles across easy / medium / hard / expert; auto-check; undo/redo with multi-cell undo; auto-clean peer notes; keyboard shortcuts (Space toggles notes, `?` shows overlay, Tab advances); persistent username + completion count; public lobbies; host kick; return-to-lobby replay cycle.
+- **Live features:** 15,000 puzzles across warm-up / beginner / easy / medium / hard / expert (the two easier tiers generated locally via QQWing with negative ratings); auto-check; undo/redo with multi-cell undo; auto-clean peer notes; keyboard shortcuts (Space toggles notes, `?` shows overlay, Tab advances); persistent username + completion count; public lobbies; host kick; return-to-lobby replay cycle.
 
 Inspired by Down for a Cross (multiplayer crosswords), Words With Friends, and the NYT Games apps.
 
@@ -102,10 +102,14 @@ unzip 3-million-sudoku-puzzles-with-ratings.zip
 cd /Users/kylets/sudoku-squad
 pnpm --filter @sudoku-squad/ingest ingest -- --dry-run
 
-# Real ingest (writes 10,000 rows via service-role key, across 4 tiers).
+# Real ingest (writes 10,000 rows via service-role key, across 4 Kaggle tiers).
 # Use --truncate to wipe puzzles + downstream tables first.
 pnpm --filter @sudoku-squad/ingest ingest
 pnpm --filter @sudoku-squad/ingest ingest -- --truncate
+
+# Plus 5,000 additional easier puzzles via local QQWing generation
+# (warmup + beginner tiers, ratings in [-10, 0)). ~60 minutes single-threaded.
+pnpm --filter @sudoku-squad/ingest ingest:qqwing
 ```
 
 ## Repo layout

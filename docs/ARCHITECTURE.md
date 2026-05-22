@@ -93,13 +93,13 @@ sudoku-squad/
 Live SQL is in `supabase/migrations/`. Tables below reflect what's actually applied to the project (migrations 0001 → 0011).
 
 ### `puzzles`
-Pre-generated puzzles. Immutable once ingested. **10,000 rows** live as of 2026-05-22 — **2,500 each in easy / medium / hard / expert**, with deterministic per-(tier, clue-count) targets so easy leans toward more clues and expert toward fewer. See [DECISIONS #0032](DECISIONS.md) (supersedes #0031).
+Pre-generated puzzles. Immutable once ingested. **15,000 rows** live as of 2026-05-22 across **six tiers**: 2,500 each in warmup / beginner / easy / medium / hard / expert. The warmup and beginner tiers are sourced via local QQWing generation (naked-singles-only, augmented to high clue counts); easy through expert come from the Kaggle 3M `radcliffe/3-million-sudoku-puzzles-with-ratings` dataset. See [DECISIONS #0032](DECISIONS.md) (radcliffe bands) and [#0033](DECISIONS.md) (QQWing tiers).
 
 | col | type | notes |
 |---|---|---|
 | `id` | uuid PK | Internal DB key. Not visible client-side. |
 | `code` | text unique not null | 6-char lowercase base36 hash of `givens`. URL slug and the cross-mode puzzle identifier. Per [DECISIONS.md #0019](DECISIONS.md). |
-| `difficulty` | text | `easy` / `medium` / `hard` / `expert`. All four tiers populated. Bands are by source rating: easy `[0, 0.75)`, medium `[0.75, 2.5)`, hard `[2.5, 5)`, expert `[5, 7)`. See [#0032](DECISIONS.md). |
+| `difficulty` | text | `warmup` / `beginner` / `easy` / `medium` / `hard` / `expert`. All six tiers populated. Rating bands by source: warmup rating `[-10, -5)`, beginner `[-5, 0)` (both via QQWing — see [#0033](DECISIONS.md)); easy `[0, 0.75)`, medium `[0.75, 2.5)`, hard `[2.5, 5)`, expert `[5, 7)` (Kaggle 3M — see [#0032](DECISIONS.md)). Constraint added in migration 0012. |
 | `givens` | smallint[81] | Starting clues. `0` = empty cell. |
 | `solution` | smallint[81] | Unique solution. **Never sent to the client during multiplayer.** Single-player gets it via the SECURITY DEFINER RPC `sp_get_puzzle(code)` — see [#0022](DECISIONS.md). |
 | `created_at` | timestamptz | |
