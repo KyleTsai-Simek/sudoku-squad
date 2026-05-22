@@ -111,7 +111,7 @@ export function SudokuBoard() {
             {value !== null ? (
               <span>{value}</span>
             ) : cell.notes !== 0 ? (
-              <NotesGrid mask={cell.notes} />
+              <NotesGrid mask={cell.notes} highlight={selValue} />
             ) : null}
           </button>
         );
@@ -120,15 +120,26 @@ export function SudokuBoard() {
   );
 }
 
-function NotesGrid({ mask }: { mask: number }) {
+function NotesGrid({ mask, highlight }: { mask: number; highlight: number | null }) {
   const notes = new Set(notesToArray(mask));
   return (
     <div className="grid h-full w-full grid-cols-3 grid-rows-3 p-0.5 text-[clamp(0.5rem,1.5vw,0.7rem)] leading-none text-stone-500">
-      {Array.from({ length: 9 }, (_, i) => i + 1).map((n) => (
-        <span key={n} className="flex items-center justify-center">
-          {notes.has(n as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9) ? n : ''}
-        </span>
-      ))}
+      {Array.from({ length: 9 }, (_, i) => i + 1).map((n) => {
+        const present = notes.has(n as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9);
+        const isHighlighted = present && highlight === n;
+        return (
+          <span
+            key={n}
+            className={
+              isHighlighted
+                ? 'flex items-center justify-center font-bold text-stone-900'
+                : 'flex items-center justify-center'
+            }
+          >
+            {present ? n : ''}
+          </span>
+        );
+      })}
     </div>
   );
 }
