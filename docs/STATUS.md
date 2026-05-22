@@ -1,118 +1,119 @@
 # Status
 
 **Last updated:** 2026-05-22
-**Current phase:** Phase 1 (single-player web) — vertical slice playable, puzzles in Supabase, CI green locally. Deploy + web→Supabase swap remain.
+**Current phase:** Phase 1 complete; Phase 2 (battle mode) is the next active phase.
 **Branch:** `main`
+**Live:** https://sudoku-squad-web.vercel.app/
 
-This doc captures *where we actually are*. Update it whenever a phase milestone lands or the current focus shifts. If you're a new agent or contributor picking this up cold, this is the single best starting place.
+This doc captures *where we actually are*. Update it whenever a phase milestone lands or the focus shifts. If you're a new agent or contributor picking this up cold, this is the single best starting place.
 
 ---
 
-## What's built and verified
+## What's built
 
-### Scaffolding (Phase 0 — complete)
+### Phase 0 — Setup ✅
 
-- **Monorepo** via pnpm 11 workspaces (`apps/*`, `packages/*`, `scripts/*`).
-- **`packages/core`** — TypeScript-only, platform-agnostic.
-  - `types/` — full domain type system (`BoardState`, `Cell`, `Move`, `Puzzle`, `PersistedMove`, ID brands, etc.)
-  - `puzzle/board.ts` — `createBoard`, `isFilled`, `cellValue` helpers
-  - `puzzle/validator.ts` — `findConflicts` (rule violations, no solution leak), `isCompleteWithSolution` (server-side use), `unitsFor`
-  - **`game/notes.ts`** — bitmask helpers: `setNote`, `clearNote`, `toggleNote`, `hasNote`, `notesToArray`, `clearAllNotes`.
-  - **`game/reducer.ts`** — `applyMove(state, move) -> state` pure reducer + `applyMoves` (replay helper). Refuses writes to given cells, returns same reference for no-ops.
-  - **`game/history.ts`** — `applyMoveWithHistory`, `undo`, `redo`, `canUndo`, `canRedo`. Local-only — never sent to server.
-  - **36/36 tests passing** (Vitest): unit + property-based (`fast-check`) for the reducer, notes, history, and board helpers. Property tests assert: no cell ever holds invalid value, replay == fold, given cells never modified, clear leaves both value+notes empty, validator never flags an empty cell.
-- **`scripts/ingest`** — Node ESM, never shipped to clients.
-  - `solver.ts` — Norvig solver. `solve`, `countSolutions`, `hasUniqueSolution`.
-  - `check-connectivity.ts` — Supabase URL + RLS sanity check.
-  - **`verify-samples.ts`** — verifies the web app's sample puzzle pack against the solver; runs via `pnpm --filter @sudoku-squad/ingest verify:samples`. All 5 currently pass.
-  - **`csv.ts` + `index.ts`** — full ingest pipeline. Streams a Kaggle CSV, buckets per tier (by `difficulty` column when present, else clue count), solver-verifies each candidate (uniqueness + claimed-solution match), and inserts a balanced 10 000-puzzle sample (2 500 × 4 tiers) into Supabase via service-role. `--dry-run` and `--csv <path>` flags. Repeatable fixture-based dry-run: `pnpm --filter @sudoku-squad/ingest ingest:dry-fixture` reports `easy=0 medium=2 hard=0 expert=3` against `fixtures/synthetic.csv` (5 valid + 2 deliberately-bad rows).
-  - 4/4 solver tests passing (incl. world-hardest).
-- **`apps/web`** — Next.js 15 + React 19 + Tailwind 3. **Single-player vertical slice complete:**
-  - `/` — landing page (`HomeClient`) with per-tier "New game" CTAs showing live `unsolved / total` counts + Battle/Coop placeholders. Fetches the (code, difficulty) manifest from `puzzles_public` once on mount, caches in memory.
-  - `/play/[code]` — full game screen, dynamic route. `play-client.tsx` calls `loadPuzzle(code)` which tries the bundled sample pack first (so the smoke test works without Supabase env) and falls back to the `sp_get_puzzle` RPC.
+Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisioned, GitHub repo, Vercel project. Done.
+
+### Phase 1 — Single-player web ✅
+
+- **`packages/core`** — platform-agnostic TypeScript engine. **36 / 36 tests passing** (unit + property-based with `fast-check`).
+  - `types/index.ts` — domain types including `Puzzle`, `BoardState`, `Move`, `PuzzleCode` (cross-mode identifier).
+  - `puzzle/board.ts` — `createBoard(puzzleCode, givens)`, `isFilled`, `cellValue`.
+  - `puzzle/validator.ts` — `findConflicts` (no solution leak), `isCompleteWithSolution` (server-side use), `unitsFor`.
+  - `game/notes.ts` — bitmask helpers.
+  - `game/reducer.ts` — `applyMove` pure reducer + `applyMoves` replay helper.
+  - `game/history.ts` — undo/redo wrapper.
+- **`scripts/ingest`** — Node-only ingest. **9 / 9 tests passing**.
+  - `solver.ts` — Norvig solver.
+  - `code.ts` — TypeScript port of the Postgres `puzzle_code_for` function. Algorithm pinned by tests.
+  - `csv.ts` — streaming CSV reader.
+  - `index.ts` — bucketed sampler + Supabase insert.
+  - `check-connectivity.ts` — 4 RLS sanity checks against the live project.
+  - `verify-samples.ts` — verifies the bundled sample pack against the solver and the code algorithm.
+- **`supabase/migrations/`** — `0001_initial.sql` → `0004_rooms_puzzle_code_fk.sql`, all applied to the live project via `supabase db push --linked`. Schema documented in [ARCHITECTURE.md §4](ARCHITECTURE.md).
+- **Live puzzle data:** 7 500 rows in the `puzzles` table, sourced from `radcliffe/3-million-sudoku-puzzles-with-ratings` on Kaggle. 2 500 each in easy / medium / hard. Expert tier is 0 by design ([DECISIONS #0018](DECISIONS.md)).
+- **`apps/web`** — Next.js 15 + React 19 + Tailwind 3.
+  - Routes: `/` (home with per-tier "New game" CTAs) and `/play/[code]` (game screen).
   - Components: `SudokuBoard`, `NumberPad`, `KeyboardController`, `Timer`, `SettingsSheet`, `CompletionOverlay`.
-  - Game state lives in a Zustand store (`lib/game-store.ts`). On completion, the code is added to `localStorage` via `solved-tracker.ts`.
-  - `lib/puzzle-source.ts` — `loadPuzzle(code)` and `listPuzzles()`. Bundled fallback in `lib/sample-puzzles.ts` (5 puzzles with pinned codes that match the algorithm). Per [DECISIONS.md #0017](DECISIONS.md).
-  - `lib/pick-puzzle.ts` — `pickRandomUnsolved(tier)` and `getTierCounts()`, used by the home page CTAs.
-  - Interaction verified in-browser (Claude Preview): cell selection, row/col/box + same-value highlights, conflict highlighting (rule-based, no solution leak), notes mode (UI wired), keyboard input, undo/redo, hint (reveals correct value from solution; locally OK in single-player), timer, settings, completion overlay with elapsed time + hint count.
-  - Build green (`pnpm --filter @sudoku-squad/web build`), zero console errors at runtime.
-- **`supabase/migrations/0001_initial.sql` + `0002_puzzles_public_security_definer.sql` + `0003_puzzle_code_and_sp_rpc.sql`** — all three applied to the live project via `supabase db push --linked`. 0002 fixed a latent bug in the `puzzles_public` view. 0003 added a 6-char `code` column (deterministic base36 hash of `givens`), exposed it in the view, and added the `sp_get_puzzle(code)` RPC that returns the full row including `solution` — for single-player only.
-- **Live puzzle data:** 7500 puzzles ingested from the Kaggle 3M dataset (`radcliffe/3-million-sudoku-puzzles-with-ratings`). 2500 each in easy/medium/hard tiers — see [DECISIONS.md #0018](DECISIONS.md). Expert is currently 0 (the dataset has only ~100 puzzles rated >7.0; we'll revisit when we have a richer high-difficulty source). Every row has a unique 6-char code.
-- **Web app talks to Supabase.** Home page fetches the (code, difficulty) manifest from `puzzles_public`, "New game" CTAs pick a random unsolved puzzle of the chosen tier and navigate to `/play/[code]`. The play route calls the `sp_get_puzzle` RPC to fetch the full row (including solution, for hint/auto-check). Solved puzzle codes live in `localStorage` under `sudokusquad:solved` so the same puzzle isn't served twice.
-- **Deployment scaffolding:**
-  - Supabase project `enaavxfrjlqqslziyypq.supabase.co`. Supabase CLI linked locally; migrations push via `supabase db push --linked`.
-  - GitHub `KyleTsai-Simek/sudoku-squad`. CI green on `main` ([latest run](https://github.com/KyleTsai-Simek/sudoku-squad/actions)).
-  - **Vercel: live at https://sudoku-squad-web.vercel.app/.** Auto-deploys from `main`. Env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) configured in Vercel for Production/Preview/Development. Root directory set to `apps/web`.
-  - Domain not yet registered (target: `sudokusquad.com`).
+  - State: Zustand store (`lib/game-store.ts`). Solved codes persisted in `localStorage` under `sudokusquad:solved` via `lib/solved-tracker.ts`.
+  - Puzzle loading: `lib/puzzle-source.ts` → `loadPuzzle(code)` first checks the bundled pack (`lib/sample-puzzles.ts`, used by the smoke test) then calls the Supabase RPC `sp_get_puzzle`. `listPuzzles()` pages through `puzzles_public`.
+  - Picker: `lib/pick-puzzle.ts` → `pickRandomUnsolved(tier)` and `getTierCounts()`.
+- **Tooling:**
+  - ESLint flat config in `packages/core` blocks Next/RN/DOM/ingest imports and DOM globals.
+  - Playwright smoke (`apps/web/e2e/single-player.spec.ts`) — navigates to `/play/3santv`, mashes Hint until the completion overlay appears.
+  - GitHub Actions CI runs lint + typecheck + tests + sample/dry-run + web build + Playwright smoke on every PR and push to `main`. Latest run on `main` green.
+- **Deploy:**
+  - Vercel live at https://sudoku-squad-web.vercel.app/, auto-deploys from `main`. Env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) configured for Production / Preview / Development. Root directory `apps/web`.
+  - Supabase CLI linked locally; future migrations push via `supabase db push --linked`.
 
 ### Verified working end-to-end
 
 | Check | Command | Status |
 |---|---|---|
-| Core engine tests | `pnpm --filter @sudoku-squad/core test` | 36/36 passing |
-| Solver tests | `pnpm --filter @sudoku-squad/ingest test` | 4/4 passing |
-| Sample-puzzle verification | `pnpm --filter @sudoku-squad/ingest verify:samples` | 5/5 OK |
+| Core engine tests | `pnpm --filter @sudoku-squad/core test` | 36 / 36 |
+| Ingest tests (solver + code) | `pnpm --filter @sudoku-squad/ingest test` | 9 / 9 |
+| Sample-pack verification | `pnpm --filter @sudoku-squad/ingest verify:samples` | 5 / 5 |
 | Ingest dry-run on synthetic fixture | `pnpm --filter @sudoku-squad/ingest ingest:dry-fixture` | sampled 5, rejected 2 (as designed) |
-| Core lint (purity rules) | `pnpm --filter @sudoku-squad/core lint` | clean; rules verified to fire on injected violations |
-| Web lint (next) | `pnpm --filter @sudoku-squad/web lint` | clean |
-| Playwright smoke | `pnpm --filter @sudoku-squad/web test:e2e` | 1/1 passing (~4 s) |
-| Supabase connectivity + RLS | `pnpm --filter @sudoku-squad/ingest check` | 4/4 — anon reads `puzzles_public`, can't read `puzzles.solution` directly, and can't request `solution` via the view |
+| Supabase connectivity + RLS | `pnpm --filter @sudoku-squad/ingest check` | 4 / 4 |
+| Core lint (purity rules) | `pnpm --filter @sudoku-squad/core lint` | clean |
+| Web lint | `pnpm --filter @sudoku-squad/web lint` | clean |
 | Web typecheck | `pnpm --filter @sudoku-squad/web typecheck` | clean |
 | Web production build | `pnpm --filter @sudoku-squad/web build` | clean |
-| Dev server | `pnpm dev` → `localhost:3000` (or `3001` if taken) | renders, plays through to completion |
+| Playwright smoke | `pnpm --filter @sudoku-squad/web test:e2e` | 1 / 1, ~5 s |
+| Vercel prod | `curl https://sudoku-squad-web.vercel.app/` | 200, Supabase URL inlined |
+| GitHub Actions on `main` | https://github.com/KyleTsai-Simek/sudoku-squad/actions | green |
 
 ---
 
 ## What does NOT yet exist
 
-- (no live blockers right now — single-player is fully wired to Supabase via the `sp_get_puzzle` RPC; bundled `sample-puzzles.ts` is kept as an offline fallback for the smoke test)
+- **Edge Functions / realtime sync / multiplayer rooms / coop / iOS** — Phases 2–4.
 - **Auto-eliminate notes** — Setting exposed in the sheet but disabled (placeholder for V2).
-- **ESLint rules** for `packages/core` purity — wired. `no-restricted-imports` blocks `next/*`, `react-dom/*`, `react-native/*`, `expo/*`, and any path into `scripts/ingest`; `no-restricted-globals` blocks DOM globals (`window`, `document`, `localStorage`, etc.). Run via `pnpm --filter @sudoku-squad/core lint`. Web still uses `next lint` (deprecated but currently green).
-- **Playwright** — config + first smoke landed (`apps/web/e2e/single-player.spec.ts`). The smoke loads `/`, navigates to `/play?seed=sample-1`, mashes the Hint button to fill the board, and asserts the completion overlay. Run via `pnpm --filter @sudoku-squad/web test:e2e` (~4 s locally).
-- **CI** (GitHub Actions) — `.github/workflows/ci.yml` runs lint + typecheck + core/ingest tests + sample-pack solver verification + dry-run ingest + web build, plus a separate `e2e` job that installs Chromium and runs the Playwright smoke. Triggered on `push` to main and on every PR.
-- **Supabase Edge Functions, realtime sync, coop, battle, iOS** — Phases 2–4.
-- **Domain, public deploy, Apple Developer account** — see "Deployment scaffolding" above.
+- **Favicon / Open Graph metadata** — placeholder Next.js favicon; no OG image yet.
+- **Lighthouse / PWA-installable manifest.**
+- **Mobile audit** — uses clamp-based font sizing; needs in-device test on 375 px (iPhone SE) and ~420 px.
+- **Custom domain** (target: `sudokusquad.com`).
+- **`next lint` → ESLint CLI migration** — `apps/web` still uses the deprecated wrapper. Build is currently green but Next.js 16 will remove the wrapper.
+
+---
+
+## Phase 2 readiness
+
+Before Phase 2 starts, the project plan is aligned:
+
+- **Puzzle codes are the cross-mode primitive.** `puzzles.code` is the URL slug, the FK from `rooms.puzzle_code`, the `BoardState.puzzleCode` field, and the in-repo sample pack's pinning value. See [DECISIONS.md #0019 / #0020](DECISIONS.md).
+- **Room codes** are 6-char lowercase base36, randomly generated, separate namespace from puzzle codes. See [#0021](DECISIONS.md).
+- **`rooms.mode`** restricted to `battle` / `coop` (migration 0004 dropped `single`). Single-player doesn't use rooms.
+- **`sp_get_puzzle` is single-player-only.** Multiplayer must use Edge Functions that don't expose `solution`. See [#0022](DECISIONS.md).
+- **Open questions** that need a decision *before* Phase 2 ships are tracked in [DECISIONS.md → Open questions](DECISIONS.md). They are: Edge Function vs SQL RPC for `submit_move`; mid-game join behavior; profanity filter (deferrable).
 
 ---
 
 ## Gotchas worth knowing before you start
 
-1. **Internal imports are extensionless.** `import './foo'` not `'./foo.js'`. Documented in [CLAUDE.md](../CLAUDE.md) §2 and [DECISIONS.md #0015](DECISIONS.md).
-2. **pnpm 11 default-deny on build scripts.** Native-binary packages (`esbuild`, `sharp`, `unrs-resolver`) are allow-listed in `pnpm-workspace.yaml` under `allowBuilds:`. See [DECISIONS.md #0016](DECISIONS.md).
-3. **Tailwind class precedence in the sudoku board.** A handful of cell states (selected/conflict/sameValue/inUnit) all set background and text colors. Tailwind v3 orders classes by stylesheet position, not className order — so combining `bg-white` (unconditional) with `bg-amber-200` (conditional) had `bg-white` winning. The board now picks exactly one `bg-*` class and one `text-*` color via a small lookup. If you add new states, extend that lookup rather than appending a conditional class.
-4. **The connectivity check shows a yellow note when `puzzles` is empty.** Expected. Once ingest populates the table, the same check becomes a definitive RLS test.
-5. **Next.js 15 promoted `typedRoutes` out of `experimental`.** `next.config.ts` reflects this.
-6. **Next.js's `.env.local` lives next to the app, not in the monorepo root.** The dev server reads it from `apps/web/.env.local`. We symlink it: `apps/web/.env.local -> ../../.env.local`. The symlink is gitignored; if you clone fresh, recreate it. Without it, `NEXT_PUBLIC_SUPABASE_*` won't reach the client and the home page falls back to the 5 bundled samples.
-7. **`puzzles.solution` must never reach the client during *multiplayer*.** Single-player ships with the solution because the `sp_get_puzzle` RPC returns the full row — there's no other player to cheat against. The RPC is V1-SP-only; multiplayer (Phase 2+) MUST NOT call it. It uses Edge Functions that track room/player context and return only the answer for one cell at a time.
+1. **Internal imports are extensionless.** `import './foo'` not `'./foo.js'`. See [CLAUDE.md](../CLAUDE.md) §2 and [DECISIONS.md #0015](DECISIONS.md).
+2. **pnpm 11 default-deny on build scripts.** `esbuild`, `sharp`, `unrs-resolver` are allow-listed in `pnpm-workspace.yaml`. See [DECISIONS.md #0016](DECISIONS.md).
+3. **Tailwind class precedence in the sudoku board.** Conditional `bg-*` and `text-*` classes can be shadowed by unconditional defaults. The board picks exactly one of each via a small lookup. Extend the lookup rather than appending conditional classes.
+4. **Next.js's `.env.local` lives next to the app, not in the monorepo root.** Symlink `apps/web/.env.local → ../../.env.local`. The symlink is gitignored; recreate it on a fresh clone. Without it, `NEXT_PUBLIC_SUPABASE_*` won't reach the client and the home page falls back to the 5 bundled samples.
+5. **`puzzles.solution` exposure rule.** Multiplayer (Phase 2+) MUST NOT call `sp_get_puzzle`. Multiplayer Edge Functions return one cell's answer at a time. SP can call the RPC freely — same player, no cheating concern.
+6. **The `puzzle_code_for` algorithm lives in two places** — PL/pgSQL in migration 0003 and TypeScript in `scripts/ingest/src/code.ts`. They must stay byte-identical. `code.test.ts` pins two outputs; `verify-samples.ts` re-checks the bundled pack on every run.
 
 ---
 
-## What to start next
-
-Phase 1 punch list, ordered:
-
-1. **Kaggle dataset ingest** in `scripts/ingest/src/index.ts` — download CSV, parse, verify uniqueness, sample medium-difficulty rows, upsert to Supabase via service-role client. After this, the connectivity check becomes a stronger RLS test and SP can swap the bundled pack for a Supabase fetch.
-2. **ESLint purity rules** for `packages/core` (no DOM/Next/RN, no solver imports).
-3. **Playwright config + first happy-path smoke** in `apps/web` (load home → start game → complete via hints → see overlay).
-4. **GitHub Actions CI** — lint, typecheck, unit + property tests, build, smoke.
-5. **Vercel deploy** wired to `main`.
-6. **Phase 2 — Battle mode** begins.
-
-Each of these is roughly a session's worth of focused work.
-
----
-
-## How to verify the environment is still healthy
+## How to verify the environment is healthy
 
 ```bash
 cd /Users/kylets/sudoku-squad
 pnpm install                                              # idempotent
 pnpm --filter @sudoku-squad/core test                     # expect 36/36
-pnpm --filter @sudoku-squad/ingest test                   # expect 4/4
+pnpm --filter @sudoku-squad/ingest test                   # expect 9/9
 pnpm --filter @sudoku-squad/ingest verify:samples         # expect 5 OK
-pnpm --filter @sudoku-squad/web typecheck                 # expect clean
+pnpm --filter @sudoku-squad/ingest check                  # expect 4/4
+pnpm -r typecheck                                         # expect clean
 pnpm --filter @sudoku-squad/web build                     # expect clean
-pnpm dev                                                  # play through a puzzle
+pnpm --filter @sudoku-squad/web test:e2e                  # expect 1/1
+pnpm dev                                                  # http://localhost:3000
 ```
 
 If any step fails, fix before adding features.

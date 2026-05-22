@@ -1,17 +1,18 @@
 'use client';
 
-import type { Difficulty } from '@sudoku-squad/core';
-import { getSupabase, hasSupabase } from './supabase';
-import { SAMPLE_PUZZLES, getSamplePuzzleByCode, type SamplePuzzle } from './sample-puzzles';
+import type { Difficulty, PuzzleCode } from '@sudoku-squad/core';
+import { getSupabase } from './supabase';
+import { SAMPLE_PUZZLES, getSamplePuzzleByCode } from './sample-puzzles';
 
 /**
- * The single-player puzzle. Includes the solution because hint and
+ * The single-player puzzle shape. Includes the solution because hint and
  * completion check happen client-side in SP — there's no other player to
- * cheat against. Multiplayer (Phase 2+) will not see this shape: it'll
- * fetch givens only and go through an Edge Function for hint/check.
+ * cheat against. Multiplayer (Phase 2+) does NOT see this shape: it'll fetch
+ * givens only and go through an Edge Function for hint/check. See
+ * docs/DECISIONS.md #0022.
  */
 export interface FetchedPuzzle {
-  code: string;
+  code: PuzzleCode;
   difficulty: Difficulty;
   givens: number[];
   solution: number[];
@@ -19,15 +20,23 @@ export interface FetchedPuzzle {
 
 /** Public-view row, no solution. Used for browsing/listing. */
 export interface PuzzleSummary {
-  code: string;
+  code: PuzzleCode;
   difficulty: Difficulty;
 }
 
 /**
- * Load a puzzle by its short code. Tries the bundled fallback first (so the
- * smoke test and offline dev work without Supabase), then the live RPC.
+ * Bundled-pack fallback used when the Supabase client isn't available — i.e.
+ * the Playwright smoke (no env in CI) or an offline dev workspace. Production
+ * always goes through Supabase. The fallback is intentionally minimal (5
+ * puzzles, lowercase base36 codes computed by the same algorithm).
  */
-export async function loadPuzzle(code: string): Promise<FetchedPuzzle | null> {
+function bundledSummaries(): PuzzleSummary[] {
+  return SAMPLE_PUZZLES.map((p) => ({ code: p.code, difficulty: p.difficulty }));
+}
+
+/** Load a puzzle by its short code. Bundled samples short-circuit before
+ *  the RPC so the smoke test runs without Supabase. */
+export async function loadPuzzle(code: PuzzleCode): Promise<FetchedPuzzle | null> {
   const sample = getSamplePuzzleByCode(code);
   if (sample) return sample;
 
@@ -49,21 +58,16 @@ export async function loadPuzzle(code: string): Promise<FetchedPuzzle | null> {
 }
 
 /**
- * List every puzzle's (code, difficulty). Returns the bundled pack when
- * Supabase isn't configured. The full Supabase list is ~7500 rows of small
- * objects (~15 KB) — fine to fetch once at home-page load.
+ * List every puzzle's (code, difficulty). 7500 rows of small objects ≈ 15 KB —
+ * fine to fetch once at home-page load. Returns the bundled pack when Supabase
+ * isn't configured.
  */
 export async function listPuzzles(): Promise<PuzzleSummary[]> {
-  if (!hasSupabase()) {
-    return SAMPLE_PUZZLES.map((p) => ({ code: p.code, difficulty: p.difficulty }));
-  }
   const client = getSupabase();
-  if (!client) {
-    return SAMPLE_PUZZLES.map((p) => ({ code: p.code, difficulty: p.difficulty }));
-  }
-  // Page through PostgREST's default 1000-row limit.
+  if (!client) return bundledSummaries();
+
   const out: PuzzleSummary[] = [];
-  const PAGE = 1000;
+  const PAGE = 1000; // PostgREST default row limit.
   for (let offset = 0; ; offset += PAGE) {
     const { data, error } = await client
       .from('puzzles_public')

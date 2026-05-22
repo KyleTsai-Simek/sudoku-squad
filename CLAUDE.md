@@ -27,11 +27,12 @@ If you've just landed in this repo:
 ```bash
 # 1. Verify environment
 pnpm install                                         # idempotent
-pnpm --filter @sudoku-squad/core test                # expect 6/6
-pnpm --filter @sudoku-squad/ingest test              # expect 4/4
+pnpm --filter @sudoku-squad/core test                # expect 36/36
+pnpm --filter @sudoku-squad/ingest test              # expect 9/9
 
-# 2. Verify Supabase connection (requires .env.local)
-pnpm --filter @sudoku-squad/ingest check             # expect 3 green checks
+# 2. Verify Supabase connection (requires .env.local at repo root +
+#    apps/web/.env.local -> ../../.env.local symlink so Next.js can read it)
+pnpm --filter @sudoku-squad/ingest check             # expect 4 green checks
 
 # 3. Boot the app
 pnpm dev                                             # http://localhost:3000
@@ -39,7 +40,7 @@ pnpm dev                                             # http://localhost:3000
 # 4. Read docs/STATUS.md and docs/TODO.md to see what to work on
 ```
 
-If any of (1–3) fail, fix before adding features. See [docs/STATUS.md](docs/STATUS.md) for credential setup if `.env.local` is missing.
+If any of (1–3) fail, fix before adding features. See [docs/STATUS.md](docs/STATUS.md) gotchas for the `.env.local` symlink trick.
 
 ---
 

@@ -17,6 +17,95 @@ Format:
 
 ---
 
+## 0022 — Single-player gets the solution; multiplayer never does
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** Hint and "auto-check" need to know the correct cell value. In single-player there's no other player to cheat against, so doing this check client-side is fine. In multiplayer it's anti-cheat-critical that `puzzles.solution` never reach the client.
+
+**Decision.** Two distinct paths, deliberately *not* unified:
+
+| Mode | How the client gets answers |
+|---|---|
+| Single-player (`/play/[code]`) | Calls the SECURITY DEFINER RPC `sp_get_puzzle(p_code)` which returns the full row including `solution`. The client uses the solution for hint, auto-check, and completion check locally. |
+| Battle / coop (Phase 2+) | Client fetches givens via `puzzles_public` (no `solution` column) and goes through Edge Functions for hint reveal, server-validated cell-correct checks, and completion. `solution` never leaves the server. |
+
+Multiplayer code MUST NOT call `sp_get_puzzle`. The RPC's comment in migration 0003 calls this out; we'll re-check it in code review when Phase 2 lands.
+
+**Alternatives considered.**
+- **Unify the path** — make SP also go through Edge Functions and stop returning the solution. Cleaner but doubles the Phase 1 effort (Edge Functions weren't needed for anything else) and gains no real security (SP has no one to cheat against).
+- **Never return the solution, even in SP** — kill the hint feature in SP entirely. Worse UX.
+- **Mix: SP also uses Edge Functions, but they're permissive** — confusing dual-purpose endpoints.
+
+**Consequences.**
+- A player who solved a puzzle in SP and later joins a coop room with the *same* puzzle has a slight advantage (they remember the answers). We accept this; V1 doesn't try to prevent self-spoiling.
+- `sp_get_puzzle` is V1-only baggage if Phase 2 builds the same Edge Function hint flow for multiplayer. Once the multiplayer hint path exists, we *could* migrate SP onto it — kept as a future refactor. Until then the dual path is the simplest thing that works.
+- The RPC is gated only by `grant execute … to anon`. Anyone can call it for any puzzle code. Acceptable for SP. If we ever want SP to also gate by player session, that becomes an Edge Function.
+
+---
+
+## 0021 — Room codes: 6-char lowercase base36, randomly generated
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** Multiplayer rooms need shareable codes for URLs like `/r/{code}`. Format choices: alphabet (Crockford base32, base36, base64-url), length, generation (random vs deterministic vs sequence).
+
+**Decision.** Match the puzzle-code shape: **6 characters, lowercase base36 (0-9a-z), randomly generated**, unique in `rooms.code`. On collision, retry.
+
+| Property | Value |
+|---|---|
+| Length | 6 |
+| Alphabet | `0-9a-z` |
+| Generation | Random (per `gen_random_bytes` or equivalent) |
+| Collision retry | Yes — `rooms.code unique` enforces it, server retries on conflict |
+| Lifetime | Tied to the room row; codes can be recycled after `rooms` is cleaned up |
+
+**Alternatives considered.**
+- **Crockford base32 (no I/L/O/U).** Friendlier when shared verbally. Rejected: rooms are shared via link, not voice; the cost of a second alphabet to remember isn't worth the marginal disambiguation.
+- **Uppercase to visually distinguish from puzzle codes.** Cute but unnecessary — different URL paths (`/play/` vs `/r/`) prevent any real confusion.
+- **UUIDs in the URL.** Too long; ugly.
+- **Sequential / pretty short IDs.** Leak room creation cadence, no real benefit.
+
+**Consequences.**
+- Room and puzzle codes share a format. They live in different tables and different URL paths — no actual collision risk in URLs. A code string in isolation is ambiguous (you'd need to know if it's a `/play/` or `/r/` URL), but we never share codes in isolation.
+- 36^6 ≈ 2.18B distinct codes. At any plausible concurrent-room count, collision probability is microscopic. The `unique` constraint catches the impossible case; the Edge Function retries with a fresh random.
+- Phase 2 `create_room` Edge Function is the only place that generates these.
+
+---
+
+## 0020 — Puzzle code is the cross-mode puzzle reference (rooms.puzzle_code FK)
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** Migration 0001 declared `rooms.puzzle_id uuid references puzzles(id)`. Migration 0003 added `puzzles.code text unique` as the URL/short-share identifier. We now had two ways to reference a puzzle from a room (UUID and code) with no clear winner. Multiplayer is about to start using this column.
+
+**Decision.** Rooms reference puzzles by `puzzle_code text references puzzles(code)`. Drop `rooms.puzzle_id`. The puzzle code is the single cross-mode identifier:
+
+| Use | Identifier |
+|---|---|
+| Internal Postgres PK | `puzzles.id` (uuid) |
+| URL slug for SP | `puzzles.code` → `/play/[code]` |
+| URL slug for multiplayer rooms | `rooms.code` → `/r/[code]` (different namespace) |
+| `rooms` reference to its puzzle | `rooms.puzzle_code` (FK to puzzles.code) |
+| Move log scope | `rooms.id` (uuid, unchanged) |
+| In-app `BoardState` identifier | `puzzleCode` (was `puzzleId`) |
+| In-repo sample puzzles | pinned to the same hash |
+
+Applied as migration `0004_rooms_puzzle_code_fk.sql`. `rooms` was empty in production so no data migration was needed.
+
+**Alternatives considered.**
+- **Keep both** (`puzzle_id` AND `puzzle_code` denormalized for read speed). Two identifiers for the same thing is exactly the conflation we wanted to remove. Skipped.
+- **Keep only `puzzle_id`, never reference by code in the schema.** Forces every admin query / log line to JOIN to display the readable identifier. The code became the human-facing identifier the moment we built `/play/[code]`; the schema should reflect that.
+- **Drop the UUID entirely** (use code as the PK on `puzzles`). Tempting but riskier — UUID PKs play nicely with Supabase tooling, RLS examples, and the future case where someone re-hashes a puzzle and we want to keep the row identity stable across the rename.
+
+**Consequences.**
+- `core.BoardState.puzzleId` was renamed to `puzzleCode`. `createBoard(puzzleCode, givens)`. The DB UUID isn't carried in the client at all — we never needed it client-side.
+- The `puzzles.id` uuid stays as the internal PK. It's used by `moves`-as-yet-unbuilt (per Phase 2 design `moves.room_id` references `rooms.id`, no puzzle_id needed there).
+- `puzzles_public` still exposes both `id` and `code` to clients. The `id` is now dead client-side surface — could be removed in a future migration if we want a tighter API, but it doesn't cost anything to leave.
+- Schema is now: puzzle = `(id uuid, code text unique)`, room = `(id uuid, code text unique, puzzle_code text fk)`.
+
+---
+
 ## 0019 — Puzzle codes: 6-char deterministic base36 hash of givens
 **Date:** 2026-05-22
 **Status:** Accepted
@@ -194,7 +283,7 @@ We also keep classic unit tests (~90% coverage target in core) and a small Playw
 
 ## 0011 — Kaggle 9M Sudoku dataset as the V1 puzzle source
 **Date:** 2026-05-21
-**Status:** Accepted
+**Status:** Superseded by #0018 — we ended up using the 3M variant (`radcliffe/3-million-sudoku-puzzles-with-ratings`) because it ships a numeric difficulty rating column. Original entry retained for context below.
 
 **Context.** Need a puzzle source for V1. Building a generator is out of scope. The dataset needs to come with difficulty ratings and ideally pre-validated unique solutions.
 
@@ -368,15 +457,33 @@ We also keep classic unit tests (~90% coverage target in core) and a small Playw
 
 # Open questions (live)
 
-Resolved items get moved into the log above. These are still TBD:
+Resolved items get moved into the log above. These are still TBD. Items grouped by when they have to be decided.
 
-1. **Battle tiebreak when no one finishes within N minutes** — needed? If yes, what's the threshold? Currently leaning "no hard time limit in V1; people quit naturally."
-2. **Host migration in coop** — automatic to longest-tenured remaining player, or require acknowledgement?
-3. **Edge Function vs. SQL RPC** for `submit_move` — TS flexibility vs. simpler stack. Leaning Edge Function.
-4. **`board_snapshots` table** — add now for fast rejoin or wait until measurable problem? Leaning wait.
-5. **Mid-game join behavior** — battle locked after start vs. coop open anytime is the working assumption. Confirm before Phase 2 ships.
-6. **Mobile cursor visualization in coop** — phones have no persistent cursor; needs a small spec. Working assumption: ring persists on last-tapped cell, fades after ~3s of inactivity.
-7. **Share-link code format** — 6-char readable codes (no 0/O/1/I) vs. UUID. Leaning readable codes, recycled when room ends.
-8. **Disconnect grace period** — 60s in architecture; may be too tight for mobile. Leaning 2 minutes.
-9. **Username profanity filter** — not needed for friend-and-family beta; needed before public launch.
-10. **Visual identity** — color palette, typography, logo, completion celebration style. Need design pass before any public-facing deploy.
+## Decide before Phase 2 ships
+
+1. **Mid-game join behavior** — working assumption: battle is locked after Start, coop is open anytime. Confirm before the lobby UI ships, because it changes the lobby copy and the room URL behavior for late arrivals.
+2. **Edge Function vs. SQL RPC for `submit_move`** — TS flexibility vs. simpler stack. Leaning Edge Function (matches `create_room`/`join_room`). Decide before the first Edge Function lands.
+3. **Username profanity filter** — not needed for friend-and-family beta. Defer; revisit when a public-launch ask is real.
+
+## Decide during Phase 2/3
+
+4. **Battle tiebreak when no one finishes within N minutes** — needed? Threshold? Leaning "no hard time limit in V1; people quit naturally."
+5. **Host migration in coop** — automatic transfer to the longest-tenured remaining player, or require acknowledgement?
+6. **Disconnect grace period** — 60 s in ARCHITECTURE; may be too tight for mobile. Leaning 2 minutes.
+7. **Mobile cursor visualization in coop** — phones have no persistent cursor. Working assumption: ring persists on last-tapped cell, fades after ~3 s of inactivity. Validate during coop UI work.
+8. **`board_snapshots` table** — add now for fast rejoin or wait until measurable problem? Leaning wait.
+
+## Open longer-term
+
+9. **Visual identity** — color palette, typography, logo, completion celebration style. Current interim is Tailwind stone-900 + amber-200 accents (sufficient for V1 demo, not committed to). Needs a design pass before any public-facing push.
+10. **Expert tier sourcing** — the 3M Kaggle dataset has only ~100 puzzles rated > 7.0, not enough for a 2 500-row sample (per #0018). Find or generate a higher-difficulty source before re-enabling the tier.
+11. **Vercel ↔ Supabase preview environment** — preview deploys currently hit the *production* Supabase project. Fine for V1; revisit before more users.
+
+## Recently resolved (and where it landed)
+
+- **Puzzle code format** — resolved in #0019 (6-char lowercase base36, deterministic from givens).
+- **Room code format** — resolved in #0021 (6-char lowercase base36, random, retried on collision).
+- **Cross-mode puzzle reference** — resolved in #0020 (`rooms.puzzle_code` FK to `puzzles.code`).
+- **`rooms.mode` includes `single`** — resolved (dropped via migration 0004; single-player doesn't use rooms).
+- **Solution exposure for SP vs. multiplayer** — resolved in #0022 (SP uses the `sp_get_puzzle` RPC; multiplayer uses Edge Functions that never expose `solution`).
+- **Puzzle dataset variant** — resolved in #0018 (Kaggle 3M with the rating column; supersedes #0011).

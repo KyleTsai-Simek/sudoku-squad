@@ -1,12 +1,12 @@
-import type { BoardArray, BoardState, Cell, CellValue, PuzzleId } from '../types/index';
+import type { BoardArray, BoardState, Cell, CellValue, PuzzleCode } from '../types/index';
 
 /**
  * Build the initial BoardState from a puzzle's givens.
  *
- * @param puzzleId Identifier (UUID from Supabase) for the puzzle.
+ * @param puzzleCode The puzzle's short hash (matches the URL slug and `puzzles.code`).
  * @param givens 81-int array; 0 means empty, 1..9 are clues.
  */
-export function createBoard(puzzleId: PuzzleId, givens: BoardArray): BoardState {
+export function createBoard(puzzleCode: PuzzleCode, givens: BoardArray): BoardState {
   if (givens.length !== 81) {
     throw new Error(`Expected 81 givens, got ${givens.length}`);
   }
@@ -19,7 +19,7 @@ export function createBoard(puzzleId: PuzzleId, givens: BoardArray): BoardState 
     }
     return { given: g as CellValue, value: null, notes: 0 };
   });
-  return { puzzleId, cells };
+  return { puzzleCode, cells };
 }
 
 /** True if every non-given cell has a value (the board is fully filled). */

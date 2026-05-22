@@ -68,7 +68,7 @@ export function undo(state: BoardState, history: MoveHistory): ApplyResult {
   const cells = state.cells.slice();
   cells[top.move.cell] = top.priorCell;
   return {
-    state: { puzzleId: state.puzzleId, cells },
+    state: { puzzleCode: state.puzzleCode, cells },
     history: {
       undoStack: history.undoStack.slice(0, -1),
       redoStack: [...history.redoStack, top],

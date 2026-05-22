@@ -15,7 +15,7 @@ This document defines the technical foundation for Sudoku Squad: stack, data mod
 | Auth | **Supabase anonymous sessions** | No signup. Each browser/device gets an anon user ID; username is per-room. |
 | Hosting | **Vercel (web) + Supabase Cloud** | Generous free tiers, deploy in minutes. |
 | State (client) | **Zustand** (or React Context for V1) + Supabase Realtime subscriptions | Simple, plays well with TS. |
-| Package manager | **pnpm 9** (workspaces) | Strict dep resolution enforces the `packages/core` purity rule. Per [DECISIONS.md #0014](DECISIONS.md). |
+| Package manager | **pnpm 11** (workspaces) | Strict dep resolution enforces the `packages/core` purity rule. Per [DECISIONS.md #0014](DECISIONS.md). |
 
 ---
 
@@ -43,59 +43,80 @@ We use a **pnpm workspace monorepo** so the shared package is trivial to import.
 ```
 sudoku-squad/
   apps/
-    web/                  # Next.js
-      app/
-      components/
-      lib/                # web-only adapters (e.g., useRouter)
+    web/                  # Next.js — the live app
+      app/                # routes: / and /play/[code]
+      components/         # SudokuBoard, NumberPad, Timer, SettingsSheet, etc.
+      lib/                # game-store (zustand), puzzle-source, pick-puzzle,
+                          # solved-tracker, supabase, sample-puzzles
+      e2e/                # Playwright smoke
     ios/                  # Expo / React Native (added in Phase 4)
   packages/
     core/                 # SHARED — must stay platform-agnostic
       src/
-        puzzle/           # validation, conflict detection (NO solver — that's in scripts/)
-        game/             # state machine, reducers, move types
-        sync/             # Supabase channel helpers, conflict rules
+        puzzle/           # board construction, conflict detection (NO solver)
+        game/             # reducer, notes bitmask helpers, undo/redo history
         types/            # shared TS types
-    ui/                   # (optional later) shared design tokens
+                          # (sync/ will be created in Phase 2)
   scripts/
-    ingest/               # one-off: dataset import, Norvig solver, uniqueness checks
+    ingest/               # one-off: dataset import, Norvig solver, code hashing
+      data/               # gitignored: source CSVs from Kaggle
+      fixtures/           # small in-repo synthetic CSVs (committed)
+      src/                # solver, csv reader, code hash, check-connectivity
   supabase/
-    migrations/           # SQL migrations
-    functions/            # Edge Functions (validation, room creation)
-  docs/
+    migrations/           # 0001..0004 applied to live project
+    functions/            # Edge Functions (Phase 2)
+  docs/                   # STATUS, GOALS_AND_SCOPE, ARCHITECTURE, ROADMAP,
+                          # TODO, DECISIONS, GAME_DESIGN
+  .github/workflows/      # CI: lint + typecheck + tests + Playwright
   package.json
   pnpm-workspace.yaml
 ```
 
-**Critical rule:** `packages/core` must not import from `next/*`, `react-native/*`, `react-dom/*`, or any DOM API. It can use `react` (for hooks like `useState` if needed) since both clients ship React.
+**Critical rules** enforced by `packages/core/eslint.config.js`:
+- No imports from `next/*`, `react-dom/*`, `react-native/*`, `expo/*`.
+- No imports from `scripts/ingest/**` or `@sudoku-squad/ingest` (the Norvig solver lives there — never ship to clients).
+- No direct access to DOM globals (`window`, `document`, `localStorage`, etc.). Platform capabilities must be injected (see §8).
+- `react` itself is allowed for hooks; no JSX components live in `packages/core`.
 
 ---
 
 ## 4. Data model (Supabase / Postgres)
 
-Schema sketch — final SQL lives in `supabase/migrations/`.
+Live SQL is in `supabase/migrations/`. Tables below reflect what's actually applied to the project (migrations 0001 → 0004).
 
 ### `puzzles`
-Pre-generated puzzles. Mined or generated; immutable.
+Pre-generated puzzles. Immutable once ingested. 7 500 rows live as of this writing — 2 500 each in easy / medium / hard.
 
 | col | type | notes |
 |---|---|---|
-| `id` | uuid PK | |
-| `difficulty` | text | `easy` / `medium` / `hard` / `expert` (V1: `medium` only) |
-| `givens` | int[81] | The starting clues. `0` = empty cell. |
-| `solution` | int[81] | The unique solution. Never sent to client during play. |
+| `id` | uuid PK | Internal DB key. Not visible client-side. |
+| `code` | text unique not null | 6-char lowercase base36 hash of `givens`. URL slug and the cross-mode puzzle identifier. Per [DECISIONS.md #0019](DECISIONS.md). |
+| `difficulty` | text | `easy` / `medium` / `hard` / `expert`. V1 ships easy/medium/hard (expert is currently empty by design — see [#0018](DECISIONS.md)). |
+| `givens` | smallint[81] | Starting clues. `0` = empty cell. |
+| `solution` | smallint[81] | Unique solution. **Never sent to the client during multiplayer.** Single-player gets it via the SECURITY DEFINER RPC `sp_get_puzzle(code)` — see [#0022](DECISIONS.md). |
 | `created_at` | timestamptz | |
+
+#### `puzzles_public` (view)
+Anon-readable projection of `puzzles`. Exposes `id`, `code`, `difficulty`, `givens`, `created_at`. **Solution is intentionally absent.** Originally created with `security_invoker = true` which made it inherit anon's lack of RLS allow on the underlying table and return zero rows; migration 0002 rebuilt it without `security_invoker` so the projection's whole point — anon can read the safe subset — actually works.
+
+#### `puzzle_code_for(givens smallint[])` (function)
+Pure SQL that computes the puzzle code. Same algorithm as `scripts/ingest/src/code.ts` so codes match across the in-DB backfill, the ingest insert path, and the in-repo sample pack. Test `code.test.ts` pins the algorithm; if you change one side, also update the other.
+
+#### `sp_get_puzzle(p_code text)` (RPC)
+SECURITY DEFINER. Returns the full row for a single puzzle including `solution`. Granted to `anon`. **Single-player only** — the comment on the function says so. Phase 2 multiplayer must use Edge Functions that take a room/player context and return only what that player is allowed to see.
 
 ### `rooms`
 A multiplayer session. Created when a host clicks "Battle" or "Coop" and gets a shareable link.
 
 | col | type | notes |
 |---|---|---|
-| `id` | uuid PK | |
-| `code` | text unique | Short shareable code in the URL (e.g., `/r/abc123`). |
-| `mode` | text | `single` / `battle` / `coop` |
-| `puzzle_id` | uuid FK → puzzles | |
+| `id` | uuid PK | Internal DB key, used by `moves.room_id` and channel naming. |
+| `code` | text unique not null | Short shareable code in the URL (`/r/[code]`). 6 chars lowercase base36, randomly generated — see [DECISIONS.md #0021](DECISIONS.md). |
+| `mode` | text | `battle` / `coop`. (`single` was dropped in migration 0004 — single-player doesn't use rooms; see [#0022](DECISIONS.md).) |
+| `puzzle_code` | text FK → `puzzles(code)` | The puzzle this room is playing. Per [DECISIONS.md #0020](DECISIONS.md) — referenced by code, not by UUID. |
 | `status` | text | `lobby` / `playing` / `finished` |
 | `winner_player_id` | uuid nullable | Battle mode only. |
+| `settings` | jsonb not null default `{}` | Host-edited room settings (locks at Start). |
 | `started_at` | timestamptz nullable | |
 | `finished_at` | timestamptz nullable | |
 | `created_at` | timestamptz | |
@@ -178,17 +199,18 @@ Run on the server (Edge Function or trigger) by comparing the current materializ
 
 ## 7. Puzzle source
 
-**V1 uses the Kaggle 9M Sudoku dataset** (or the 1M variant if it's easier to download). Plain CSV, one row per puzzle: `puzzle,solution[,difficulty]`. Per [DECISIONS.md #0011](DECISIONS.md).
+V1 uses the Kaggle [3 million Sudoku puzzles with ratings](https://www.kaggle.com/datasets/radcliffe/3-million-sudoku-puzzles-with-ratings) dataset (`radcliffe/3-million-sudoku-puzzles-with-ratings`). One row per puzzle: `id,puzzle,solution,clues,difficulty`. The rating column lets us bucket by the dataset's own difficulty without inferring from clue count. Per [DECISIONS.md #0018](DECISIONS.md), which supersedes #0011.
 
 Ingest flow (`scripts/ingest/`, one-off):
 1. Stream the CSV.
-2. For each row, run our Norvig-ported solver against `puzzle` to confirm it has exactly one solution. Reject any row with zero or multiple solutions, or where the dataset's claimed `solution` doesn't match.
-3. Pick 500–1000 medium-difficulty rows. Upsert into `puzzles` with `givens` and `solution`.
-4. Done. The script is never run at runtime.
+2. For each row, run our Norvig-ported solver to confirm a unique solution and that the dataset's claimed solution matches.
+3. Bucket by the dataset's `difficulty` rating into easy / medium / hard / expert. Stop sampling once each tier hits its target (currently 2 500 each except expert = 0).
+4. Compute `puzzles.code = puzzleCodeFor(givens)` for every kept row (the TS port of the in-DB function — see [#0019](DECISIONS.md)).
+5. Bulk insert into `puzzles` via the service-role client. The `unique(code)` constraint catches the impossible collision case.
 
-Runtime never invokes the solver. Hints, auto-check, and win detection all read `puzzles.solution` directly (server-side; never sent to the client). The solver code lives in `scripts/`, not `packages/core`. Per [DECISIONS.md #0012](DECISIONS.md).
+Runtime never invokes the solver. Hints, auto-check, and win detection in single-player read `solution` via the RPC `sp_get_puzzle`; multiplayer hits Edge Functions instead — see [#0022](DECISIONS.md). The solver code lives in `scripts/ingest/` and is lint-blocked from being imported by `packages/core` or `apps/web`. Per [DECISIONS.md #0012](DECISIONS.md).
 
-A real generator is a V2 project. If we ever want one, the same Norvig implementation in `scripts/` is the starting point.
+A real generator is a V2 project. The same Norvig implementation in `scripts/ingest/` would be the starting point.
 
 ---
 
@@ -221,20 +243,41 @@ Web passes a `localStorage`-backed impl; RN passes an `AsyncStorage`-backed impl
 ## 9. Security & RLS notes
 
 - Supabase Row-Level Security on every table.
-- `puzzles.solution` is **server-only** — readable by `service_role` and Edge Functions, never by `anon`.
+- **`puzzles.solution` never leaves the server in multiplayer.** Anon can read `puzzles_public` (id, code, difficulty, givens, created_at); the underlying table is RLS-denied to anon. Migration 0002 fixed a `security_invoker = true` bug in the view that was silently denying anon reads.
+- **Single-player is the only path that ships the solution to the client**, via the SECURITY DEFINER RPC `sp_get_puzzle(p_code)`. This is V1-only baggage; Phase 2 multiplayer must not call it. See [DECISIONS.md #0022](DECISIONS.md).
 - `room_players` writable only when `player_id = auth.uid()`.
 - `moves` insertable only by a current member of the room.
-- Edge Function `submit_move` validates the move against game rules before persisting + broadcasting.
+- Edge Function `submit_move` (Phase 2) validates the move against game rules before persisting + broadcasting.
+
+`scripts/ingest/check-connectivity.ts` asserts the contract: anon can read `puzzles_public`, anon's direct read of `puzzles` returns 0 rows despite 7 500 real rows (RLS deny), and anon cannot request `solution` from the view at all (column doesn't exist there). Run it on every schema change.
 
 This isn't paranoia — without server-authoritative move validation, anyone can DevTools their way to "I won battle mode."
 
 ---
 
-## 10. Open architectural questions
+## 10. Identifiers across modes (cheat sheet)
 
-- **Do we need `board_snapshots`?** Probably defer until rejoin latency becomes an issue.
-- **Edge Function vs. Postgres RPC for move submission?** Both work. RPC is simpler if all logic is SQL-expressible; Edge Function gives us TS. Likely Edge Function.
-- **Presence cursor frequency.** Need to throttle to ~10/s to avoid Realtime quota issues.
-- **What happens when the host leaves mid-game?** Probably: host title transfers to the longest-tenured remaining player; game continues. Decide before coop ships.
+This is the part that most often confuses new contributors. There are five kinds of identifier in play:
 
-See [DECISIONS.md](DECISIONS.md) for resolved decisions and the running open-questions list.
+| What | Type | Where it lives | Used for |
+|---|---|---|---|
+| Puzzle DB key | uuid | `puzzles.id` | internal PK; not exposed client-side |
+| **Puzzle code** | text (6-char base36) | `puzzles.code` | URL slug `/play/[code]`, FK from `rooms.puzzle_code`, `BoardState.puzzleCode`, in-repo sample pinning |
+| Room DB key | uuid | `rooms.id` | move-log scope, realtime channel name `room:{room_id}` |
+| **Room code** | text (6-char base36, random) | `rooms.code` | URL slug `/r/[code]`, what users share with friends |
+| Player | uuid | Supabase `auth.uid()` | `room_players.player_id`, `moves.player_id` |
+
+The two `code` columns share a format but live in independent tables and URL namespaces. Per [DECISIONS.md #0019](DECISIONS.md), #0020, #0021.
+
+---
+
+## 11. Open architectural questions
+
+See the live list in [DECISIONS.md](DECISIONS.md) → "Open questions (live)". The biggest ones blocking Phase 2:
+
+- **Edge Function vs. Postgres RPC for `submit_move`** — leaning Edge Function for TS flexibility and to match `create_room`/`join_room`. Decide before the first one lands.
+- **Mid-game join behavior** — working assumption: battle locks at Start, coop is open anytime. Confirm before the lobby UI ships.
+- **Disconnect grace period** — 60 s vs 2 minutes; affects how the lobby renders absent players.
+- **Presence cursor frequency** — throttle to ~10/s to avoid Realtime quota; not a question, a constraint to remember.
+
+Deferred / V2: `board_snapshots`, host migration acknowledgement UX, mobile cursor visualization in coop.

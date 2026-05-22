@@ -45,7 +45,7 @@ export function applyMove(state: BoardState, move: Move): BoardState {
 
   const cells = state.cells.slice();
   cells[move.cell] = next;
-  return { puzzleId: state.puzzleId, cells };
+  return { puzzleCode: state.puzzleCode, cells };
 }
 
 /** Apply a sequence of moves in order. Convenience for replay. */

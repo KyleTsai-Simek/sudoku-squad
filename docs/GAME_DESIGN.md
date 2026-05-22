@@ -2,17 +2,19 @@
 
 Everything UX-facing: modes, settings, what shows up on the board, what shouldn't, and the open questions we still need to answer. Where a decision is open, it's flagged with **OPEN**.
 
+> **What's live vs. spec.** Single-player is the only mode that exists today (live at https://sudoku-squad-web.vercel.app/). Battle and coop sections below are the design spec — they describe what we'll build in Phases 2 and 3. Treat them as the source of truth for what those modes should *feel like* when they ship.
+
 ---
 
 ## Modes
 
-### Single player
+### Single player ✅ live
 - One player, one puzzle.
 - All settings (notes, reveal, hints) available.
 - Local state only — does not require a Supabase room.
 - Purpose: most casual entry point, also our testbed for the core engine.
 
-### Battle
+### Battle 📝 spec (Phase 2)
 - 2–4 players, each with their own private copy of the same puzzle.
 - Each player sees their own board only. We do show a **progress bar per opponent** (% cells correctly filled) — enough social pressure without giving away their answers.
 - First player to legally complete the puzzle wins. Server validates.
@@ -20,7 +22,7 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 - If a player gets stuck, they can give up at any time (counts as a loss for them; game continues for others).
 - Optional: time-based fallback — if no one finishes in X minutes, highest progress % wins. **OPEN**.
 
-### Coop
+### Coop 📝 spec (Phase 3)
 - 2–4 players, all writing to the same board.
 - Visible colored cursors show where other players are looking.
 - Last-write-wins per cell (server-ordered).
@@ -113,7 +115,7 @@ These all default to per-room settings (host picks in the lobby):
 - Daily puzzle / shared world puzzle.
 - Chat or emoji reactions inside the room.
 - Spectator mode.
-- Difficulty selection. (We pick one tier; that's it.)
+- Expert tier (3 tiers ship in V1: easy/medium/hard — see [DECISIONS.md #0018](DECISIONS.md). Expert is on hold pending a higher-difficulty puzzle source.)
 - Achievements, stats, history.
 - Custom rules / variants (X-sudoku, killer sudoku, etc.).
 - Audio / SFX.

@@ -6,6 +6,10 @@
  *  - Cell values are 1..9. We use 0 to mean "empty" in compact representations
  *    (e.g., 81-int arrays from the dataset), and `null` in BoardState for clarity.
  *  - Notes are sets of 1..9, represented as a small bitmask for compactness.
+ *  - A puzzle has two identifiers: the database UUID (`PuzzleId`, internal) and
+ *    the short URL-friendly hash (`PuzzleCode`, external). The code is the
+ *    cross-mode primitive — URLs, sharing, and `rooms.puzzle_code` all use it.
+ *    See docs/DECISIONS.md #0019 and #0020.
  */
 
 export type CellIndex = number; // 0..80
@@ -27,21 +31,30 @@ export interface Cell {
 }
 
 export interface BoardState {
-  readonly puzzleId: PuzzleId;
+  /** Short base36 hash; the same identifier the URL carries. */
+  readonly puzzleCode: PuzzleCode;
   readonly cells: Cell[]; // length 81
 }
 
+/** Internal DB key. UUIDs in Supabase. Use sparingly — prefer PuzzleCode. */
 export type PuzzleId = string;
+/** External 6-char lowercase base36 hash of `givens`. Used in URLs and as the FK across modes. */
+export type PuzzleCode = string;
 export type PlayerId = string;
 export type RoomId = string;
+/** Short shareable code for a multiplayer room. Format per docs/DECISIONS.md #0021. */
+export type RoomCode = string;
 
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
 
 export interface Puzzle {
   readonly id: PuzzleId;
+  readonly code: PuzzleCode;
   readonly difficulty: Difficulty;
   readonly givens: BoardArray; // length 81
-  // NOTE: `solution` is intentionally not on this type. The client never receives it.
+  // NOTE: `solution` is intentionally not on this type. The client never receives it
+  // in multiplayer. Single-player uses an SP-only RPC that returns the full row — see
+  // docs/DECISIONS.md #0019 / #0022.
 }
 
 /** A move applied to a board. Discriminated union by `kind`. */

@@ -2,35 +2,38 @@
 
 Four phases, each with an explicit **exit criterion** — we don't move on until it's met. Single player first, then battle, then coop, then iOS. This sequencing exists for a reason: each phase de-risks the next.
 
-**Current position:** end of Phase 0 (setup) → start of Phase 1 (single-player web). See [STATUS.md](STATUS.md) for the live snapshot.
+**Current position:** end of Phase 1 → start of Phase 2 (battle mode). See [STATUS.md](STATUS.md) for the live snapshot.
 
 | Phase | Status |
 |---|---|
 | Phase 0 — Setup, scaffold, doc set | ✅ Complete |
-| Phase 1 — Single-player web | 🔄 Active |
-| Phase 2 — Battle mode | Pending |
+| Phase 1 — Single-player web | ✅ Complete (deployed at https://sudoku-squad-web.vercel.app/) |
+| Phase 2 — Battle mode | 🔄 Next |
 | Phase 3 — Coop mode | Pending |
 | Phase 4 — iOS (React Native) | Pending |
 
 ---
 
-## Phase 1 — Single-player web
+## Phase 1 — Single-player web ✅
 
-**Goal:** A solid, fun-to-use single player sudoku on the web. No multiplayer yet. This phase is mostly about getting the *game* right so we never have to relitigate it.
+**Goal:** A solid, fun-to-use single-player sudoku on the web. **Exit criterion met.**
 
-**Scope**
-- Monorepo scaffolding (pnpm workspaces, Next.js app, `packages/core`).
-- Puzzle dataset ingested (open-source pack, medium difficulty, ~200 puzzles to start).
-- `packages/core`: puzzle types, validator, conflict checker, completion checker, basic move state machine.
-- Web app: home page, "New game" button, full sudoku UI (grid + number pad + notes + undo + timer).
-- Settings: show conflicts (on), auto-check (off), notes (on), hints (available).
-- Mobile-responsive layout that works in a phone browser.
-- Deployed to a real Vercel URL.
+**What landed:**
+- Monorepo (pnpm 11 workspaces, Next.js 15 app, `packages/core` with engine, `scripts/ingest`).
+- 7 500 puzzles in Supabase (`radcliffe/3-million-sudoku-puzzles-with-ratings`), 2 500 each easy/medium/hard. Short 6-char codes assigned per puzzle.
+- `packages/core`: types, validator, conflict checker, completion checker, pure move reducer, undo/redo history. 36/36 tests passing including `fast-check` property tests.
+- Web app: home page with per-tier "New game" CTAs that pick a random unsolved puzzle and navigate to `/play/[code]`. Full sudoku UI (grid + number pad + notes + undo/redo + hint + timer + settings + completion overlay). Conflict highlighting, same-value highlighting, optional auto-check. Solved tracking in `localStorage`.
+- Tooling: ESLint flat config enforces `packages/core` purity. Playwright happy-path smoke. GitHub Actions CI runs everything on PR + push.
+- Deployed to https://sudoku-squad-web.vercel.app/, auto-deploys from `main`.
 
-**Exit criterion**
-- A user can play a complete game on web and mobile-web, the game is enjoyable, and `packages/core` has unit tests for puzzle validation, conflict detection, and completion.
+**Phase 1 cleanup (not blocking Phase 2):**
+- Mobile audit on 375 px / ~420 px widths.
+- Favicon + Open Graph metadata.
+- Lighthouse / PWA manifest.
+- `next lint` → ESLint CLI migration.
+- Register `sudokusquad.com` and point at Vercel.
 
-**Estimate:** ~1–2 weeks of focused work.
+These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 work or batched into a polish pass.
 
 ---
 
@@ -38,19 +41,33 @@ Four phases, each with an explicit **exit criterion** — we don't move on until
 
 **Goal:** Two players can race to finish the same puzzle via a shared link.
 
+**Schema state going in:** `rooms`, `room_players`, `moves` already exist (migration 0001). `rooms.puzzle_code` references `puzzles(code)` (migration 0004). Anonymous auth enabled. No code change needed before Edge Functions can be added.
+
 **Scope**
-- Supabase project provisioned; SQL migrations for `puzzles`, `rooms`, `room_players`, `moves`.
-- Anonymous auth wired up.
-- Room creation flow: "New Battle" → creates room → `/r/{code}` → lobby.
-- Username picker on first arrival to a room.
-- Lobby UI: player list, host's "Start" button, share-link UI.
-- Realtime channel: presence (who's online), `game_event` broadcasts, opponent progress %.
-- Battle gameplay: each player has their own board, sees opponents' progress %.
-- Server-side completion validation (Edge Function `check_completion` or RPC).
-- "X won!" end-of-game UI; play-again button creates a fresh room.
+- Edge Functions in `supabase/functions/`:
+  - `create_room({mode, difficulty})` — picks a random unsolved-for-host puzzle of the difficulty, returns `{room_id, code}`. Sets `rooms.puzzle_code`.
+  - `join_room({code, username})` — returns `{room_id, player_id, color}`.
+  - `submit_move({room_id, cell, kind, value})` — validates the move, assigns `seq`, persists in `moves`, broadcasts on the channel `room:{room_id}`.
+  - `check_completion({room_id, player_id})` — server-side win check; never returns the solution.
+  - `hint({room_id, player_id, cell})` — returns one cell's correct value (multiplayer hint, replaces the SP `sp_get_puzzle` flow).
+- `packages/core/src/sync/`: created fresh.
+  - Supabase client factory (accepts injected client; web and RN each provide one).
+  - `useRoom(roomCode)` hook: subscribes, returns `room`, `players`, board state, move sender.
+  - Optimistic move apply + server echo reconciliation (rollback on rejection).
+  - Move log replay on rejoin.
+- `apps/web`:
+  - Home page: enable "New Battle" CTA (already a placeholder button).
+  - Room route `/r/[code]`.
+  - Lobby UI: player list, host's Start button, share link with copy button.
+  - Lobby settings panel (host-editable, locks at Start): show conflicts, auto-check, hints availability.
+  - Mid-game join handling: "this game has already started" screen with "Start a new one" option.
+  - In-game battle UI: own board + opponents' progress bars.
+  - Battle winner overlay (dismissible; losers may continue per [DECISIONS #0008](DECISIONS.md)).
+  - Play-again flow.
 
 **Exit criterion**
 - Two browsers (one host, one joiner) can complete a full battle game end-to-end. Winner is declared correctly. No state desync.
+- Race-condition test: both submit a completing move within milliseconds — exactly one wins.
 
 **Estimate:** ~2 weeks.
 
