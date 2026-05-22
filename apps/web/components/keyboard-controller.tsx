@@ -69,15 +69,13 @@ export function KeyboardController() {
         store.moveSelection(1, 0);
         return;
       }
-      // Tab: like ArrowRight but wraps within the row (col 8 → col 0 of the
-      // same row). Doesn't cross row boundaries. preventDefault so the focus
-      // doesn't escape the grid.
+      // Tab: like ArrowRight but wraps. At col 8 it advances to col 0 of the
+      // next row; at the bottom-right (cell 80) it wraps back to the top-left
+      // (cell 0). preventDefault so focus doesn't escape the grid.
       if (key === 'Tab' && !e.shiftKey) {
         e.preventDefault();
         const cur = store.selected ?? 0;
-        const row = Math.floor(cur / 9);
-        const col = cur % 9;
-        store.selectCell(row * 9 + ((col + 1) % 9));
+        store.selectCell((cur + 1) % 81);
         return;
       }
       // Spacebar: toggle notes mode. preventDefault so the page doesn't scroll.

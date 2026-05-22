@@ -40,12 +40,10 @@ export function BattleKeyboardController() {
       if (key === 'ArrowLeft') { e.preventDefault(); store.moveSelection(-1, 0); return; }
       if (key === 'ArrowRight') { e.preventDefault(); store.moveSelection(1, 0); return; }
       if (key === 'Tab' && !e.shiftKey) {
-        // Tab = ArrowRight + wrap col 8→0 within the same row.
+        // Tab = ArrowRight + wrap; end of row → start of next, cell 80 → cell 0.
         e.preventDefault();
         const cur = store.selected ?? 0;
-        const row = Math.floor(cur / 9);
-        const col = cur % 9;
-        store.selectCell(row * 9 + ((col + 1) % 9));
+        store.selectCell((cur + 1) % 81);
         return;
       }
       if (key === ' ' || key === 'Spacebar') {

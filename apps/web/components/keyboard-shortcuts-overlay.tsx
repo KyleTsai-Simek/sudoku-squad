@@ -9,7 +9,7 @@ interface Shortcut {
 
 const SHORTCUTS: Shortcut[] = [
   { keys: ['↑', '↓', '←', '→'], description: 'Move selection' },
-  { keys: ['Tab'], description: 'Move right (wraps in row)' },
+  { keys: ['Tab'], description: 'Next cell (wraps)' },
   { keys: ['1', '–', '9'], description: 'Enter a value' },
   { keys: ['Space'], description: 'Toggle notes mode' },
   { keys: ['Shift', '+', '1', '–', '9'], description: 'Add a note' },
