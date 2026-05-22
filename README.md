@@ -1,12 +1,13 @@
 # Sudoku Squad
 
-A multiplayer sudoku web app. Single-player live; battle + coop in flight.
+A multiplayer sudoku web app. Single-player + battle mode live; coop in flight.
 
 - **Live demo:** https://sudoku-squad-web.vercel.app/
-- **Modes (planned):**
-  - **Battle** — 2–4 players race to finish the same puzzle.
-  - **Coop** — 2–4 players collaboratively solve one shared board.
-- **Phase 1 (live today):** Single-player sudoku with 7 500 puzzles in easy / medium / hard, hint, auto-check, undo/redo, settings, completion overlay. Per-device "don't re-serve solved puzzles" tracking via localStorage.
+- **Modes:**
+  - **Single player** — pick a tier, solve a random unsolved puzzle.
+  - **Battle** — up to 8 players race to finish the same puzzle (live).
+  - **Coop** — 2–4 players collaboratively solve one shared board (Phase 3, planned).
+- **Live features:** 10,000 puzzles across easy / medium / hard / expert; auto-check; undo/redo with multi-cell undo; auto-clean peer notes; keyboard shortcuts (Space toggles notes, `?` shows overlay, Tab advances); persistent username + completion count; public lobbies; host kick; return-to-lobby replay cycle.
 
 Inspired by Down for a Cross (multiplayer crosswords), Words With Friends, and the NYT Games apps.
 
@@ -14,7 +15,7 @@ Inspired by Down for a Cross (multiplayer crosswords), Words With Friends, and t
 
 ## Status
 
-**Phase 1 complete.** Single-player web is built, deployed to Vercel, talking to Supabase. **Phase 2 next: battle mode.** See [docs/STATUS.md](docs/STATUS.md) for the live snapshot.
+**Phase 1 complete.** Single-player web is built and deployed. **Phase 2 (battle) is substantially landed** — chunks A–H from the May 22 product changes shipped plus a UX polish pass. Remaining: two-context Playwright smoke and the loser-keeps-solving local lock. See [docs/STATUS.md](docs/STATUS.md) for the live snapshot.
 
 ## Document set (read in this order)
 
@@ -62,7 +63,7 @@ cp .env.example .env.local
 ln -s ../../.env.local apps/web/.env.local
 
 # 3. Sanity-check the engine, solver, RLS
-pnpm --filter @sudoku-squad/core test          # expect 36/36
+pnpm --filter @sudoku-squad/core test          # expect 43/43
 pnpm --filter @sudoku-squad/ingest test        # expect 9/9
 pnpm --filter @sudoku-squad/ingest check       # 4/4 if puzzles are ingested
 
@@ -84,7 +85,7 @@ supabase link --project-ref <your-ref>
 supabase db push --linked
 ```
 
-Currently applied: `0001_initial.sql`, `0002_puzzles_public_security_definer.sql`, `0003_puzzle_code_and_sp_rpc.sql`, `0004_rooms_puzzle_code_fk.sql`.
+Currently applied: `0001_initial.sql` through `0011_room_players_has_returned.sql` (eleven migrations covering schema, RLS recursion fix, realtime publications, persistent usernames, completions, public lobbies, and return-to-lobby).
 
 ### Ingesting puzzles
 
@@ -101,8 +102,10 @@ unzip 3-million-sudoku-puzzles-with-ratings.zip
 cd /Users/kylets/sudoku-squad
 pnpm --filter @sudoku-squad/ingest ingest -- --dry-run
 
-# Real ingest (writes ~7500 rows via service-role key)
+# Real ingest (writes 10,000 rows via service-role key, across 4 tiers).
+# Use --truncate to wipe puzzles + downstream tables first.
 pnpm --filter @sudoku-squad/ingest ingest
+pnpm --filter @sudoku-squad/ingest ingest -- --truncate
 ```
 
 ## Repo layout
@@ -117,8 +120,10 @@ sudoku-squad/
   scripts/
     ingest/               # Kaggle dataset ingest + Norvig solver (server-only)
   supabase/
-    migrations/           # SQL migrations
-    functions/            # Edge Functions (Phase 2 — none yet)
+    migrations/           # SQL migrations (0001..0011)
+    functions/            # Edge Functions: create-room, join-room, start-game,
+                          # submit-move, claim-username, kick-player,
+                          # update-room-settings, return-to-lobby
   docs/                   # Planning + status docs
   .github/workflows/      # CI
 ```

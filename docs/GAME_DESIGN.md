@@ -66,7 +66,7 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 | Auto-check correctness | **Off** | When ON, the moment you place a wrong number it's flagged (compared against solution). When OFF, you only learn at completion attempt. |
 | Notes (pencil marks) | **On** | Always available. |
 | Auto-clean notes | **Always on** | When you place a number, that digit is removed from the pencil-marks of every peer cell (row/col/box). Universal pattern in major sudoku apps; no toggle. Undo restores. |
-| Hints / Reveal cell | **Available but counted** | Players can request a hint (reveals one correct cell). In battle, hints are tracked and shown to opponents to discourage spam. In coop, no penalty. |
+| Hints / Reveal cell | **Removed in V1** (Chunk A). Auto-check is the replacement signal: when on, the moment a wrong digit is placed it's flagged. The `sp_get_puzzle` RPC stays for SP auto-check; the multiplayer `hint` Edge Function was dropped from scope. |
 | Timer visible | **On** | Battle uses it for tiebreaks; coop just for fun. |
 
 ### The "reveal answers" cluster — resolved
@@ -75,7 +75,7 @@ These all default to per-room settings (host picks in the lobby):
 
 - **Show conflicts (rule violations vs. other entered cells)** — defaults **ON**. Does not reveal the solution.
 - **Auto-check correctness (vs. solution)** — defaults **OFF**. Available as a lobby setting if the host wants to enable it.
-- **Hints / Reveal cell** — available; when used in battle, the usage is visible on the opponent progress UI so it can't be spammed unfairly. **OPEN**: exact UI for hint disclosure.
+- **Hints / Reveal cell** — **removed from V1** (Chunk A). Player feedback indicated hints felt like the wrong escape hatch for a competitive mode; auto-check is the milder, opt-in replacement. The `sp_get_puzzle` RPC remains for SP auto-check, but no multiplayer `hint` Edge Function is planned.
 - **End-of-game check** — pressing "Done" / "Check" when you think you're finished. Always available, always allowed. Server validates against the solution and either announces win or returns "not yet" without saying which cells are wrong (otherwise it's a free auto-check).
 
 ---
@@ -123,7 +123,7 @@ These all default to per-room settings (host picks in the lobby):
 - Daily puzzle / shared world puzzle.
 - Chat or emoji reactions inside the room.
 - Spectator mode.
-- Expert tier (3 tiers ship in V1: easy/medium/hard — see [DECISIONS.md #0018](DECISIONS.md). Expert is on hold pending a higher-difficulty puzzle source.)
+- (Removed — expert tier shipped 2026-05-22 in [DECISIONS #0031](DECISIONS.md). A true "evil" tier rated 7+ is still post-V1 pending a richer puzzle source.)
 - Achievements, stats, history.
 - Custom rules / variants (X-sudoku, killer sudoku, etc.).
 - Audio / SFX.

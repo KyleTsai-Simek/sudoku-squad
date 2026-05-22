@@ -17,13 +17,13 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
 
 ### Phase 1 — Single-player web ✅
 
-- **`packages/core`** — platform-agnostic TypeScript engine. **42 / 42 tests passing** (unit + property-based with `fast-check`).
+- **`packages/core`** — platform-agnostic TypeScript engine. **43 / 43 tests passing** (unit + property-based with `fast-check`).
   - `types/index.ts` — domain types including `Puzzle`, `BoardState`, `Move`, `PuzzleCode` (cross-mode identifier).
   - `puzzle/board.ts` — `createBoard(puzzleCode, givens)`, `isFilled`, `cellValue`.
   - `puzzle/validator.ts` — `findConflicts` (no solution leak), `isCompleteWithSolution` (server-side use), `unitsFor`.
   - `game/notes.ts` — bitmask helpers.
   - `game/reducer.ts` — `applyMove` pure reducer + `applyMoves` replay helper. **`value` placement also auto-clears the placed digit from every peer cell's notes (row/col/box)** — always on; no setting.
-  - `game/history.ts` — undo/redo wrapper. Records every cell mutated by a move (not just the target), so undo restores auto-cleaned peer notes alongside the placement.
+  - `game/history.ts` — undo/redo wrapper. Records every cell mutated by a move (not just the target), so undo restores auto-cleaned peer notes alongside the placement. Exports `peekLastMove(history)` used by the stores' smart-clear (re-typing the just-placed value undoes instead of clearing).
 - **`scripts/ingest`** — Node-only ingest. **9 / 9 tests passing**.
   - `solver.ts` — Norvig solver.
   - `code.ts` — TypeScript port of the Postgres `puzzle_code_for` function. Algorithm pinned by tests.
@@ -31,17 +31,18 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
   - `index.ts` — bucketed sampler + Supabase insert.
   - `check-connectivity.ts` — 4 RLS sanity checks against the live project.
   - `verify-samples.ts` — verifies the bundled sample pack against the solver and the code algorithm.
-- **`supabase/migrations/`** — `0001_initial.sql` → `0007_realtime_publications.sql`, all applied to the live project via `supabase db push --linked`. Schema documented in [ARCHITECTURE.md §4](ARCHITECTURE.md).
+- **`supabase/migrations/`** — `0001_initial.sql` → `0011_room_players_has_returned.sql` (eleven migrations), all applied to the live project via `supabase db push --linked`. Highlights: 0006 RLS recursion fix via `is_room_member`, 0007 Realtime publications, 0008 `issued_usernames`, 0009 `player_completions` + completion RPCs, 0010 `rooms.is_public`, 0011 `room_players.has_returned`. Schema documented in [ARCHITECTURE.md §4](ARCHITECTURE.md).
 - **Live puzzle data:** **10,000 rows** in the `puzzles` table, sourced from `radcliffe/3-million-sudoku-puzzles-with-ratings` on Kaggle. **2,500 each in easy / medium / hard / expert**, with per-(tier, clue-count) targets so easy leans toward more clues and expert toward fewer. See [DECISIONS #0031](DECISIONS.md) for bands and target distribution. (Older snapshot was 7,500 with no expert — re-bucketed 2026-05-22.)
 - **`apps/web`** — Next.js 15 + React 19 + Tailwind 3.
-  - Routes: `/` (home with per-tier "New game" CTAs) and `/play/[code]` (game screen).
-  - Components: `SudokuBoard`, `NumberPad`, `KeyboardController`, `Timer`, `SettingsSheet`, `CompletionOverlay`.
-  - State: Zustand store (`lib/game-store.ts`). Solved codes persisted in `localStorage` under `sudokusquad:solved` via `lib/solved-tracker.ts`.
+  - Routes: `/` (home with per-tier "New game" CTAs + public-lobby list), `/play/[code]` (SP game screen), `/r/[code]` (multiplayer lobby + battle game).
+  - SP components: `SudokuBoard`, `NumberPad`, `KeyboardController`, `KeyboardShortcutsOverlay`, `Timer`, `SettingsSheet`, `CompletionOverlay`, `PencilIcon`, `ActionIcons` (Eraser/Undo/Redo).
+  - Battle components: `BattleBoard`, `BattleNumberPad`, `BattleKeyboardController`, `BattleWinnerOverlay`, `OpponentProgress`, `LobbySettingsPanel`, `PublicLobbyList`.
+  - State: Zustand stores `lib/game-store.ts` (SP) and `lib/battle-store.ts` (battle). Completions persisted server-side in `player_completions` (chunk F) — `lib/completions.ts` wraps the `record_completion` / `get_completion_count` RPCs. (The old `lib/solved-tracker.ts` localStorage-based store was removed when completions went server-side.)
   - Puzzle loading: `lib/puzzle-source.ts` → `loadPuzzle(code)` first checks the bundled pack (`lib/sample-puzzles.ts`, used by the smoke test) then calls the Supabase RPC `sp_get_puzzle`. `listPuzzles()` pages through `puzzles_public`.
   - Picker: `lib/pick-puzzle.ts` → `pickRandomUnsolved(tier)` and `getTierCounts()`.
 - **Tooling:**
   - ESLint flat config in `packages/core` blocks Next/RN/DOM/ingest imports and DOM globals.
-  - Playwright smoke (`apps/web/e2e/single-player.spec.ts`) — navigates to `/play/3santv`, mashes Hint until the completion overlay appears.
+  - Playwright smoke (`apps/web/e2e/single-player.spec.ts`) — navigates to `/play/3santv` (bundled sample, no Supabase needed), clicks each empty cell and types its solution digit via the keyboard, asserts the "You won!" completion overlay.
   - GitHub Actions CI runs lint + typecheck + tests + sample/dry-run + web build + Playwright smoke on every PR and push to `main`. Latest run on `main` green.
 - **Deploy:**
   - Vercel live at https://sudoku-squad-web.vercel.app/, auto-deploys from `main`. Env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) configured for Production / Preview / Development. Root directory `apps/web`.
@@ -51,7 +52,7 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
 
 | Check | Command | Status |
 |---|---|---|
-| Core engine tests | `pnpm --filter @sudoku-squad/core test` | 42 / 42 |
+| Core engine tests | `pnpm --filter @sudoku-squad/core test` | 43 / 43 |
 | Ingest tests (solver + code) | `pnpm --filter @sudoku-squad/ingest test` | 9 / 9 |
 | Sample-pack verification | `pnpm --filter @sudoku-squad/ingest verify:samples` | 5 / 5 |
 | Ingest dry-run on synthetic fixture | `pnpm --filter @sudoku-squad/ingest ingest:dry-fixture` | sampled 5, rejected 2 (as designed) |
@@ -90,11 +91,11 @@ What's landed:
     - **Game** (battle): opponent progress bars, own board (`BattleBoard`), number pad (`BattleNumberPad`, hint omitted), keyboard controller, winner overlay (dismissible per [#0008](DECISIONS.md)).
 
 What does NOT yet exist (Phase 2 remainder):
-- **Edge Function `hint`** — per-cell reveal for the multiplayer hint path (so SP's `sp_get_puzzle` isn't reachable from battle/coop). Battle number pad omits Hint until this lands.
-- **Lobby settings panel** (host-editable, locks at Start): show conflicts, auto-check, hints availability. Today both clients use the same hard-coded defaults.
-- **Late solving for losers** — once a winner is declared, losers' boards lock. Per [#0008](DECISIONS.md) the loser should be able to dismiss the overlay and keep solving their own board; deferred (see TODO #27 in-session).
-- **Play-again flow** — winner overlay only offers "Back to menu". A "create a fresh room with the same players" flow lands later.
-- **Battle game UI polish** — opponent progress bars are minimal; the same-page lobby→game transition could be smoother.
+- **Losers keep solving locally.** The server already accepts late `submit-move` from non-winners after `room.status='finished'`, but the local client still disables the board when `finishedAt !== null` (`battle-board.tsx` line 79). Fix is to lift that local lock on the loser path while keeping the winner overlay dismissible.
+- **Two-context Playwright smoke** for battle. Two browser contexts, one room, end-to-end create → join → start → play → win. The harness lands here so Phase 3 inherits it. See [DECISIONS #0013](DECISIONS.md).
+- **Battle UI polish** — opponent progress bars are minimal; the same-page lobby→game transition could be smoother.
+
+The Edge Function `hint` is intentionally not shipping — Chunk A removed Hint as a feature. Lobby settings panel, return-to-lobby/play-again, kick, public lobbies, and persistent completions all shipped in chunks D / F / G / H.
 
 ### Beyond Phase 2
 
@@ -136,7 +137,7 @@ What does NOT yet exist (Phase 2 remainder):
 ```bash
 cd /Users/kylets/sudoku-squad
 pnpm install                                              # idempotent
-pnpm --filter @sudoku-squad/core test                     # expect 42/42
+pnpm --filter @sudoku-squad/core test                     # expect 43/43
 pnpm --filter @sudoku-squad/ingest test                   # expect 9/9
 pnpm --filter @sudoku-squad/ingest verify:samples         # expect 5 OK
 pnpm --filter @sudoku-squad/ingest check                  # expect 4/4

@@ -2,13 +2,13 @@
 
 Four phases, each with an explicit **exit criterion** — we don't move on until it's met. Single player first, then battle, then coop, then iOS. This sequencing exists for a reason: each phase de-risks the next.
 
-**Current position:** end of Phase 1 → start of Phase 2 (battle mode). See [STATUS.md](STATUS.md) for the live snapshot.
+**Current position:** Phase 2 battle mode is substantially complete and live; remaining gaps are the two-context Playwright smoke and lifting the local board-lock on the loser path. See [STATUS.md](STATUS.md) for the live snapshot.
 
 | Phase | Status |
 |---|---|
 | Phase 0 — Setup, scaffold, doc set | ✅ Complete |
 | Phase 1 — Single-player web | ✅ Complete (deployed at https://sudoku-squad-web.vercel.app/) |
-| Phase 2 — Battle mode | 🔄 Next |
+| Phase 2 — Battle mode | 🔄 Substantially landed (chunks A–H + UX polish pass) |
 | Phase 3 — Coop mode | Pending |
 | Phase 4 — iOS (React Native) | Pending |
 
@@ -20,9 +20,9 @@ Four phases, each with an explicit **exit criterion** — we don't move on until
 
 **What landed:**
 - Monorepo (pnpm 11 workspaces, Next.js 15 app, `packages/core` with engine, `scripts/ingest`).
-- 7 500 puzzles in Supabase (`radcliffe/3-million-sudoku-puzzles-with-ratings`), 2 500 each easy/medium/hard. Short 6-char codes assigned per puzzle.
-- `packages/core`: types, validator, conflict checker, completion checker, pure move reducer, undo/redo history. 36/36 tests passing including `fast-check` property tests.
-- Web app: home page with per-tier "New game" CTAs that pick a random unsolved puzzle and navigate to `/play/[code]`. Full sudoku UI (grid + number pad + notes + undo/redo + hint + timer + settings + completion overlay). Conflict highlighting, same-value highlighting, optional auto-check. Solved tracking in `localStorage`.
+- **10,000 puzzles** in Supabase (`radcliffe/3-million-sudoku-puzzles-with-ratings`), **2,500 each across easy/medium/hard/expert** with per-(tier, clue-count) targets ([DECISIONS #0031](DECISIONS.md)). Short 6-char codes assigned per puzzle.
+- `packages/core`: types, validator, conflict checker, completion checker, pure move reducer (with auto-clean peer notes), undo/redo history (multi-cell undo + `peekLastMove`). **43/43 tests passing** including `fast-check` property tests.
+- Web app: home page with per-tier "New game" CTAs that pick a random unsolved puzzle and navigate to `/play/[code]`. Full sudoku UI (grid + number pad + notes + undo/redo + timer + settings + completion overlay + keyboard shortcuts overlay). Hint was removed in Chunk A. Conflict highlighting, same-value highlighting, optional auto-check. Completions tracked server-side in `player_completions` (Chunk F).
 - Tooling: ESLint flat config enforces `packages/core` purity. Playwright happy-path smoke. GitHub Actions CI runs everything on PR + push.
 - Deployed to https://sudoku-squad-web.vercel.app/, auto-deploys from `main`.
 
@@ -43,33 +43,25 @@ These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 wor
 
 **Schema state going in:** `rooms`, `room_players`, `moves` already exist (migration 0001). `rooms.puzzle_code` references `puzzles(code)` (migration 0004). Anonymous auth enabled. No code change needed before Edge Functions can be added.
 
-**Scope**
+**Scope (final shape — what shipped)**
 - Edge Functions in `supabase/functions/`:
-  - `create_room({mode, difficulty})` — picks a random unsolved-for-host puzzle of the difficulty, returns `{room_id, code}`. Sets `rooms.puzzle_code`.
-  - `join_room({code, username})` — returns `{room_id, player_id, color}`.
-  - `submit_move({room_id, cell, kind, value})` — validates the move, assigns `seq`, persists in `moves`, broadcasts on the channel `room:{room_id}`.
-  - `check_completion({room_id, player_id})` — server-side win check; never returns the solution.
-  - `hint({room_id, player_id, cell})` — returns one cell's correct value (multiplayer hint, replaces the SP `sp_get_puzzle` flow).
-- `packages/core/src/sync/`: created fresh.
-  - Supabase client factory (accepts injected client; web and RN each provide one).
-  - `useRoom(roomCode)` hook: subscribes, returns `room`, `players`, board state, move sender.
-  - Optimistic move apply + server echo reconciliation (rollback on rejection).
-  - Move log replay on rejoin.
+  - `create-room`, `join-room`, `start-game`, `submit-move` — core flow. `submit-move` does inline progress + atomic winner update (subsumes the originally-planned `check_completion`).
+  - `claim-username`, `update-room-settings`, `kick-player`, `return-to-lobby` — added in the May 22 UX expansion (Chunks B / D / G / H).
+  - Multiplayer `hint` is **not** shipping — Chunk A removed the hint feature.
+- `packages/core/src/sync/`: **deferred for V1.** The web client's `battle-store.ts` does optimistic local apply with the server as authority; move rejection is rare and we just surface an error rather than rolling back. The reconciler module lifts into `packages/core/src/sync/` when iOS lands or coop's LWW forces the issue.
 - `apps/web`:
-  - Home page: enable "New Battle" CTA (already a placeholder button).
-  - Room route `/r/[code]`.
-  - Lobby UI: player list, host's Start button, share link with copy button.
-  - Lobby settings panel (host-editable, locks at Start): show conflicts, auto-check, hints availability.
-  - Mid-game join handling: "this game has already started" screen with "Start a new one" option.
-  - In-game battle UI: own board + opponents' progress bars.
-  - Battle winner overlay (dismissible; losers may continue per [DECISIONS #0008](DECISIONS.md)).
-  - Play-again flow.
+  - Home page: Solo / Battle / Public-lobby list / "Have a code?" sections.
+  - Room route `/r/[code]`: lobby (live player list, share link, kick, host-edited settings panel) + battle game view (own board, opponent progress, synced countdown, winner overlay).
+  - Mid-game join handling and the "return to lobby" same-room replay cycle (Chunk H).
+  - Persistent username (Chunk B), public lobbies (Chunk G), persistent completion count (Chunk F).
 
 **Exit criterion**
 - Two browsers (one host, one joiner) can complete a full battle game end-to-end. Winner is declared correctly. No state desync.
 - Race-condition test: both submit a completing move within milliseconds — exactly one wins.
 
-**Estimate:** ~2 weeks.
+**Remaining work**
+- Two-context Playwright smoke that drives both sides automatically and asserts converged state (see Phase 2 Testing in [TODO.md](TODO.md)).
+- Lift the local board lock on the loser path so non-winners can keep solving after a winner is declared (server already accepts late moves).
 
 ---
 
@@ -119,7 +111,7 @@ These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 wor
 
 After Phase 4 lands, the natural next moves are:
 
-1. **Difficulty tiers** (easy / medium / hard / expert) + difficulty selection in lobby.
+1. **A real "evil" / 7+ tier** once we have a richer high-difficulty source (the 3M dataset has only ~100 rows above rating 7.0 — not enough to seed a 2,500-row sample). Easy/medium/hard/expert already shipped in V1.
 2. **Daily puzzle** — same puzzle for everyone, leaderboard for the day.
 3. **Persistent accounts** (Sign in with Apple + magic link) → profiles, history, stats.
 4. **Match history & replays.**

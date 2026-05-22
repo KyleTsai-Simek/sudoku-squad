@@ -39,7 +39,7 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope.
 - [x] Edge Function `join-room({code, username}) → {room_id, room_code, player_id, color, is_host, rejoined, ...}`. Enforces mid-game-join policy per [DECISIONS #0024](DECISIONS.md). Rejoin is idempotent.
 - [x] Edge Function `start-game({room_id})` — host-only. Transitions room.status `lobby → playing`. Sets `started_at`. Realtime broadcast fires automatically via the rooms publication.
 - [x] Edge Function `submit-move({room_id, cell, kind, value})` — validates, assigns next per-room `seq` (retries on unique-violation), inserts into `moves`, recomputes progress_pct, on progress=100 atomically transitions room → finished with winner. Server-side completion is fully inline; no separate `check-completion`.
-- [ ] **Hint removed for V1.** Per the May 22 product changes, the SP Hint button is being dropped (Chunk A below). The `sp_get_puzzle` RPC stays for auto-check. The multiplayer `hint` Edge Function is no longer planned.
+- [x] **Hint removed for V1.** Per the May 22 product changes, the SP Hint button was dropped (Chunk A). The `sp_get_puzzle` RPC stays for auto-check. The multiplayer `hint` Edge Function is no longer planned.
 
 ### `packages/core` — sync (new module, lands in this phase)
 - [~] **Deferred for V1.** The web client's `lib/battle-store.ts` does optimistic apply directly (no reconciler) and the server is authoritative — move rejection is rare enough that we don't roll back, just surface an error. When iOS lands or when coop's LWW forces the issue, lift this into `packages/core/src/sync/` with the reconciler design from ROADMAP.
@@ -53,9 +53,9 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope.
 - [x] Host "Start" button — wires up `start-game`. Disabled when < 2 players in battle.
 - [x] Battle game view: own board (`BattleBoard`) + opponent progress bars (`OpponentProgress`) + own number pad (`BattleNumberPad`, hint omitted) + keyboard controller. Duplicates the SP components rather than refactoring them; revisit in Phase 3.
 - [x] Server-broadcast Win overlay (announces winner; dismissible). Losers can dismiss but their board stays locked — full "keep solving" support is task #27.
-- [ ] Lobby settings panel (host-editable, locks at Start): show conflicts, auto-check, hints availability.
-- [ ] Play-again flow ("create a fresh room with the same players").
-- [ ] Polish: losers can keep solving their own board after a winner is declared. Currently the board freezes when room.status='finished' broadcasts.
+- [x] Lobby settings panel (host-editable, locks at Start): showConflicts / autoCheck / highlightSameValue + is_public — shipped in Chunk D (`LobbySettingsPanel` + `update-room-settings` Edge Function).
+- [x] Play-again flow — shipped in Chunk H as the return-to-lobby same-room cycle (`return-to-lobby` Edge Function + `start-game` extended to reset + re-pick puzzle). Distinct from "fresh room with same players" but covers the same need.
+- [ ] Polish: losers can keep solving their own board after a winner is declared. The server already accepts late moves (`submit-move` allows kind=value/clear when `room.status='finished'`), but the local client still disables the board when `finishedAt !== null`. Fix is to lift that local lock on the loser path while keeping the room-finished UI overlay dismissible.
 
 ### Phase 2 UX expansion (May 22 product changes — chunks A–H) ✅
 

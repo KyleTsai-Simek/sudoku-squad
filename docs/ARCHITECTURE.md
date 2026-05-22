@@ -44,27 +44,35 @@ We use a **pnpm workspace monorepo** so the shared package is trivial to import.
 sudoku-squad/
   apps/
     web/                  # Next.js — the live app
-      app/                # routes: / and /play/[code]
-      components/         # SudokuBoard, NumberPad, Timer, SettingsSheet, etc.
-      lib/                # game-store (zustand), puzzle-source, pick-puzzle,
-                          # solved-tracker, supabase, sample-puzzles
-      e2e/                # Playwright smoke
+      app/                # routes: /, /play/[code], /r/[code]
+      components/         # SP + battle boards, number pads, overlays,
+                          # keyboard controllers, settings panels, icons
+      lib/                # game-store + battle-store (zustand), puzzle-source,
+                          # pick-puzzle, completions (server-backed), rooms,
+                          # username, supabase, sample-puzzles, confetti
+      e2e/                # Playwright smoke (single-player keyboard solve)
     ios/                  # Expo / React Native (added in Phase 4)
   packages/
     core/                 # SHARED — must stay platform-agnostic
       src/
         puzzle/           # board construction, conflict detection (NO solver)
-        game/             # reducer, notes bitmask helpers, undo/redo history
+        game/             # reducer (with auto-clean peer notes),
+                          # notes bitmask helpers, history (multi-cell undo)
         types/            # shared TS types
-                          # (sync/ will be created in Phase 2)
+                          # (sync/ deferred — battle-store does optimistic
+                          #  apply directly; revisit when coop's LWW forces it)
   scripts/
     ingest/               # one-off: dataset import, Norvig solver, code hashing
       data/               # gitignored: source CSVs from Kaggle
       fixtures/           # small in-repo synthetic CSVs (committed)
-      src/                # solver, csv reader, code hash, check-connectivity
+      src/                # solver, csv reader, code hash, ingest entrypoint,
+                          # preflight-3m (source scan), audit-difficulty
+                          # (live DB audit), check-connectivity
   supabase/
-    migrations/           # 0001..0004 applied to live project
-    functions/            # Edge Functions (Phase 2)
+    migrations/           # 0001..0011 applied to live project
+    functions/            # Edge Functions: create-room, join-room, start-game,
+                          # submit-move, claim-username, kick-player,
+                          # update-room-settings, return-to-lobby
   docs/                   # STATUS, GOALS_AND_SCOPE, ARCHITECTURE, ROADMAP,
                           # TODO, DECISIONS, GAME_DESIGN
   .github/workflows/      # CI: lint + typecheck + tests + Playwright
@@ -82,16 +90,16 @@ sudoku-squad/
 
 ## 4. Data model (Supabase / Postgres)
 
-Live SQL is in `supabase/migrations/`. Tables below reflect what's actually applied to the project (migrations 0001 → 0004).
+Live SQL is in `supabase/migrations/`. Tables below reflect what's actually applied to the project (migrations 0001 → 0011).
 
 ### `puzzles`
-Pre-generated puzzles. Immutable once ingested. 7 500 rows live as of this writing — 2 500 each in easy / medium / hard.
+Pre-generated puzzles. Immutable once ingested. **10,000 rows** live as of 2026-05-22 — **2,500 each in easy / medium / hard / expert**, with deterministic per-(tier, clue-count) targets so easy leans toward more clues and expert toward fewer. See [DECISIONS #0031](DECISIONS.md).
 
 | col | type | notes |
 |---|---|---|
 | `id` | uuid PK | Internal DB key. Not visible client-side. |
 | `code` | text unique not null | 6-char lowercase base36 hash of `givens`. URL slug and the cross-mode puzzle identifier. Per [DECISIONS.md #0019](DECISIONS.md). |
-| `difficulty` | text | `easy` / `medium` / `hard` / `expert`. V1 ships easy/medium/hard (expert is currently empty by design — see [#0018](DECISIONS.md)). |
+| `difficulty` | text | `easy` / `medium` / `hard` / `expert`. All four tiers populated. Bands are by source rating: easy `[0,1.5)`, medium `[1.5,4)`, hard `[4,5)`, expert `[5,7)`. See [#0031](DECISIONS.md). |
 | `givens` | smallint[81] | Starting clues. `0` = empty cell. |
 | `solution` | smallint[81] | Unique solution. **Never sent to the client during multiplayer.** Single-player gets it via the SECURITY DEFINER RPC `sp_get_puzzle(code)` — see [#0022](DECISIONS.md). |
 | `created_at` | timestamptz | |
@@ -219,9 +227,13 @@ V1 uses the Kaggle [3 million Sudoku puzzles with ratings](https://www.kaggle.co
 Ingest flow (`scripts/ingest/`, one-off):
 1. Stream the CSV.
 2. For each row, run our Norvig-ported solver to confirm a unique solution and that the dataset's claimed solution matches.
-3. Bucket by the dataset's `difficulty` rating into easy / medium / hard / expert. Stop sampling once each tier hits its target (currently 2 500 each except expert = 0).
+3. Bucket by the dataset's `difficulty` rating into easy / medium / hard / expert using the half-open bands in [#0031](DECISIONS.md). Rows whose rating sits above 7.0 are skipped entirely (no clue-count fallback). Per-(tier, clue-count) targets in `TARGET_PER_CELL` mean easy admits more high-clue puzzles, expert admits more low-clue ones. Stop sampling once every cell hits its target — currently 2,500 per tier (10,000 total).
 4. Compute `puzzles.code = puzzleCodeFor(givens)` for every kept row (the TS port of the in-DB function — see [#0019](DECISIONS.md)).
 5. Bulk insert into `puzzles` via the service-role client. The `unique(code)` constraint catches the impossible collision case.
+
+Two read-only utility scripts complement the ingest:
+- `pnpm --filter @sudoku-squad/ingest preflight:3m` — scan the source CSV and report rating + clue-count distributions, used to design `TARGET_PER_CELL`.
+- `pnpm --filter @sudoku-squad/ingest audit:difficulty` — audit the live DB: per-tier counts, clue stats, and source-rating distribution by re-matching rows against the CSV.
 
 Runtime never invokes the solver. Hints, auto-check, and win detection in single-player read `solution` via the RPC `sp_get_puzzle`; multiplayer hits Edge Functions instead — see [#0022](DECISIONS.md). The solver code lives in `scripts/ingest/` and is lint-blocked from being imported by `packages/core` or `apps/web`. Per [DECISIONS.md #0012](DECISIONS.md).
 
@@ -264,7 +276,7 @@ Web passes a `localStorage`-backed impl; RN passes an `AsyncStorage`-backed impl
 - `moves` insertable only by a current member of the room.
 - Edge Function `submit_move` (Phase 2) validates the move against game rules before persisting + broadcasting.
 
-`scripts/ingest/check-connectivity.ts` asserts the contract: anon can read `puzzles_public`, anon's direct read of `puzzles` returns 0 rows despite 7 500 real rows (RLS deny), and anon cannot request `solution` from the view at all (column doesn't exist there). Run it on every schema change.
+`scripts/ingest/check-connectivity.ts` asserts the contract: anon can read `puzzles_public`, anon's direct read of `puzzles` returns 0 rows despite the ~10,000 real rows (RLS deny), and anon cannot request `solution` from the view at all (column doesn't exist there). Run it on every schema change.
 
 This isn't paranoia — without server-authoritative move validation, anyone can DevTools their way to "I won battle mode."
 
@@ -295,12 +307,13 @@ Per [DECISIONS.md #0023](DECISIONS.md), multiplayer mutations go through TypeScr
 | `create-room` | `{mode, difficulty, username, is_public?}` | `{room_id, room_code, player_id, color, mode, puzzle_code}` | ✅ deployed |
 | `join-room` | `{code, username}` | `{room_id, room_code, mode, status, puzzle_code, player_id, color, is_host, rejoined}` | ✅ deployed |
 | `start-game` | `{room_id}` | `{status: 'playing', started_at, puzzle_code}` | ✅ deployed — extended to handle next-round reset per [#0030](DECISIONS.md) |
-| `submit-move` | `{room_id, cell, kind, value}` | `{seq, accepted, progress_pct, won, is_winner, cell_correct?}` | ✅ deployed — `cell_correct` returned only when `settings.autoCheck` is on |
-| `update-room-settings` | `{room_id, settings}` | `{settings}` | pending (host-only, lobby-only) |
-| `kick-player` | `{room_id, player_id}` | `{kicked: true}` | pending (host-only) |
-| `return-to-lobby` | `{room_id}` | `{status, has_returned: true}` | pending |
-| `record-completion` (RPC) | `(p_code, p_mode)` → bool | inserts `player_completions` with `on conflict do nothing`. SECURITY DEFINER. | pending |
-| `get-completion-count` (RPC) | `()` → int | reads caller's row count. SECURITY DEFINER. | pending |
+| `submit-move` | `{room_id, cell, kind, value}` | `{seq, accepted, progress_pct, won, is_winner, cell_correct?}` | ✅ deployed — `cell_correct` returned only when `settings.autoCheck` is on; non-winners may submit late on `status='finished'` rooms per [#0030](DECISIONS.md) |
+| `claim-username` | `{}` | `{username}` | ✅ deployed — idempotent per `auth.uid()`; backed by `issued_usernames` (migration 0008) |
+| `update-room-settings` | `{room_id, settings}` | `{settings}` | ✅ deployed — host-only, lobby-only |
+| `kick-player` | `{room_id, player_id}` | `{kicked: true}` | ✅ deployed — host-only |
+| `return-to-lobby` | `{room_id}` | `{status, has_returned: true}` | ✅ deployed — flips caller's `has_returned`; transitions room to `lobby` if not already |
+| `record_completion` (RPC) | `(p_code, p_mode)` → bool | inserts `player_completions` with `on conflict do nothing`. SECURITY DEFINER. | ✅ deployed (migration 0009) |
+| `get_completion_count` (RPC) | `()` → int | reads caller's row count. SECURITY DEFINER. | ✅ deployed (migration 0009) |
 | `hint` | (removed for V1) | — | dropped per the May 22 product changes |
 
 `submit-move` does the work that `check-completion` was originally going to do — inline progress + atomic winner update. The `where status = 'playing'` guard is the tiebreak for near-simultaneous winning moves.
