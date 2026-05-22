@@ -172,9 +172,14 @@ Deno.serve(async (req) => {
     return errorResponse('invalid_move', `cell ${cell} is a given`, 422);
   }
 
-  // Assign next seq with retry on unique(room_id, seq) collision.
+  // Assign next seq with retry on unique(room_id, seq) collision. The budget
+  // needs to be generous because multiple players (or one rapid-fire player)
+  // racing to submit will all read the same `max(seq)` and try to insert
+  // `max + 1` concurrently — Postgres serializes the inserts via the unique
+  // constraint and only one wins per round. 16 attempts handles ~16-way
+  // contention before we surface an error to the client.
   let seq: number | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 16; attempt++) {
     const { data: maxRow, error: maxErr } = await admin
       .from('moves')
       .select('seq')

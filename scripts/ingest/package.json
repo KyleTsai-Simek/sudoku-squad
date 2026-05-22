@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "description": "One-off scripts for ingesting puzzles from the Kaggle 9M dataset. NOT shipped to clients.",
+  "exports": {
+    "./solver": "./src/solver.ts",
+    "./code": "./src/code.ts"
+  },
   "scripts": {
     "ingest": "tsx -r dotenv/config src/index.ts dotenv_config_path=../../.env.local",
     "ingest:qqwing": "tsx -r dotenv/config src/ingest-qqwing.ts dotenv_config_path=../../.env.local",

@@ -81,7 +81,7 @@ ADRs [#0026](DECISIONS.md)–[#0030](DECISIONS.md). Migrations 0008–0011. Edge
 ### Phase 2 testing
 - [ ] Two-browser manual test: both join, both play, one finishes, winner declared correctly.
 - [ ] Race-condition test: both submit a completing move within milliseconds — exactly one wins.
-- [ ] Playwright two-context smoke ([DECISIONS #0013](DECISIONS.md)) — the harness lands here so Phase 3 inherits it.
+- [x] Playwright two-context smoke ([DECISIONS #0013](DECISIONS.md)) — minimal version landed (`apps/web/e2e/battle.spec.ts`). Covers create + join + start + lobby→game routing + opponent-progress Realtime subscription. Stops short of race-to-completion because `submit-move`'s ~1.5s warm latency with the new client-side serialization queue makes 50-cell drain time ~75s. Extension tracked as a separate follow-up.
 
 ---
 

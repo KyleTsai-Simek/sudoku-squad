@@ -84,6 +84,25 @@ function recomputeConflicts(board: BoardState, on: boolean): Set<CellIndex> {
   return on ? findConflicts(board) : new Set<CellIndex>();
 }
 
+/**
+ * Serial submit-move queue. Every outgoing move chains on the last pending
+ * one so we never have two concurrent submit-move requests racing for the
+ * same `seq`. The keyboard controller fires enterValue via `void`, so without
+ * this queue rapid typing produces N parallel in-flight requests that
+ * contend on the server's unique(room_id, seq) constraint and lose many to
+ * the retry budget. Module-level (not in the store state) because it's
+ * implementation detail of the network side — nothing in React needs to
+ * read it.
+ */
+let submitQueue: Promise<unknown> = Promise.resolve();
+function enqueueSubmit<T>(fn: () => Promise<T>): Promise<T> {
+  const next = submitQueue.then(fn, fn);
+  // Swallow errors on the chain itself so a single rejection doesn't poison
+  // future submits; the caller still gets the original error via `next`.
+  submitQueue = next.catch(() => undefined);
+  return next;
+}
+
 export const useBattleStore = create<BattleState>((set, get) => ({
   room: null,
   puzzleCode: null,
@@ -170,12 +189,14 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       conflicts: recomputeConflicts(result.state, settings.showConflicts),
     });
 
-    const res = await submitMove({
-      room_id: room.room_id,
-      cell: move.cell,
-      kind: move.kind,
-      value: move.kind === 'value' || move.kind === 'note_toggle' ? value : null,
-    });
+    const res = await enqueueSubmit(() =>
+      submitMove({
+        room_id: room.room_id,
+        cell: move.cell,
+        kind: move.kind,
+        value: move.kind === 'value' || move.kind === 'note_toggle' ? value : null,
+      }),
+    );
     if (!res.ok) {
       set({ lastError: res.error.message });
       return;
@@ -208,12 +229,14 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       history: result.history,
       conflicts: recomputeConflicts(result.state, settings.showConflicts),
     });
-    const res = await submitMove({
-      room_id: room.room_id,
-      cell: selected,
-      kind: 'note_toggle',
-      value,
-    });
+    const res = await enqueueSubmit(() =>
+      submitMove({
+        room_id: room.room_id,
+        cell: selected,
+        kind: 'note_toggle',
+        value,
+      }),
+    );
     if (!res.ok) {
       set({ lastError: res.error.message });
       return;
@@ -257,12 +280,14 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       });
     }
 
-    const res = await submitMove({
-      room_id: room.room_id,
-      cell: selected,
-      kind: 'clear',
-      value: null,
-    });
+    const res = await enqueueSubmit(() =>
+      submitMove({
+        room_id: room.room_id,
+        cell: selected,
+        kind: 'clear',
+        value: null,
+      }),
+    );
     if (!res.ok) {
       set({ lastError: res.error.message });
       return;

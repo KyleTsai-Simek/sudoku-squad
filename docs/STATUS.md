@@ -94,7 +94,7 @@ What's landed:
     - **Game** (battle): opponent progress bars, own board (`BattleBoard`), number pad (`BattleNumberPad`, hint omitted), keyboard controller, winner overlay (dismissible per [#0008](DECISIONS.md)).
 
 What does NOT yet exist (Phase 2 remainder):
-- **Two-context Playwright smoke** for battle. Two browser contexts, one room, end-to-end create → join → start → play → win + a late-finisher path. The harness lands here so Phase 3 inherits it. See [DECISIONS #0013](DECISIONS.md).
+- **Battle smoke extension to race-to-completion + late-finish.** The minimal two-context smoke (`apps/web/e2e/battle.spec.ts`) covers create + join + start + lobby→game routing + opponent-progress Realtime broadcast. Race-to-completion is currently blocked by `submit-move` latency (~1.5s warm with the new serialization queue; 50 cells × 1.5s ≈ 75s of server drain). Options for the follow-up: optimize `submit-move`'s DB roundtrips, batch moves, or bump the test's win-detection timeout.
 - **Battle UI polish** — opponent progress bars are minimal; the same-page lobby→game transition could be smoother.
 
 The Edge Function `hint` is intentionally not shipping — Chunk A removed Hint as a feature. Lobby settings panel, return-to-lobby/play-again, kick, public lobbies, persistent completions, and "losers keep solving" all shipped in chunks D / F / G / H + the May 22 UX polish pass.

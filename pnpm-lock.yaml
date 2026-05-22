@@ -42,6 +42,9 @@ importers:
       '@playwright/test':
         specifier: ^1.49.0
         version: 1.60.0
+      '@sudoku-squad/ingest':
+        specifier: workspace:*
+        version: link:../../scripts/ingest
       '@types/canvas-confetti':
         specifier: ^1.9.0
         version: 1.9.0
