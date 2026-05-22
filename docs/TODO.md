@@ -57,18 +57,18 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope.
 - [ ] Play-again flow ("create a fresh room with the same players").
 - [ ] Polish: losers can keep solving their own board after a winner is declared. Currently the board freezes when room.status='finished' broadcasts.
 
-### Phase 2 UX expansion (May 22 product changes — chunks A–H)
+### Phase 2 UX expansion (May 22 product changes — chunks A–H) ✅
 
-Sequenced so each chunk leaves the app working. ADRs [#0026](DECISIONS.md)–[#0030](DECISIONS.md) capture the design.
+ADRs [#0026](DECISIONS.md)–[#0030](DECISIONS.md). Migrations 0008–0011. Edge Functions claim-username, update-room-settings, kick-player, return-to-lobby (+ create-room / start-game / submit-move extended). All landed and verified end-to-end on the live project.
 
-- [ ] **Chunk A — hint removal + winner copy + confetti.** Drop the SP Hint button. Winner overlay: self → "You won!"; other → "[username] won"; remove "Better luck next time". Add `canvas-confetti` and fire on SP completion + battle winner overlay.
-- [ ] **Chunk B — persistent username from CSV.** User drops `apps/web/lib/data/usernames.csv` (two columns: adjective, noun). Add `scripts/build-word-lists.ts` to convert → `word-lists.generated.ts` (committed). `lib/username.ts` uses the larger pool. Drop the `-NN` suffix unless wordlist is too small.
-- [ ] **Chunk C — 8-player palette + cap.** `room-code.ts` palette: 8 hex values per [#0026](DECISIONS.md). `join-room` cap 4 → 8. Player count copy updated.
-- [ ] **Chunk D — lobby settings panel.** Host toggles show conflicts / auto-check / highlight same value. Stored in `rooms.settings`. New `update-room-settings` Edge Function (lobby-only, host-only). Lock at Start. `submit-move` returns `cell_correct` when `settings.autoCheck` is on so the client can flag wrong entries.
-- [ ] **Chunk E — synced 5-second countdown.** Clients compute the countdown from `rooms.started_at`. Board visible but locked during. Elapsed timer starts at zero after countdown.
-- [ ] **Chunk F — persistent puzzle count.** Migration 0008: `player_completions` table. `submit-move` inserts on multiplayer win. New `record_completion` RPC for SP (called from CompletionOverlay). New `get_completion_count` RPC for home page. Replace localStorage `solved-tracker` reads.
-- [ ] **Chunk G — public lobbies + host kick.** Migration 0009: `rooms.is_public boolean`. Home page "Public lobbies" list with Realtime updates. `update-room-settings` toggles is_public. New `kick-player` Edge Function (host-only). Lobby UI: host gets kick buttons; kicked player redirects home.
-- [ ] **Chunk H — return-to-lobby cycle.** Migration 0010: `room_players.has_returned`. `playing → finished` flips all to false. New `return-to-lobby` Edge Function flips caller true + room status finished → lobby. Lobby UI: non-returned players greyed with 3-dot animation; host can kick. `start-game` on a previously-played room: clear `moves`, pick a new puzzle, reset progress/winner/finished_at, new `started_at`. Winner overlay: "Back to menu" → "Return to lobby" (secondary back-to-menu kept).
+- [x] **Chunk A** — SP Hint button removed. Winner overlay: self → "You won!"; other → "[username] won". `canvas-confetti` fires on SP completion + battle winner overlay.
+- [x] **Chunk B** — `apps/web/lib/data/usernames.csv` (456 adj × 966 noun) → `supabase/functions/_shared/word-lists.generated.json` via `pnpm build:wordlists`. New `claim-username` Edge Function + `issued_usernames` table (migration 0008). `lib/username.ts` is async, persists in localStorage, idempotent per `auth.uid()`.
+- [x] **Chunk C** — Palette in `_shared/room-code.ts` is 8 distinct colors. `join-room` MAX_PLAYERS = 8. Lobby reads `(X/8)`.
+- [x] **Chunk D** — `LobbySettingsPanel` (toggles for showConflicts / autoCheck / highlightSameValue + Public). New `update-room-settings` Edge Function. `submit-move` returns `cell_correct` when autoCheck is on. Battle-store tracks `incorrect` set.
+- [x] **Chunk E** — Clients compute the 5-second countdown locally from `rooms.started_at`. Board visible with an overlay blocking input during countdown. Elapsed display starts at 0 after.
+- [x] **Chunk F** — Migration 0009 + `record_completion` + `get_completion_count` RPCs. `submit-move` upserts on `won`. Home page shows username + total solved count. `lib/solved-tracker.ts` removed; `lib/completions.ts` replaces it.
+- [x] **Chunk G** — Migration 0010 (`rooms.is_public`). `PublicLobbyList` on home page with Realtime auto-refresh. `kick-player` Edge Function. Lobby player rows show a kick button to host.
+- [x] **Chunk H** — Migration 0011 (`room_players.has_returned`). `submit-move` flips all `has_returned=false` on the winning move + allows late finishes for losers (records their completion). New `return-to-lobby` Edge Function. `start-game` extended for replay: clears `moves`, picks a new puzzle of the same difficulty, resets progress/winner. Winner overlay's primary action is "Return to lobby"; non-returned players render with `opacity-60` + a 3-dot waiting animation; Start button disables with "Waiting on N players…".
 
 ### Phase 2 testing
 - [ ] Two-browser manual test: both join, both play, one finishes, winner declared correctly.

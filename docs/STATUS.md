@@ -1,7 +1,7 @@
 # Status
 
 **Last updated:** 2026-05-22
-**Current phase:** Phase 2 in progress. Lobby + game start + move submission + winner detection all wired end-to-end. UX expansion in flight (8-player cap, lobby settings, public lobbies, return-to-lobby cycle, persistent completion count) — see [DECISIONS.md #0026–#0030](DECISIONS.md) and TODO chunks A–H.
+**Current phase:** Phase 2 — battle mode is fully playable end-to-end with the May 22 UX expansion landed (chunks A–H). Remaining items are polish + the two-tab Playwright smoke; coop / iOS are the next phases.
 **Branch:** `main`
 **Live:** https://sudoku-squad-web.vercel.app/
 
