@@ -44,6 +44,8 @@ Thumbs.db
 # Ingest data (large CSV dumps, never committed)
 scripts/ingest/data/
 *.csv
+# Small in-repo CSV fixtures are OK
+!scripts/ingest/fixtures/*.csv
 
 # Supabase local dev
 supabase/.branches

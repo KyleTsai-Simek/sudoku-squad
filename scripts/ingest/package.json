@@ -8,6 +8,7 @@
     "ingest": "tsx -r dotenv/config src/index.ts dotenv_config_path=../../.env.local",
     "check": "tsx -r dotenv/config src/check-connectivity.ts dotenv_config_path=../../.env.local",
     "verify:samples": "tsx src/verify-samples.ts",
+    "ingest:dry-fixture": "tsx src/index.ts --dry-run --csv fixtures/synthetic.csv",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "lint": "echo 'TODO: eslint'"

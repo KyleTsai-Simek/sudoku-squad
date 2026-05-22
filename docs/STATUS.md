@@ -25,6 +25,7 @@ This doc captures *where we actually are*. Update it whenever a phase milestone 
   - `solver.ts` — Norvig solver. `solve`, `countSolutions`, `hasUniqueSolution`.
   - `check-connectivity.ts` — Supabase URL + RLS sanity check.
   - **`verify-samples.ts`** — verifies the web app's sample puzzle pack against the solver; runs via `pnpm --filter @sudoku-squad/ingest verify:samples`. All 5 currently pass.
+  - **`csv.ts` + `index.ts`** — full ingest pipeline. Streams a Kaggle CSV, buckets per tier (by `difficulty` column when present, else clue count), solver-verifies each candidate (uniqueness + claimed-solution match), and inserts a balanced 10 000-puzzle sample (2 500 × 4 tiers) into Supabase via service-role. `--dry-run` and `--csv <path>` flags. Repeatable fixture-based dry-run: `pnpm --filter @sudoku-squad/ingest ingest:dry-fixture` reports `easy=0 medium=2 hard=0 expert=3` against `fixtures/synthetic.csv` (5 valid + 2 deliberately-bad rows).
   - 4/4 solver tests passing (incl. world-hardest).
 - **`apps/web`** — Next.js 15 + React 19 + Tailwind 3. **Single-player vertical slice complete:**
   - `/` — landing page with **New Game** CTA + Quick Start grid (5 sample puzzles) + Battle/Coop placeholders.
@@ -44,6 +45,7 @@ This doc captures *where we actually are*. Update it whenever a phase milestone 
 | Core engine tests | `pnpm --filter @sudoku-squad/core test` | 36/36 passing |
 | Solver tests | `pnpm --filter @sudoku-squad/ingest test` | 4/4 passing |
 | Sample-puzzle verification | `pnpm --filter @sudoku-squad/ingest verify:samples` | 5/5 OK |
+| Ingest dry-run on synthetic fixture | `pnpm --filter @sudoku-squad/ingest ingest:dry-fixture` | sampled 5, rejected 2 (as designed) |
 | Supabase connectivity + RLS | `pnpm --filter @sudoku-squad/ingest check` | 3/3 (yellow note expected while `puzzles` is empty) |
 | Web typecheck | `pnpm --filter @sudoku-squad/web typecheck` | clean |
 | Web production build | `pnpm --filter @sudoku-squad/web build` | clean |
@@ -53,7 +55,7 @@ This doc captures *where we actually are*. Update it whenever a phase milestone 
 
 ## What does NOT yet exist
 
-- **Real puzzles in Supabase** — `puzzles` table is empty. The Kaggle CSV ingest is still a placeholder (`scripts/ingest/src/index.ts`). Single-player uses the bundled `lib/sample-puzzles.ts` until ingest lands.
+- **Real puzzles in Supabase** — the ingest pipeline is written and dry-run-tested, but the `puzzles` table is still empty until someone drops the Kaggle CSV into `scripts/ingest/data/` and runs `pnpm --filter @sudoku-squad/ingest ingest`. See `scripts/ingest/README.md`. Single-player uses the bundled `apps/web/lib/sample-puzzles.ts` until that happens.
 - **Auto-eliminate notes** — Setting exposed in the sheet but disabled (placeholder for V2).
 - **ESLint rules** for `packages/core` purity (no DOM, no Next, no RN, no solver imports) — planned but not wired.
 - **Playwright** — `@playwright/test` installed, no config or smoke yet.

@@ -39,13 +39,12 @@ Working task list. Checkboxes get checked as work completes. New items added as 
 ### `scripts/ingest` — puzzle data
 - [x] Sample puzzle pack bundled in `apps/web/lib/sample-puzzles.ts` (5 puzzles, solver-verified) — unblocks single-player UI until the real ingest lands. See [DECISIONS.md #0017](DECISIONS.md).
 - [x] `verify-samples.ts` script + `pnpm verify:samples` — solver checks the bundled pack for uniqueness and matching solutions.
-- [ ] Implement the Kaggle 9M CSV reader in `scripts/ingest/src/index.ts`
-- [ ] Download dataset to `scripts/ingest/data/` (gitignored)
-- [ ] For each candidate row: parse, run `hasUniqueSolution`, confirm dataset solution matches `solve()` output
-- [ ] Sample 500–1000 medium-difficulty rows, upsert to Supabase `puzzles` via service-role client
-- [ ] After ingest: re-run connectivity check — should now show non-zero rows and become a stronger RLS test
-- [ ] Tighten `check-connectivity.ts` to verify anon canNOT read `puzzles.solution` even when rows exist (insert test row → query as anon → confirm empty result)
-- [ ] Swap `apps/web` single-player to fetch from Supabase `puzzles_public` instead of the bundled pack; keep the pack as an offline fallback for dev
+- [x] CSV streamer (`src/csv.ts`), bucketed sampler + solver-verified ingest in `src/index.ts`. Auto-detects header layout, buckets by `difficulty` column when present else by clue count, targets 2500 per tier (10000 total). `--dry-run` and `--csv <path>` flags for safe iteration. Repeatable fixture-based dry-run via `pnpm ingest:dry-fixture`.
+- [ ] **User action:** download the Kaggle 1M CSV to `scripts/ingest/data/` (see README).
+- [ ] Run `pnpm --filter @sudoku-squad/ingest ingest` against the real dataset; verify counts come back near targets.
+- [ ] After ingest: re-run `pnpm --filter @sudoku-squad/ingest check` — should show non-zero rows and become a stronger RLS test.
+- [ ] Tighten `check-connectivity.ts` to verify anon canNOT read `puzzles.solution` even when rows exist (insert test row → query as anon → confirm empty result).
+- [ ] Swap `apps/web` single-player to fetch from Supabase `puzzles_public` instead of the bundled pack; keep the pack as an offline fallback. (Will need an Edge Function for the hint/completion path so the solution stays server-side. Phase 2 prep.)
 
 ### `apps/web` — single player UI ✅ (modulo mobile audit)
 - [x] Replace placeholder home page with "New Game" CTA + Quick Start grid (5 sample puzzles)
