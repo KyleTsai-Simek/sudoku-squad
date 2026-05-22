@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import {
+  applyMove,
   applyMoveWithHistory,
   canRedo,
   canUndo,
@@ -25,23 +26,31 @@ import {
   DEFAULT_ROOM_SETTINGS,
   type RoomSettings,
   type RoomState,
+  type ServerMove,
 } from './rooms';
 import { enqueueSubmit } from './submit-queue';
 
 /**
- * Battle-mode local state. Like game-store.ts but:
- *   - No `solution` client-side (server-authoritative).
- *   - No local win detection — the server broadcasts winner via the rooms row.
- *   - No hint/auto-check locally (those need server endpoints, Phase 2+).
- *   - Every value/clear/note_toggle calls submit-move in the background.
+ * Coop-mode local state. Like battle-store.ts but the board is **shared** —
+ * every player writes to the same board, and the server materializes via
+ * LWW per cell by `seq`. Differences from battle-store:
  *
- * We apply moves optimistically and don't wait for the server echo. Network
- * errors from submit-move are surfaced into `lastError` so the UI can show
- * a small toast. For V1 we don't roll back on rejection — a real reconcile
- * loop lands when coop's LWW semantics force the issue.
+ *   - `applyRemoteMove` folds in other players' moves as they arrive via
+ *     the moves realtime channel.
+ *   - `pendingOwnSeqs` dedupes server echos of moves we already applied
+ *     locally (optimistic apply).
+ *   - No `incorrect` set yet (autoCheck wiring is the same as battle but
+ *     simpler — we trust the server's per-move response).
+ *   - No `winner_player_id` distinction: a coop win is a SHARED win
+ *     announced via `rooms.status='finished'`, and the UI shows
+ *     "Solved together!" instead of a per-player win/lose state.
+ *
+ * Per the Plan agent's spec, this is duplicated from battle-store rather
+ * than extracted — the two shapes diverge meaningfully and a parameterized
+ * version would be noisier. Refactor candidate post-Phase-3.
  */
 
-interface BattleState {
+interface CoopState {
   room: RoomState | null;
   puzzleCode: PuzzleCode | null;
   board: BoardState | null;
@@ -50,22 +59,22 @@ interface BattleState {
   notesMode: boolean;
   settings: RoomSettings;
   conflicts: Set<CellIndex>;
-  /** Server-flagged incorrect cells when settings.autoCheck is on. */
-  incorrect: Set<CellIndex>;
   startedAt: number | null;
   finishedAt: number | null;
-  ownProgressPct: number;
+  sharedProgressPct: number;
   lastError: string | null;
+  /** Seqs we've submitted ourselves; suppresses double-apply when the server
+   *  echoes them via the realtime channel. */
+  pendingOwnSeqs: Set<number>;
 
   // actions
-  /** `gameStartsAt` is the absolute timestamp (ms) at which input is unlocked
-   *  — i.e. `serverStartedAt + 5000`. The elapsed display reads from this. */
-  startBattle: (
+  startCoop: (
     room: RoomState,
     puzzleCode: PuzzleCode,
     givens: number[],
     settings: RoomSettings,
     gameStartsAt: number,
+    initialMoves: ServerMove[],
   ) => void;
   applySettings: (settings: RoomSettings) => void;
   selectCell: (cell: CellIndex | null) => void;
@@ -73,11 +82,13 @@ interface BattleState {
   toggleNotesMode: () => void;
   setNotesMode: (on: boolean) => void;
   enterValue: (value: CellValue) => Promise<void>;
-  /** One-shot pencil-mark toggle, regardless of notesMode. Wired to Shift+digit. */
   enterNote: (value: CellValue) => Promise<void>;
   clearCell: () => Promise<void>;
   undo: () => void;
   redo: () => void;
+  /** Apply a move from another player (or our own echo). Suppressed when seq
+   *  is already in pendingOwnSeqs. */
+  applyRemoteMove: (m: ServerMove) => void;
   markFinished: () => void;
 }
 
@@ -85,7 +96,18 @@ function recomputeConflicts(board: BoardState, on: boolean): Set<CellIndex> {
   return on ? findConflicts(board) : new Set<CellIndex>();
 }
 
-export const useBattleStore = create<BattleState>((set, get) => ({
+/** Convert a ServerMove into the local Move shape understood by the
+ *  packages/core reducer. Returns null for moves that can't be applied
+ *  (e.g., a value move with a null value, which the server validates against
+ *  but we double-check). */
+function toCoreMove(m: ServerMove): Move | null {
+  if (m.kind === 'clear') return { kind: 'clear', cell: m.cell };
+  if (m.value === null) return null;
+  if (m.value < 1 || m.value > 9) return null;
+  return { kind: m.kind, cell: m.cell, value: m.value as CellValue };
+}
+
+export const useCoopStore = create<CoopState>((set, get) => ({
   room: null,
   puzzleCode: null,
   board: null,
@@ -94,14 +116,21 @@ export const useBattleStore = create<BattleState>((set, get) => ({
   notesMode: false,
   settings: { ...DEFAULT_ROOM_SETTINGS },
   conflicts: new Set(),
-  incorrect: new Set(),
   startedAt: null,
   finishedAt: null,
-  ownProgressPct: 0,
+  sharedProgressPct: 0,
   lastError: null,
+  pendingOwnSeqs: new Set(),
 
-  startBattle: (room, puzzleCode, givens, settings, gameStartsAt) => {
-    const board = createBoard(puzzleCode, givens);
+  startCoop: (room, puzzleCode, givens, settings, gameStartsAt, initialMoves) => {
+    // Build base board, then fold in every move that's already been made in
+    // the room (replay path — covers both fresh-start with 0 moves and
+    // late-joiner with N moves). LWW falls out of replaying in seq order.
+    let board = createBoard(puzzleCode, givens);
+    for (const sm of initialMoves) {
+      const core = toCoreMove(sm);
+      if (core) board = applyMove(board, core);
+    }
     set({
       room,
       puzzleCode,
@@ -111,11 +140,11 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       notesMode: false,
       settings,
       conflicts: recomputeConflicts(board, settings.showConflicts),
-      incorrect: new Set(),
       startedAt: gameStartsAt,
       finishedAt: null,
-      ownProgressPct: 0,
+      sharedProgressPct: 0,
       lastError: null,
+      pendingOwnSeqs: new Set(),
     });
   },
 
@@ -124,8 +153,6 @@ export const useBattleStore = create<BattleState>((set, get) => ({
     set({
       settings,
       conflicts: board ? recomputeConflicts(board, settings.showConflicts) : new Set(),
-      // Clear incorrect flags when autoCheck flips off; otherwise leave them.
-      incorrect: settings.autoCheck ? get().incorrect : new Set(),
     });
   },
 
@@ -146,13 +173,11 @@ export const useBattleStore = create<BattleState>((set, get) => ({
   enterValue: async (value) => {
     const { board, selected, room, notesMode, finishedAt, startedAt } = get();
     if (!board || !room || selected === null || finishedAt !== null) return;
-    // Countdown lock: startedAt is the future absolute moment input unlocks.
     if (startedAt !== null && Date.now() < startedAt) return;
     const cell = board.cells[selected];
     if (!cell || cell.given !== null) return;
 
-    // Re-typing the placed value acts as a clear (which itself becomes a
-    // smart-undo when the placement was the most recent move).
+    // Re-typing the placed value acts as a clear (same UX as SP / battle).
     if (!notesMode && cell.value === value) {
       await get().clearCell();
       return;
@@ -183,13 +208,14 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       set({ lastError: res.error.message });
       return;
     }
-    // Update incorrect set from server's autoCheck verdict.
-    const inc = new Set(get().incorrect);
-    if (res.value.cell_correct === true) inc.delete(move.cell);
-    if (res.value.cell_correct === false) inc.add(move.cell);
+    // Mark this seq as ours so the realtime echo doesn't double-apply.
+    if (res.value.seq !== undefined) {
+      const next = new Set(get().pendingOwnSeqs);
+      next.add(res.value.seq);
+      set({ pendingOwnSeqs: next });
+    }
     set({
-      ownProgressPct: res.value.progress_pct,
-      incorrect: inc,
+      sharedProgressPct: res.value.progress_pct,
       lastError: null,
     });
     if (res.value.won) {
@@ -198,12 +224,13 @@ export const useBattleStore = create<BattleState>((set, get) => ({
   },
 
   enterNote: async (value) => {
-    const { board, selected, history, room, settings, finishedAt, startedAt } = get();
+    const { board, selected, room, finishedAt, startedAt } = get();
     if (!board || !room || selected === null || finishedAt !== null) return;
     if (startedAt !== null && Date.now() < startedAt) return;
     const cell = board.cells[selected];
     if (!cell || cell.given !== null || cell.value !== null) return;
     const move: Move = { kind: 'note_toggle', cell: selected, value };
+    const { history, settings } = get();
     const result = applyMoveWithHistory(board, history, move);
     if (result.state === board) return;
     set({
@@ -223,7 +250,12 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       set({ lastError: res.error.message });
       return;
     }
-    set({ ownProgressPct: res.value.progress_pct, lastError: null });
+    if (res.value.seq !== undefined) {
+      const next = new Set(get().pendingOwnSeqs);
+      next.add(res.value.seq);
+      set({ pendingOwnSeqs: next });
+    }
+    set({ sharedProgressPct: res.value.progress_pct, lastError: null });
   },
 
   clearCell: async () => {
@@ -233,10 +265,10 @@ export const useBattleStore = create<BattleState>((set, get) => ({
     const cell = board.cells[selected];
     if (!cell || cell.given !== null) return;
 
-    // Smart-clear: if the most recent move was placing exactly the value
-    // currently in this cell, treat the clear as an undo so auto-cleaned
-    // peer notes come back. We still submit a `clear` to the server so the
-    // server's progress_pct stays in sync with what the user sees locally.
+    // Smart-clear: matches battle/SP. Note: in coop the "just-placed" move
+    // might be another player's; we only smart-undo when peekLastMove says
+    // our local history's top frame was a value move on this cell. Safe
+    // because our local history is per-player and never sees others' moves.
     const last = peekLastMove(history);
     const isSmartUndo =
       !!last &&
@@ -245,7 +277,6 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       cell.value === last.value;
 
     if (isSmartUndo) {
-      // Local: pop the placement (which restores peer notes and empties the cell).
       const undone = undoHistory(board, history);
       set({
         board: undone.state,
@@ -274,10 +305,12 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       set({ lastError: res.error.message });
       return;
     }
-    // Cleared cells can no longer be "wrong".
-    const inc = new Set(get().incorrect);
-    inc.delete(selected);
-    set({ ownProgressPct: res.value.progress_pct, incorrect: inc, lastError: null });
+    if (res.value.seq !== undefined) {
+      const next = new Set(get().pendingOwnSeqs);
+      next.add(res.value.seq);
+      set({ pendingOwnSeqs: next });
+    }
+    set({ sharedProgressPct: res.value.progress_pct, lastError: null });
   },
 
   undo: () => {
@@ -289,10 +322,9 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       history: result.history,
       conflicts: recomputeConflicts(result.state, settings.showConflicts),
     });
-    // Note: undo is local-only — we don't send a server clear for V1. The
-    // server's progress_pct will drift from the client's until the next
-    // move. That's acceptable for the typical "I miss-typed, let me undo"
-    // case; the next legitimate enterValue will resync.
+    // V1: undo is local-only — server still has the move. Acceptable for
+    // typo-fix UX; coop late-finish-style desync is rare and resolved on
+    // the next legitimate enterValue.
   },
 
   redo: () => {
@@ -306,14 +338,34 @@ export const useBattleStore = create<BattleState>((set, get) => ({
     });
   },
 
+  applyRemoteMove: (m) => {
+    const { board, pendingOwnSeqs, settings } = get();
+    if (!board) return;
+    // Echo suppression — we already applied this seq locally on submit.
+    if (pendingOwnSeqs.has(m.seq)) {
+      const next = new Set(pendingOwnSeqs);
+      next.delete(m.seq);
+      set({ pendingOwnSeqs: next });
+      return;
+    }
+    const core = toCoreMove(m);
+    if (!core) return;
+    const nextBoard = applyMove(board, core);
+    if (nextBoard === board) return;
+    set({
+      board: nextBoard,
+      conflicts: recomputeConflicts(nextBoard, settings.showConflicts),
+    });
+  },
+
   markFinished: () => {
     if (get().finishedAt === null) set({ finishedAt: Date.now() });
   },
 }));
 
-export function selectBattleCanUndo(s: BattleState): boolean {
+export function selectCoopCanUndo(s: CoopState): boolean {
   return canUndo(s.history);
 }
-export function selectBattleCanRedo(s: BattleState): boolean {
+export function selectCoopCanRedo(s: CoopState): boolean {
   return canRedo(s.history);
 }

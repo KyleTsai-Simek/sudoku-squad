@@ -20,6 +20,7 @@ import { getUsername, setLocalUsernameOverride } from '@/lib/username';
 import { LobbySettingsPanel } from '@/components/lobby-settings-panel';
 import { DEFAULT_ROOM_SETTINGS } from '@/lib/rooms';
 import { BattleGame } from './battle-game';
+import { CoopGame } from './coop-game';
 
 type Phase =
   | { kind: 'joining' }
@@ -157,6 +158,17 @@ export function LobbyClient({ code }: { code: string }) {
   const settings = roomRow?.settings ?? DEFAULT_ROOM_SETTINGS;
 
   if (status === 'playing' || status === 'finished') {
+    if (room.mode === 'coop') {
+      return (
+        <CoopGame
+          room={room}
+          players={players}
+          settings={settings}
+          serverStartedAt={roomRow?.started_at ?? null}
+          finished={status === 'finished'}
+        />
+      );
+    }
     return (
       <BattleGame
         room={room}

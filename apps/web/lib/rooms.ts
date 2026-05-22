@@ -201,6 +201,70 @@ export async function subscribeToRoomPlayers(
   };
 }
 
+/**
+ * Coop-only realtime subscription: fire `onInsert` for every new `moves` row
+ * landed in this room. Used by coop-store to apply other players' moves as
+ * they arrive. Battle mode doesn't need this — each player only sees their
+ * own board and submit-move's response is enough for their progress.
+ */
+export interface ServerMove {
+  seq: number;
+  player_id: string;
+  cell: number;
+  kind: 'value' | 'clear' | 'note_toggle';
+  value: number | null;
+}
+
+export async function subscribeToMoves(
+  roomId: string,
+  onInsert: (move: ServerMove) => void,
+): Promise<() => void> {
+  const client = await ensureAuthClient();
+  if (!client) return () => {};
+  const channel = client
+    .channel(`moves:${roomId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'moves',
+        filter: `room_id=eq.${roomId}`,
+      },
+      (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        onInsert({
+          seq: Number(row.seq),
+          player_id: String(row.player_id),
+          cell: Number(row.cell),
+          kind: row.kind as ServerMove['kind'],
+          value: row.value === null ? null : Number(row.value),
+        });
+      },
+    )
+    .subscribe();
+  return () => {
+    client.removeChannel(channel);
+  };
+}
+
+/** One-shot fetch of every move in a room, ordered by seq. Used by coop on
+ *  mount + late-join replay to reconstruct the shared board. */
+export async function fetchAllMoves(roomId: string): Promise<ServerMove[]> {
+  const client = await ensureAuthClient();
+  if (!client) return [];
+  const { data, error } = await client
+    .from('moves')
+    .select('seq, player_id, cell, kind, value')
+    .eq('room_id', roomId)
+    .order('seq', { ascending: true });
+  if (error) {
+    console.error('fetchAllMoves error', error);
+    return [];
+  }
+  return (data ?? []) as ServerMove[];
+}
+
 export interface RoomPlayerProgress extends RoomPlayer {
   progress_pct: number;
   has_returned: boolean;

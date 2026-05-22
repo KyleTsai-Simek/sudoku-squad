@@ -39,6 +39,7 @@ export function HomeClient() {
   const [counts, setCounts] = useState<Record<Difficulty, TierState> | null>(null);
   const [loadingSolo, setLoadingSolo] = useState<Difficulty | null>(null);
   const [loadingBattle, setLoadingBattle] = useState<Difficulty | null>(null);
+  const [loadingCoop, setLoadingCoop] = useState<Difficulty | null>(null);
   const [joinCode, setJoinCode] = useState('');
   const [joinPending, setJoinPending] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -82,6 +83,18 @@ export function HomeClient() {
     } else {
       // Surface the error inline. For V1 we just alert; refine later.
       alert(`Could not start battle: ${res.error.message}`);
+    }
+  }
+
+  async function startCoop(tier: Difficulty) {
+    setLoadingCoop(tier);
+    const username = await getUsername();
+    const res = await createRoom({ mode: 'coop', difficulty: tier, username });
+    setLoadingCoop(null);
+    if (res.ok) {
+      router.push(`/r/${res.value.room_code}`);
+    } else {
+      alert(`Could not start coop: ${res.error.message}`);
     }
   }
 
@@ -208,7 +221,37 @@ export function HomeClient() {
           })}
         </div>
         <p className="mt-2 text-xs text-stone-500">
-          Create a room and share the link — first to finish wins. Coop coming next.
+          Create a room and share the link — first to finish wins.
+        </p>
+      </section>
+
+      <section className="w-full">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-500">
+          Coop with a friend
+        </h2>
+        <div className="grid grid-cols-3 gap-3">
+          {(['easy', 'medium', 'hard'] as const).map((tier) => {
+            const isLoading = loadingCoop === tier;
+            return (
+              <button
+                key={tier}
+                type="button"
+                onClick={() => startCoop(tier)}
+                disabled={isLoading}
+                className="flex flex-col items-start gap-1 rounded-xl border border-emerald-500 bg-white px-4 py-3 text-left hover:bg-emerald-50 disabled:opacity-60"
+              >
+                <span className="text-xs font-medium uppercase tracking-widest text-emerald-700">
+                  {tier}
+                </span>
+                <span className="text-sm font-semibold text-stone-900">
+                  {isLoading ? 'Creating…' : 'Start coop'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-xs text-stone-500">
+          Same puzzle, same board. Solve it together — last-write-wins on conflicts.
         </p>
       </section>
 

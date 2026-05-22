@@ -1,0 +1,76 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { fireWinConfetti } from '@/lib/confetti';
+import { returnToLobby, type RoomPlayerProgress } from '@/lib/rooms';
+
+interface Props {
+  roomId: string;
+  finished: boolean;
+  players: RoomPlayerProgress[];
+  dismissed: boolean;
+  onDismiss: () => void;
+}
+
+/**
+ * Coop shared-win overlay. Mirrors the BattleWinnerOverlay shape but with
+ * "Solved together!" copy — there's no individual winner in coop. Same
+ * Return-to-lobby flow (per DECISIONS #0030 same-room replay cycle).
+ */
+export function CoopWinOverlay({ roomId, finished, players, dismissed, onDismiss }: Props) {
+  const router = useRouter();
+  const [returning, setReturning] = useState(false);
+  const visible = finished && !dismissed;
+
+  useEffect(() => {
+    if (visible) fireWinConfetti();
+  }, [visible]);
+
+  if (!visible) return null;
+
+  async function onReturn() {
+    setReturning(true);
+    const res = await returnToLobby(roomId);
+    setReturning(false);
+    if (res.ok) onDismiss();
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Coop finished"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 px-4"
+    >
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+        <p className="text-sm font-medium uppercase tracking-widest text-emerald-700">
+          Solved together!
+        </p>
+        <h2 className="mt-2 text-2xl font-semibold">Nice work, team.</h2>
+        <p className="mt-3 text-sm text-stone-600">
+          {players.length === 1
+            ? 'You finished the puzzle.'
+            : `${players.length} players finished the puzzle.`}
+        </p>
+        <div className="mt-6 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={onReturn}
+            disabled={returning}
+            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
+          >
+            {returning ? 'Returning…' : 'Return to lobby'}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/')}
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+          >
+            Back to menu
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

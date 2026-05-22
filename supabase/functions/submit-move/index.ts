@@ -211,32 +211,41 @@ Deno.serve(async (req) => {
     return errorResponse('internal', 'could not assign seq after retries', 500);
   }
 
-  // Replay this player's moves to compute current progress + win.
-  const { data: ownMoves, error: movesErr } = await admin
+  // Replay moves to compute current progress + win. Battle materializes the
+  // caller's own moves (independent boards); coop materializes EVERY move in
+  // the room since the board is shared (LWW per cell falls out of replaying
+  // in seq order — a later move overwrites an earlier cell value).
+  const movesQuery = admin
     .from('moves')
     .select('seq, cell, kind, value')
     .eq('room_id', room_id)
-    .eq('player_id', userId)
     .order('seq', { ascending: true });
+  if (room.mode === 'battle') movesQuery.eq('player_id', userId);
+  const { data: replayMoves, error: movesErr } = await movesQuery;
   if (movesErr) {
     return errorResponse('internal', `moves read failed: ${movesErr.message}`, 500);
   }
-  const { progressPct, won } = materialize(p.givens, (ownMoves ?? []) as MoveRow[], p.solution);
+  const { progressPct, won } = materialize(p.givens, (replayMoves ?? []) as MoveRow[], p.solution);
 
-  // Cache progress on the player row so opponents can render their bars.
-  const { error: progErr } = await admin
+  // Cache progress on room_players. Battle writes only the caller's row;
+  // coop writes the same shared % to every player's row so everyone's UI
+  // shows the same progress bar.
+  const progressUpdate = admin
     .from('room_players')
     .update({ progress_pct: progressPct })
-    .eq('room_id', room_id)
-    .eq('player_id', userId);
+    .eq('room_id', room_id);
+  if (room.mode === 'battle') progressUpdate.eq('player_id', userId);
+  const { error: progErr } = await progressUpdate;
   if (progErr) {
     console.error('progress_pct update failed', progErr);
   }
 
   let isWinner = false;
+  let isSharedWin = false;
   if (won && room.mode === 'battle') {
-    // Atomic: only become the winner if no one else has already AND the room
-    // is still 'playing' (late finishers can't steal the win).
+    // Battle: atomic individual claim. Only become the winner if no one else
+    // has already AND the room is still 'playing' (late finishers can't
+    // steal the win).
     const { data: claimed, error: winErr } = await admin
       .from('rooms')
       .update({
@@ -265,12 +274,62 @@ Deno.serve(async (req) => {
         console.error('has_returned reset failed', hrErr);
       }
     }
+  } else if (won && room.mode === 'coop') {
+    // Coop: everyone wins together. Atomic transition gated on status='playing'
+    // so the second "completing move" lands cleanly (LWW already produced the
+    // same shared board; second submit just sees status='finished' and is a no-op).
+    const { data: claimed, error: winErr } = await admin
+      .from('rooms')
+      .update({
+        status: 'finished',
+        winner_player_id: null,
+        finished_at: new Date().toISOString(),
+      })
+      .eq('id', room_id)
+      .eq('status', 'playing')
+      .select('id')
+      .maybeSingle();
+    if (winErr) {
+      return errorResponse('internal', `room finish update failed: ${winErr.message}`, 500);
+    }
+    isSharedWin = !!claimed;
+
+    if (isSharedWin) {
+      // Same return-to-lobby pattern as battle: flip every player to has_returned=false.
+      const { error: hrErr } = await admin
+        .from('room_players')
+        .update({ has_returned: false })
+        .eq('room_id', room_id);
+      if (hrErr) {
+        console.error('has_returned reset failed', hrErr);
+      }
+      // Record a completion row for every member of the room (one per
+      // (player_id, puzzle_code) — onConflict do-nothing-ish via upsert).
+      const { data: members, error: membersErr } = await admin
+        .from('room_players')
+        .select('player_id')
+        .eq('room_id', room_id);
+      if (membersErr) {
+        console.error('coop members lookup failed', membersErr);
+      } else if (members && members.length > 0) {
+        const rows = members.map((m) => ({
+          player_id: (m as { player_id: string }).player_id,
+          puzzle_code: room.puzzle_code,
+          mode: room.mode,
+        }));
+        const { error: cErr } = await admin
+          .from('player_completions')
+          .upsert(rows, { onConflict: 'player_id,puzzle_code' });
+        if (cErr) console.error('coop player_completions upsert failed', cErr);
+      }
+    }
   }
 
-  // Persistent completion tally. Multiplayer wins always count; non-winners
-  // who finish the same puzzle later via the loser-keep-solving flow also
-  // call here (chunk H — for now this only fires for winners).
-  if (won) {
+  // Persistent completion tally for the CALLER. In battle this covers winners
+  // + late-finishing losers. In coop the per-member rows were already inserted
+  // above on the winning move; subsequent calls fall into this branch and
+  // re-upsert the caller's own row (idempotent).
+  if (won && room.mode === 'battle') {
     const { error: cErr } = await admin.from('player_completions').upsert(
       {
         player_id: userId,
