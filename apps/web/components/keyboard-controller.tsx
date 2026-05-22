@@ -6,11 +6,17 @@ import type { CellValue } from '@sudoku-squad/core';
 
 /**
  * Wires physical keyboard input into the game store.
- * 1..9 — enter value (or toggle note when notesMode is on)
- * 0 / Backspace / Delete — clear the cell
- * Arrows — move selection
- * N — toggle notes mode
- * Ctrl/Cmd+Z — undo; Ctrl/Cmd+Shift+Z or Ctrl+Y — redo
+ *
+ *   1..9              — enter value (or toggle a pencil-mark in notes mode)
+ *   Shift+1..9        — one-shot pencil-mark toggle, regardless of mode
+ *   0 / Backspace / Delete — clear the cell
+ *   Arrows            — move selection
+ *   Space             — toggle notes mode
+ *   N                 — toggle notes mode (legacy alias)
+ *   Cmd/Ctrl+Z        — undo
+ *   Cmd/Ctrl+Shift+Z  — redo
+ *   Cmd/Ctrl+Y        — redo
+ *   ?                 — open the keyboard shortcuts overlay
  *
  * Renders nothing.
  */
@@ -26,6 +32,13 @@ export function KeyboardController() {
       }
 
       const key = e.key;
+      // Shift+digit: one-shot pencil-mark, regardless of notesMode. Check
+      // BEFORE the plain-digit branch so Shift+1 doesn't fall through.
+      if (e.shiftKey && /^[1-9]$/.test(key)) {
+        e.preventDefault();
+        store.enterNote(Number(key) as CellValue);
+        return;
+      }
       if (/^[1-9]$/.test(key)) {
         e.preventDefault();
         store.enterValue(Number(key) as CellValue);
@@ -54,6 +67,12 @@ export function KeyboardController() {
       if (key === 'ArrowRight') {
         e.preventDefault();
         store.moveSelection(1, 0);
+        return;
+      }
+      // Spacebar: toggle notes mode. preventDefault so the page doesn't scroll.
+      if (key === ' ' || key === 'Spacebar') {
+        e.preventDefault();
+        store.toggleNotesMode();
         return;
       }
       if (key === 'n' || key === 'N') {

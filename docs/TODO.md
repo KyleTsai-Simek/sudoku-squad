@@ -61,6 +61,13 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope.
 
 ADRs [#0026](DECISIONS.md)–[#0030](DECISIONS.md). Migrations 0008–0011. Edge Functions claim-username, update-room-settings, kick-player, return-to-lobby (+ create-room / start-game / submit-move extended). All landed and verified end-to-end on the live project.
 
+### Phase 2 UX polish (May 22 afternoon pass) ✅
+
+- [x] Board renders at integer pixel size at every viewport — `w-[calc(round(down,min(92vw,560px)-4px,9px)+4px)]` so each cell is exactly N px. Plus `border-stone-300` base color on every cell to kill Tailwind preflight gray-200 leak at corners.
+- [x] Auto-clean peer notes: placing a value clears that digit from notes in same row / col / box. Always on; no setting. Undo restores. Implemented in `packages/core/src/game/reducer.ts` + `history.ts`; 6 new tests in core.
+- [x] Keyboard shortcuts: `Space` toggles notes mode, `Shift+1-9` one-shot pencil-mark, `?` opens shortcut overlay. Header `?` button on desktop. Both SP and battle.
+- [x] Notes button visual rework: pencil icon + accent-fill on state instead of "Notes off/on" text.
+
 - [x] **Chunk A** — SP Hint button removed. Winner overlay: self → "You won!"; other → "[username] won". `canvas-confetti` fires on SP completion + battle winner overlay.
 - [x] **Chunk B** — `apps/web/lib/data/usernames.csv` (456 adj × 966 noun) → `supabase/functions/_shared/word-lists.generated.json` via `pnpm build:wordlists`. New `claim-username` Edge Function + `issued_usernames` table (migration 0008). `lib/username.ts` is async, persists in localStorage, idempotent per `auth.uid()`.
 - [x] **Chunk C** — Palette in `_shared/room-code.ts` is 8 distinct colors. `join-room` MAX_PLAYERS = 8. Lobby reads `(X/8)`.

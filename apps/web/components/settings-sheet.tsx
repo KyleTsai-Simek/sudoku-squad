@@ -24,11 +24,6 @@ const OPTIONS: Array<{
     label: 'Highlight same value',
     description: 'When a filled cell is selected, dim other cells with the same value.',
   },
-  {
-    key: 'autoEliminateNotes',
-    label: 'Auto-eliminate notes',
-    description: 'Not yet implemented — placeholder for V2.',
-  },
 ];
 
 export function SettingsSheet() {
@@ -82,26 +77,22 @@ export function SettingsSheet() {
               </button>
             </div>
             <ul className="flex flex-col gap-3">
-              {OPTIONS.map((opt) => {
-                const disabled = opt.key === 'autoEliminateNotes';
-                return (
-                  <li key={opt.key} className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-medium text-stone-900">{opt.label}</p>
-                      <p className="text-xs text-stone-500">{opt.description}</p>
-                    </div>
-                    <label className="flex shrink-0 cursor-pointer items-center">
-                      <input
-                        type="checkbox"
-                        checked={settings[opt.key]}
-                        disabled={disabled}
-                        onChange={(e) => setSetting(opt.key, e.target.checked)}
-                        className="h-5 w-5 cursor-pointer accent-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
-                      />
-                    </label>
-                  </li>
-                );
-              })}
+              {OPTIONS.map((opt) => (
+                <li key={opt.key} className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-stone-900">{opt.label}</p>
+                    <p className="text-xs text-stone-500">{opt.description}</p>
+                  </div>
+                  <label className="flex shrink-0 cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      checked={settings[opt.key]}
+                      onChange={(e) => setSetting(opt.key, e.target.checked)}
+                      className="h-5 w-5 cursor-pointer accent-amber-500"
+                    />
+                  </label>
+                </li>
+              ))}
             </ul>
           </div>
         </div>

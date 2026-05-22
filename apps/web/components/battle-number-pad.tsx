@@ -6,6 +6,7 @@ import {
   useBattleStore,
 } from '@/lib/battle-store';
 import type { CellValue } from '@sudoku-squad/core';
+import { PencilIcon } from './pencil-icon';
 
 function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
@@ -53,9 +54,17 @@ export function BattleNumberPad() {
           onClick={toggleNotesMode}
           disabled={disabled}
           aria-pressed={notesMode}
-          className={cn(BTN, notesMode && 'border-amber-500 bg-amber-100 text-amber-900')}
+          aria-label={notesMode ? 'Turn notes mode off (Space)' : 'Turn notes mode on (Space)'}
+          title="Notes mode (Space)"
+          className={cn(
+            'flex h-12 items-center justify-center gap-1.5 rounded-md border px-3 text-sm font-medium transition-colors active:translate-y-px disabled:opacity-40',
+            notesMode
+              ? 'border-amber-500 bg-amber-500 text-white shadow-sm hover:bg-amber-600'
+              : 'border-stone-300 bg-white text-stone-800 hover:bg-stone-50',
+          )}
         >
-          Notes {notesMode ? 'on' : 'off'}
+          <PencilIcon filled={notesMode} />
+          Notes
         </button>
         <button
           type="button"

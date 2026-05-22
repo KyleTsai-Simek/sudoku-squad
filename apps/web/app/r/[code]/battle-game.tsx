@@ -14,6 +14,10 @@ import { BattleNumberPad } from '@/components/battle-number-pad';
 import { BattleKeyboardController } from '@/components/battle-keyboard';
 import { OpponentProgress } from '@/components/opponent-progress';
 import { BattleWinnerOverlay } from '@/components/battle-winner-overlay';
+import {
+  KeyboardShortcutsButton,
+  KeyboardShortcutsOverlay,
+} from '@/components/keyboard-shortcuts-overlay';
 
 const COUNTDOWN_MS = 5000;
 
@@ -103,7 +107,10 @@ export function BattleGame({
         <span aria-label="Elapsed time" className="font-mono tabular-nums text-stone-700">
           {formatElapsed(elapsed)}
         </span>
-        <span className="text-xs uppercase tracking-widest text-stone-500">battle</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs uppercase tracking-widest text-stone-500">battle</span>
+          <KeyboardShortcutsButton />
+        </div>
       </header>
 
       <OpponentProgress
@@ -117,6 +124,7 @@ export function BattleGame({
           <BattleBoard />
           <BattleNumberPad />
           <BattleKeyboardController />
+          <KeyboardShortcutsOverlay />
           {inCountdown ? (
             <div
               role="status"

@@ -71,6 +71,8 @@ interface BattleState {
   toggleNotesMode: () => void;
   setNotesMode: (on: boolean) => void;
   enterValue: (value: CellValue) => Promise<void>;
+  /** One-shot pencil-mark toggle, regardless of notesMode. Wired to Shift+digit. */
+  enterNote: (value: CellValue) => Promise<void>;
   clearCell: () => Promise<void>;
   undo: () => void;
   redo: () => void;
@@ -181,6 +183,33 @@ export const useBattleStore = create<BattleState>((set, get) => ({
     if (res.value.won) {
       set({ finishedAt: Date.now() });
     }
+  },
+
+  enterNote: async (value) => {
+    const { board, selected, history, room, settings, finishedAt, startedAt } = get();
+    if (!board || !room || selected === null || finishedAt !== null) return;
+    if (startedAt !== null && Date.now() < startedAt) return;
+    const cell = board.cells[selected];
+    if (!cell || cell.given !== null || cell.value !== null) return;
+    const move: Move = { kind: 'note_toggle', cell: selected, value };
+    const result = applyMoveWithHistory(board, history, move);
+    if (result.state === board) return;
+    set({
+      board: result.state,
+      history: result.history,
+      conflicts: recomputeConflicts(result.state, settings.showConflicts),
+    });
+    const res = await submitMove({
+      room_id: room.room_id,
+      cell: selected,
+      kind: 'note_toggle',
+      value,
+    });
+    if (!res.ok) {
+      set({ lastError: res.error.message });
+      return;
+    }
+    set({ ownProgressPct: res.value.progress_pct, lastError: null });
   },
 
   clearCell: async () => {

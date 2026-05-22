@@ -21,14 +21,12 @@ export interface GameSettings {
   showConflicts: boolean;
   autoCheck: boolean;
   highlightSameValue: boolean;
-  autoEliminateNotes: boolean;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
   showConflicts: true,
   autoCheck: false,
   highlightSameValue: true,
-  autoEliminateNotes: false,
 };
 
 interface GameState {
@@ -52,6 +50,11 @@ interface GameState {
   toggleNotesMode: () => void;
   setNotesMode: (on: boolean) => void;
   enterValue: (value: CellValue) => void;
+  /**
+   * One-shot pencil-mark toggle on the selected cell, regardless of notesMode.
+   * Wired to Shift+digit so users can drop a note without flipping modes.
+   */
+  enterNote: (value: CellValue) => void;
   clearCell: () => void;
   undo: () => void;
   redo: () => void;
@@ -153,6 +156,26 @@ export const useGameStore = create<GameState>((set, get) => ({
       conflicts: derived.conflicts,
       incorrect: derived.incorrect,
       finishedAt: won ? Date.now() : null,
+    });
+  },
+
+  enterNote: (value) => {
+    const { board, selected, history, puzzle, settings, finishedAt } = get();
+    if (!board || !puzzle || selected === null || finishedAt !== null) return;
+    const cell = board.cells[selected];
+    if (!cell || cell.given !== null) return;
+    const result = applyMoveWithHistory(board, history, {
+      kind: 'note_toggle',
+      cell: selected,
+      value,
+    });
+    if (result.state === board) return;
+    const derived = recomputeDerived(result.state, settings, puzzle.solution);
+    set({
+      board: result.state,
+      history: result.history,
+      conflicts: derived.conflicts,
+      incorrect: derived.incorrect,
     });
   },
 

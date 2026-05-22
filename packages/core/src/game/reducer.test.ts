@@ -99,6 +99,55 @@ describe('applyMove — note_toggle', () => {
   });
 });
 
+describe('applyMove — value auto-cleans peer notes', () => {
+  // Cell 0 is row 0, col 0, box 0. Peers include cells 1..8 (same row),
+  // 9, 18, 27, 36, 45, 54, 63, 72 (same col), and 10, 11, 19, 20 (rest of box 0).
+  it("removes the placed value from every peer cell's notes", () => {
+    let board = freshBoard();
+    // Seed pencil-marks of 7 in a same-row peer, a same-col peer, a same-box
+    // peer, and an unrelated cell (which should NOT be cleaned).
+    board = applyMove(board, { kind: 'note_toggle', cell: 3, value: 7 }); // row 0
+    board = applyMove(board, { kind: 'note_toggle', cell: 18, value: 7 }); // col 0
+    board = applyMove(board, { kind: 'note_toggle', cell: 10, value: 7 }); // box 0
+    board = applyMove(board, { kind: 'note_toggle', cell: 40, value: 7 }); // unrelated
+    board = applyMove(board, { kind: 'value', cell: 0, value: 7 });
+
+    expect(hasNote(board.cells[3]!.notes, 7)).toBe(false);
+    expect(hasNote(board.cells[18]!.notes, 7)).toBe(false);
+    expect(hasNote(board.cells[10]!.notes, 7)).toBe(false);
+    // Unrelated cell keeps its note.
+    expect(hasNote(board.cells[40]!.notes, 7)).toBe(true);
+  });
+
+  it('leaves OTHER notes on the same peer alone', () => {
+    let board = freshBoard();
+    board = applyMove(board, { kind: 'note_toggle', cell: 3, value: 7 });
+    board = applyMove(board, { kind: 'note_toggle', cell: 3, value: 4 });
+    board = applyMove(board, { kind: 'value', cell: 0, value: 7 });
+    expect(hasNote(board.cells[3]!.notes, 7)).toBe(false);
+    expect(hasNote(board.cells[3]!.notes, 4)).toBe(true);
+  });
+
+  it('placing the value still counts as a real move when only peer notes change', () => {
+    let board = freshBoard();
+    board = applyMove(board, { kind: 'value', cell: 0, value: 7 });
+    board = applyMove(board, { kind: 'note_toggle', cell: 3, value: 7 });
+    // Re-placing the same value on cell 0 is a no-op for cell 0 itself but
+    // SHOULD clean the just-added note on cell 3.
+    const next = applyMove(board, { kind: 'value', cell: 0, value: 7 });
+    expect(next).not.toBe(board);
+    expect(hasNote(next.cells[3]!.notes, 7)).toBe(false);
+  });
+
+  it('is a true no-op (same reference) when nothing changes', () => {
+    let board = freshBoard();
+    board = applyMove(board, { kind: 'value', cell: 0, value: 7 });
+    // No peer notes exist, target is already 7 with no notes — should be no-op.
+    const next = applyMove(board, { kind: 'value', cell: 0, value: 7 });
+    expect(next).toBe(board);
+  });
+});
+
 describe('applyMoves (replay convenience)', () => {
   it('matches a step-by-step fold', () => {
     const moves: Move[] = [

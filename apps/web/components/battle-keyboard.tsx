@@ -6,7 +6,8 @@ import type { CellValue } from '@sudoku-squad/core';
 
 /**
  * Battle equivalent of `keyboard-controller.tsx`. Same key bindings; routes
- * actions to `useBattleStore` instead of `useGameStore`.
+ * actions to `useBattleStore` instead of `useGameStore`. See that file for
+ * the full bindings table.
  */
 export function BattleKeyboardController() {
   useEffect(() => {
@@ -19,6 +20,11 @@ export function BattleKeyboardController() {
       }
 
       const key = e.key;
+      if (e.shiftKey && /^[1-9]$/.test(key)) {
+        e.preventDefault();
+        void store.enterNote(Number(key) as CellValue);
+        return;
+      }
       if (/^[1-9]$/.test(key)) {
         e.preventDefault();
         void store.enterValue(Number(key) as CellValue);
@@ -33,6 +39,11 @@ export function BattleKeyboardController() {
       if (key === 'ArrowDown') { e.preventDefault(); store.moveSelection(0, 1); return; }
       if (key === 'ArrowLeft') { e.preventDefault(); store.moveSelection(-1, 0); return; }
       if (key === 'ArrowRight') { e.preventDefault(); store.moveSelection(1, 0); return; }
+      if (key === ' ' || key === 'Spacebar') {
+        e.preventDefault();
+        store.toggleNotesMode();
+        return;
+      }
       if (key === 'n' || key === 'N') { e.preventDefault(); store.toggleNotesMode(); return; }
       const mod = e.metaKey || e.ctrlKey;
       if (mod && (key === 'z' || key === 'Z')) {

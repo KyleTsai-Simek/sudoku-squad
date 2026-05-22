@@ -42,9 +42,17 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 
 ## Input methods
 
-- **On-screen number pad** (1–9 + clear + notes toggle + undo) — primary input on mobile/web.
-- **Physical keyboard** (1–9 to enter, Backspace/0 to clear, N to toggle notes mode, arrow keys to navigate) — desktop.
-- **Notes mode**: when on, tapping numbers toggles them as small marks in the cell rather than setting the value.
+- **On-screen number pad** (1–9 + clear + notes toggle + undo/redo) — primary input on mobile/web. The Notes button is a real toggle: outlined pencil + neutral fill when off, filled pencil + amber-500 fill when on, glanceable mid-puzzle.
+- **Physical keyboard** — desktop. The header has a `?` button that opens a shortcut cheatsheet; the same overlay is bound to `?` as a hotkey. Bindings:
+  - `1`–`9` enter a value (or toggle a pencil-mark in notes mode).
+  - `Shift`+`1`–`9` toggles a pencil-mark *regardless* of current mode — one-shot, doesn't flip the mode. Useful when you're mostly placing values but want to drop a single note without round-tripping through `Space`.
+  - `0` / `Backspace` / `Delete` clear the cell.
+  - Arrow keys move the selection.
+  - `Space` toggles notes mode (NYT-style); `N` is kept as a legacy alias.
+  - `Cmd/Ctrl+Z` undo, `Cmd/Ctrl+Shift+Z` or `Cmd/Ctrl+Y` redo.
+  - `Esc` closes any open overlay.
+- **Notes mode**: when on, tapping numbers (or pressing 1–9) toggles them as small marks in the cell rather than setting the value.
+- **Auto-clean (smart notes)**: when you place a value in a cell, that digit is automatically removed from the pencil-marks of every peer cell (same row, column, or 3×3 box). Always on; not a setting. Undo restores both the placement and the wiped notes in one step. This matches the universal pattern in NYT Sudoku, Sudoku.com, and Good Sudoku — players expect it. See [research notes in chat transcript].
 
 ---
 
@@ -57,7 +65,7 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 | Show conflicts | **On** | Highlights cells in red if they violate sudoku rules vs. other player-entered cells. Does NOT compare to the solution. |
 | Auto-check correctness | **Off** | When ON, the moment you place a wrong number it's flagged (compared against solution). When OFF, you only learn at completion attempt. |
 | Notes (pencil marks) | **On** | Always available. |
-| Auto-eliminate notes | **Off** | When you place a number, notes for that number in the row/col/box could auto-clear. Convenient but considered cheating by purists. |
+| Auto-clean notes | **Always on** | When you place a number, that digit is removed from the pencil-marks of every peer cell (row/col/box). Universal pattern in major sudoku apps; no toggle. Undo restores. |
 | Hints / Reveal cell | **Available but counted** | Players can request a hint (reveals one correct cell). In battle, hints are tracked and shown to opponents to discourage spam. In coop, no penalty. |
 | Timer visible | **On** | Battle uses it for tiebreaks; coop just for fun. |
 

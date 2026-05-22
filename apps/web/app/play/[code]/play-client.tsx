@@ -10,6 +10,10 @@ import { KeyboardController } from '@/components/keyboard-controller';
 import { Timer } from '@/components/timer';
 import { SettingsSheet } from '@/components/settings-sheet';
 import { CompletionOverlay } from '@/components/completion-overlay';
+import {
+  KeyboardShortcutsButton,
+  KeyboardShortcutsOverlay,
+} from '@/components/keyboard-shortcuts-overlay';
 
 type Status = 'loading' | 'ready' | 'not-found';
 
@@ -73,6 +77,7 @@ export function PlayClient({ code }: { code: string }) {
           <span className="hidden text-xs uppercase tracking-widest text-stone-500 sm:inline">
             {puzzle?.difficulty ?? ''}
           </span>
+          <KeyboardShortcutsButton />
           <SettingsSheet />
         </div>
       </header>
@@ -84,6 +89,7 @@ export function PlayClient({ code }: { code: string }) {
           <SudokuBoard />
           <NumberPad />
           <KeyboardController />
+          <KeyboardShortcutsOverlay />
           <CompletionOverlay />
         </>
       )}

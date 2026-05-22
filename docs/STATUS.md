@@ -1,7 +1,7 @@
 # Status
 
-**Last updated:** 2026-05-22
-**Current phase:** Phase 2 — battle mode is fully playable end-to-end with the May 22 UX expansion landed (chunks A–H). Remaining items are polish + the two-tab Playwright smoke; coop / iOS are the next phases.
+**Last updated:** 2026-05-22 (afternoon — post UX polish)
+**Current phase:** Phase 2 — battle mode is fully playable end-to-end with the May 22 UX expansion landed (chunks A–H) plus a UX-polish pass (board pixel-snap, auto-clean peer notes, spacebar notes toggle + `?` shortcuts overlay, Notes button visual rework). Remaining items are polish + the two-tab Playwright smoke; coop / iOS are the next phases.
 **Branch:** `main`
 **Live:** https://sudoku-squad-web.vercel.app/
 
@@ -17,13 +17,13 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
 
 ### Phase 1 — Single-player web ✅
 
-- **`packages/core`** — platform-agnostic TypeScript engine. **36 / 36 tests passing** (unit + property-based with `fast-check`).
+- **`packages/core`** — platform-agnostic TypeScript engine. **42 / 42 tests passing** (unit + property-based with `fast-check`).
   - `types/index.ts` — domain types including `Puzzle`, `BoardState`, `Move`, `PuzzleCode` (cross-mode identifier).
   - `puzzle/board.ts` — `createBoard(puzzleCode, givens)`, `isFilled`, `cellValue`.
   - `puzzle/validator.ts` — `findConflicts` (no solution leak), `isCompleteWithSolution` (server-side use), `unitsFor`.
   - `game/notes.ts` — bitmask helpers.
-  - `game/reducer.ts` — `applyMove` pure reducer + `applyMoves` replay helper.
-  - `game/history.ts` — undo/redo wrapper.
+  - `game/reducer.ts` — `applyMove` pure reducer + `applyMoves` replay helper. **`value` placement also auto-clears the placed digit from every peer cell's notes (row/col/box)** — always on; no setting.
+  - `game/history.ts` — undo/redo wrapper. Records every cell mutated by a move (not just the target), so undo restores auto-cleaned peer notes alongside the placement.
 - **`scripts/ingest`** — Node-only ingest. **9 / 9 tests passing**.
   - `solver.ts` — Norvig solver.
   - `code.ts` — TypeScript port of the Postgres `puzzle_code_for` function. Algorithm pinned by tests.
@@ -51,7 +51,7 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
 
 | Check | Command | Status |
 |---|---|---|
-| Core engine tests | `pnpm --filter @sudoku-squad/core test` | 36 / 36 |
+| Core engine tests | `pnpm --filter @sudoku-squad/core test` | 42 / 42 |
 | Ingest tests (solver + code) | `pnpm --filter @sudoku-squad/ingest test` | 9 / 9 |
 | Sample-pack verification | `pnpm --filter @sudoku-squad/ingest verify:samples` | 5 / 5 |
 | Ingest dry-run on synthetic fixture | `pnpm --filter @sudoku-squad/ingest ingest:dry-fixture` | sampled 5, rejected 2 (as designed) |
@@ -99,7 +99,6 @@ What does NOT yet exist (Phase 2 remainder):
 ### Beyond Phase 2
 
 - **Coop mode / iOS** — Phases 3–4.
-- **Auto-eliminate notes** — Setting exposed in the sheet but disabled (placeholder for V2).
 - **Favicon / Open Graph metadata** — placeholder Next.js favicon; no OG image yet.
 - **Lighthouse / PWA-installable manifest.**
 - **Mobile audit** — uses clamp-based font sizing; needs in-device test on 375 px (iPhone SE) and ~420 px.
@@ -137,7 +136,7 @@ What does NOT yet exist (Phase 2 remainder):
 ```bash
 cd /Users/kylets/sudoku-squad
 pnpm install                                              # idempotent
-pnpm --filter @sudoku-squad/core test                     # expect 36/36
+pnpm --filter @sudoku-squad/core test                     # expect 42/42
 pnpm --filter @sudoku-squad/ingest test                   # expect 9/9
 pnpm --filter @sudoku-squad/ingest verify:samples         # expect 5 OK
 pnpm --filter @sudoku-squad/ingest check                  # expect 4/4
