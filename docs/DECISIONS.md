@@ -17,6 +17,40 @@ Format:
 
 ---
 
+## 0035 — Mode-first home flow + in-lobby difficulty toggle
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** The previous home page exposed every tier as a button under each game mode (Solo / Battle / Coop), which produced a wall of difficulty buttons before users had even decided what kind of game they wanted to play. With six total tiers (after #0033) the wall got longer. We wanted a cleaner first step: pick a mode, then pick a difficulty.
+
+**Decision.** Reorganize the home page as a three-step state machine, and move the multiplayer difficulty choice into the lobby.
+
+1. **Home page step 1 — Mode**: three vertically stacked buttons, no difficulties. Single-player / Co-op / Battle.
+2. **Home page step 2 — Action**:
+   - SP: expands to a vertical list of the five visible difficulty tiers (warmup / easy / medium / hard / expert).
+   - Coop + Battle: expands to two horizontal buttons — **Create game** (calls `createRoom` with a default `medium` difficulty) and **Join game** (opens the open-lobby browser filtered to that mode).
+3. **Home page step 3 — Join browser**: list of open public lobbies of the chosen mode; plus an inline "Or create your own" button; plus a "Have a code?" input. Joining a private link from the home page also still works via the code box.
+4. **Lobby — Difficulty selector**: the host sees five buttons (warmup..expert) and can re-pick at any point while `status='lobby'`. Each click calls a new Edge Function `change-difficulty({ room_id, difficulty })` that re-picks a random puzzle of that tier via `pick_random_puzzle_code` and rewrites `rooms.puzzle_code`. Non-hosts see a read-only display of the host's choice ("Selected: Medium"), updated via the existing `rooms` realtime subscription.
+
+Multiplayer difficulty lives at the room level (derived from the puzzle's tier via the new `fetchPuzzleDifficulty(code)` helper). No schema change — we don't denormalize difficulty onto `rooms`; the puzzle's `difficulty` column on `puzzles` is the source of truth.
+
+The hidden `killer` tier (#0034) is **not** in the lobby's selector — it stays solely DB-side for a future "evil mode" reveal.
+
+**Alternatives considered.**
+- **Difficulty button per mode on the home page** (status quo from #0034). Rejected as cluttered.
+- **`/join/[mode]` route for the public-lobby browser.** Would give shareable URLs, but the state-machine on the home page is simpler, faster, and the back button has nicer semantics (single click back to the mode picker).
+- **Add a `rooms.difficulty` column.** Avoided — derivable from `puzzle_code`, and we'd have to keep it in sync on every `change-difficulty`. Single source of truth is cleaner.
+- **Default the multiplayer create to whatever tier the user last solo-played.** Could be nice future polish; for V1 a fixed `medium` default is fine — the host can toggle in the lobby.
+
+**Consequences.**
+- New Edge Function `change-difficulty` (host-only, lobby-only, validates difficulty against the visible-tier set so callers can't promote rooms to `killer` via the API).
+- `lib/rooms.ts` gains `changeDifficulty` + `fetchPuzzleDifficulty` helpers.
+- `PublicLobbyList` accepts an optional `mode` filter and an `emptyState` slot so the join view can render "no open battle lobbies right now."
+- Battle and coop CTAs no longer carry pre-chosen difficulty — they create rooms at the default and let the host toggle. This is also why Battle's start-condition gate is now mode-aware (battle requires ≥2 players, coop allows 1).
+- The battle Playwright smoke was updated to traverse the new flow (`Battle → Create game`, `Battle → Join game → code`).
+
+---
+
 ## 0034 — Shift tier labels up one, hide former-expert as `killer`
 **Date:** 2026-05-22
 **Status:** Accepted (renames the tier labels established in #0033 + #0032)

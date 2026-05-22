@@ -6,13 +6,25 @@ import {
   fetchPublicLobbies,
   subscribeToPublicLobbies,
   type PublicLobby,
+  type RoomMode,
 } from '@/lib/rooms';
 
 /**
- * Compact card list of open public rooms, used on the home page. Auto-refreshes
- * on any `rooms` realtime event — we filter client-side for is_public + status.
+ * Compact card list of open public rooms. Optionally filtered to a specific
+ * mode via the `mode` prop (used by the join-mode views in home-client).
+ * Without the filter, shows every open public room. Auto-refreshes on any
+ * `rooms` realtime event.
+ *
+ * Renders `emptyState` (or hides the section entirely) when the filtered
+ * list is empty. The home-page's join view passes a tailored empty state
+ * pointing the user at "create your own."
  */
-export function PublicLobbyList() {
+interface Props {
+  mode?: RoomMode;
+  emptyState?: React.ReactNode;
+}
+
+export function PublicLobbyList({ mode, emptyState }: Props) {
   const [rooms, setRooms] = useState<PublicLobby[] | null>(null);
 
   useEffect(() => {
@@ -33,34 +45,32 @@ export function PublicLobbyList() {
     };
   }, []);
 
-  if (rooms === null) return null; // still loading; skip the section silently
-  if (rooms.length === 0) return null;
+  if (rooms === null) return null; // still loading
+  const filtered = mode ? rooms.filter((r) => r.mode === mode) : rooms;
+  if (filtered.length === 0) {
+    return emptyState !== undefined ? <>{emptyState}</> : null;
+  }
 
   return (
-    <section className="w-full">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-500">
-        Public lobbies
-      </h2>
-      <ul className="flex flex-col gap-2">
-        {rooms.map((r) => (
-          <li key={r.id}>
-            <Link
-              href={`/r/${r.code}`}
-              className="flex items-center justify-between rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm hover:border-stone-400"
-            >
-              <span className="flex items-center gap-3">
-                <span className="font-mono font-semibold tracking-widest text-stone-900">
-                  {r.code}
-                </span>
-                <span className="text-xs uppercase tracking-widest text-stone-500">
-                  {r.mode} · {r.status}
-                </span>
+    <ul className="flex w-full flex-col gap-2">
+      {filtered.map((r) => (
+        <li key={r.id}>
+          <Link
+            href={`/r/${r.code}`}
+            className="flex items-center justify-between rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm hover:border-stone-400"
+          >
+            <span className="flex items-center gap-3">
+              <span className="font-mono font-semibold tracking-widest text-stone-900">
+                {r.code}
               </span>
-              <span className="text-xs text-stone-400">Join →</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
+              <span className="text-xs uppercase tracking-widest text-stone-500">
+                {r.mode} · {r.status}
+              </span>
+            </span>
+            <span className="text-xs text-stone-400">Join →</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }

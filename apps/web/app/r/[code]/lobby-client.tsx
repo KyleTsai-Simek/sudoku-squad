@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
+  changeDifficulty,
+  fetchPuzzleDifficulty,
   fetchRoom,
   fetchRoomPlayers,
   joinRoom,
@@ -16,6 +18,7 @@ import {
   type RoomRow,
   type RoomState,
 } from '@/lib/rooms';
+import type { Difficulty } from '@sudoku-squad/core';
 import { getUsername, setLocalUsernameOverride } from '@/lib/username';
 import { LobbySettingsPanel } from '@/components/lobby-settings-panel';
 import { DEFAULT_ROOM_SETTINGS } from '@/lib/rooms';
@@ -41,6 +44,8 @@ export function LobbyClient({ code }: { code: string }) {
   const [usernameDraft, setUsernameDraft] = useState('');
   const [startError, setStartError] = useState<string | null>(null);
   const [startPending, setStartPending] = useState(false);
+  const [currentDifficulty, setCurrentDifficulty] = useState<Difficulty | null>(null);
+  const [difficultyPending, setDifficultyPending] = useState(false);
 
   // 1. Join (or rejoin) the room on mount.
   useEffect(() => {
@@ -103,6 +108,38 @@ export function LobbyClient({ code }: { code: string }) {
       unsubRoom?.();
     };
   }, [phase]);
+
+  // Resolve current difficulty from the room's puzzle_code. Re-runs whenever
+  // the room row updates (e.g., host clicks the difficulty toggle and the
+  // server picks a new puzzle of the new tier).
+  useEffect(() => {
+    if (!roomRow?.puzzle_code) {
+      setCurrentDifficulty(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const d = await fetchPuzzleDifficulty(roomRow.puzzle_code);
+      if (!cancelled) setCurrentDifficulty(d);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roomRow?.puzzle_code]);
+
+  const onChangeDifficulty = useCallback(
+    async (next: Difficulty) => {
+      if (phase.kind !== 'in_lobby') return;
+      setDifficultyPending(true);
+      const res = await changeDifficulty({ room_id: phase.room.room_id, difficulty: next });
+      setDifficultyPending(false);
+      if (!res.ok) {
+        // Best-effort error display via the same red-text line as start.
+        setStartError(res.error.message);
+      }
+    },
+    [phase],
+  );
 
   const onCopyShare = useCallback(async () => {
     try {
@@ -181,7 +218,9 @@ export function LobbyClient({ code }: { code: string }) {
   }
 
   const isHost = room.own_is_host;
-  const enoughPlayers = players.length >= 2;
+  // Battle needs at least 2 players (a race against yourself is silly); coop
+  // can start solo and pick up friends mid-game (#0024).
+  const enoughPlayers = room.mode === 'battle' ? players.length >= 2 : players.length >= 1;
   const stragglers = players.filter((p) => !p.has_returned);
   const allReady = stragglers.length === 0;
   const otherHost = players.find((p) => p.is_host && p.player_id !== room.own_player_id);
@@ -324,6 +363,47 @@ export function LobbyClient({ code }: { code: string }) {
         ) : null}
       </section>
 
+      <section className="w-full">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-500">
+          Difficulty
+          {!isHost ? <span className="ml-2 text-stone-400 normal-case tracking-normal">— host chooses</span> : null}
+        </h2>
+        {currentDifficulty === null ? (
+          <p className="text-sm text-stone-500">Loading…</p>
+        ) : isHost && status === 'lobby' ? (
+          <div className="grid grid-cols-5 gap-2">
+            {(['warmup', 'easy', 'medium', 'hard', 'expert'] as const).map((d) => {
+              const selected = currentDifficulty === d;
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => onChangeDifficulty(d)}
+                  disabled={difficultyPending || selected}
+                  className={cn(
+                    'rounded-lg border px-2 py-2 text-xs font-medium transition-colors',
+                    selected
+                      ? 'border-stone-900 bg-stone-900 text-white'
+                      : 'border-stone-300 bg-white text-stone-700 hover:border-stone-500 disabled:opacity-60',
+                  )}
+                >
+                  {d === 'warmup' ? 'Warm-up' : d[0]!.toUpperCase() + d.slice(1)}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="inline-flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
+            <span className="text-xs uppercase tracking-widest text-stone-500">selected</span>
+            <span className="font-semibold text-stone-900">
+              {currentDifficulty === 'warmup'
+                ? 'Warm-up'
+                : currentDifficulty[0]!.toUpperCase() + currentDifficulty.slice(1)}
+            </span>
+          </div>
+        )}
+      </section>
+
       <LobbySettingsPanel
         roomId={room.room_id}
         settings={settings}
@@ -347,7 +427,9 @@ export function LobbyClient({ code }: { code: string }) {
                   ? 'Waiting for at least 2 players…'
                   : !allReady
                     ? `Waiting on ${stragglers.length} player${stragglers.length === 1 ? '' : 's'}…`
-                    : 'Start battle'}
+                    : room.mode === 'coop'
+                      ? 'Start coop'
+                      : 'Start battle'}
             </button>
             {startError ? (
               <p className="mt-2 text-xs text-red-600">{startError}</p>

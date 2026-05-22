@@ -310,6 +310,7 @@ Per [DECISIONS.md #0023](DECISIONS.md), multiplayer mutations go through TypeScr
 | `submit-move` | `{room_id, cell, kind, value}` | `{seq, accepted, progress_pct, won, is_winner, cell_correct?}` | ✅ deployed — `cell_correct` returned only when `settings.autoCheck` is on; non-winners may submit late on `status='finished'` rooms per [#0030](DECISIONS.md) |
 | `claim-username` | `{}` | `{username}` | ✅ deployed — idempotent per `auth.uid()`; backed by `issued_usernames` (migration 0008) |
 | `update-room-settings` | `{room_id, settings}` | `{settings}` | ✅ deployed — host-only, lobby-only |
+| `change-difficulty` | `{room_id, difficulty}` | `{puzzle_code, difficulty}` | ✅ deployed — host-only, lobby-only. Re-picks a random puzzle of the new tier; `killer` is intentionally rejected by the input validator. See [#0035](DECISIONS.md). |
 | `kick-player` | `{room_id, player_id}` | `{kicked: true}` | ✅ deployed — host-only |
 | `return-to-lobby` | `{room_id}` | `{status, has_returned: true}` | ✅ deployed — flips caller's `has_returned`; transitions room to `lobby` if not already |
 | `record_completion` (RPC) | `(p_code, p_mode)` → bool | inserts `player_completions` with `on conflict do nothing`. SECURITY DEFINER. | ✅ deployed (migration 0009) |

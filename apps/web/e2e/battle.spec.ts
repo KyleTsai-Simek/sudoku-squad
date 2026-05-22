@@ -28,16 +28,20 @@ test('battle: create + join + start + sync', async ({ browser }) => {
   const pageB = await ctxB.newPage();
 
   try {
-    // A creates a battle room (easy tier).
+    // A creates a battle room via the three-step home flow:
+    //   1. click "Battle"  →  2. click "Create game"
     await pageA.goto('/');
     await expect(pageA.getByRole('heading', { name: 'Sudoku Squad' })).toBeVisible();
-    await pageA.getByRole('button', { name: /Start battle/i }).first().click();
+    await pageA.getByRole('button', { name: /^Battle/ }).click();
+    await pageA.getByRole('button', { name: /Create game/i }).click();
     await pageA.waitForURL(ROOM_CODE_RE, { timeout: 15000 });
     const code = pageA.url().match(ROOM_CODE_RE)![1]!;
 
-    // B joins via the home-page code input.
+    // B joins via the Battle → Join game → code input path.
     await pageB.goto('/');
-    await pageB.getByPlaceholder(/room code/i).fill(code);
+    await pageB.getByRole('button', { name: /^Battle/ }).click();
+    await pageB.getByRole('button', { name: /Join game/i }).click();
+    await pageB.getByPlaceholder(/code/i).fill(code);
     await pageB.getByRole('button', { name: /^Join$/ }).click();
     await pageB.waitForURL(new RegExp(`/r/${code}`), { timeout: 15000 });
 

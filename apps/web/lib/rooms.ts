@@ -407,6 +407,20 @@ export async function fetchPuzzleGivens(code: string): Promise<PuzzleGivens | nu
   return { code: data.code, givens: data.givens };
 }
 
+/** Resolve a puzzle code to its difficulty tier. Used by the lobby to
+ *  display the current difficulty (the room itself doesn't store it). */
+export async function fetchPuzzleDifficulty(code: string): Promise<Difficulty | null> {
+  const client = await ensureAuthClient();
+  if (!client) return null;
+  const { data, error } = await client
+    .from('puzzles_public')
+    .select('difficulty')
+    .eq('code', code)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data.difficulty as Difficulty;
+}
+
 export async function startGame(roomId: string): Promise<Result<void>> {
   const res = await invoke<{ room_id: string; status: string }>('start-game', {
     room_id: roomId,
@@ -430,6 +444,24 @@ export async function updateRoomSettings(args: {
     value: {
       settings: normalizeRoomSettings(res.value.settings),
       is_public: res.value.is_public,
+    },
+  };
+}
+
+export async function changeDifficulty(args: {
+  room_id: string;
+  difficulty: Difficulty;
+}): Promise<Result<{ puzzle_code: string; difficulty: Difficulty }>> {
+  const res = await invoke<{ puzzle_code: string; difficulty: string }>(
+    'change-difficulty',
+    args,
+  );
+  if (!res.ok) return res;
+  return {
+    ok: true,
+    value: {
+      puzzle_code: res.value.puzzle_code,
+      difficulty: res.value.difficulty as Difficulty,
     },
   };
 }

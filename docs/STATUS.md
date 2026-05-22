@@ -40,8 +40,10 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
   - Rating medians: warmup -7.5, easy -2.5, medium 0.0, hard 1.7, expert 3.1, killer 5.3.
 - **`apps/web`** — Next.js 15 + React 19 + Tailwind 3.
   - Routes: `/` (home with per-tier "New game" CTAs + public-lobby list), `/play/[code]` (SP game screen), `/r/[code]` (multiplayer lobby + battle game).
+  - Home flow: mode-first state machine in `home-client.tsx` — picks Single-player / Co-op / Battle first, then either the difficulty list (SP) or the Create + Join browser (multiplayer). See [DECISIONS #0035](DECISIONS.md).
   - SP components: `SudokuBoard`, `NumberPad`, `KeyboardController`, `KeyboardShortcutsOverlay`, `Timer`, `SettingsSheet`, `CompletionOverlay`, `PencilIcon`, `ActionIcons` (Eraser/Undo/Redo).
-  - Battle components: `BattleBoard`, `BattleNumberPad`, `BattleKeyboardController`, `BattleWinnerOverlay`, `OpponentProgress`, `LobbySettingsPanel`, `PublicLobbyList`.
+  - Battle components: `BattleBoard`, `BattleNumberPad`, `BattleKeyboardController`, `BattleWinnerOverlay`, `OpponentProgress`, `LobbySettingsPanel`, `PublicLobbyList` (mode-filterable).
+  - Coop components: `CoopBoard`, `CoopNumberPad`, `CoopKeyboardController`, `CoopWinOverlay`.
   - State: Zustand stores `lib/game-store.ts` (SP) and `lib/battle-store.ts` (battle). Completions persisted server-side in `player_completions` (chunk F) — `lib/completions.ts` wraps the `record_completion` / `get_completion_count` RPCs. (The old `lib/solved-tracker.ts` localStorage-based store was removed when completions went server-side.)
   - Puzzle loading: `lib/puzzle-source.ts` → `loadPuzzle(code)` first checks the bundled pack (`lib/sample-puzzles.ts`, used by the smoke test) then calls the Supabase RPC `sp_get_puzzle`. `listPuzzles()` pages through `puzzles_public`.
   - Picker: `lib/pick-puzzle.ts` → `pickRandomUnsolved(tier)` and `getTierCounts()`.
