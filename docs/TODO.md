@@ -55,7 +55,7 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope.
 - [x] Server-broadcast Win overlay (announces winner; dismissible). Losers can dismiss but their board stays locked — full "keep solving" support is task #27.
 - [x] Lobby settings panel (host-editable, locks at Start): showConflicts / autoCheck / highlightSameValue + is_public — shipped in Chunk D (`LobbySettingsPanel` + `update-room-settings` Edge Function).
 - [x] Play-again flow — shipped in Chunk H as the return-to-lobby same-room cycle (`return-to-lobby` Edge Function + `start-game` extended to reset + re-pick puzzle). Distinct from "fresh room with same players" but covers the same need.
-- [ ] Polish: losers can keep solving their own board after a winner is declared. The server already accepts late moves (`submit-move` allows kind=value/clear when `room.status='finished'`), but the local client still disables the board when `finishedAt !== null`. Fix is to lift that local lock on the loser path while keeping the room-finished UI overlay dismissible.
+- [x] Polish: losers can keep solving their own board after a winner is declared. Server already accepted late moves; lifted the local board lock in `battle-game.tsx` so `markFinished()` only fires when the local player IS the winner. The winner overlay's "Keep solving" button dismisses, the elapsed-time ticker keeps running, and when the late solver finishes (their own `submit-move` returns `won=true`), the overlay re-opens so they can pick Return-to-lobby or Back-to-menu. `canKeepSolving` now also gates on `finishedAt === null` so the dismiss button hides once they're done.
 
 ### Phase 2 UX expansion (May 22 product changes — chunks A–H) ✅
 

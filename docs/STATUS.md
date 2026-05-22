@@ -91,11 +91,10 @@ What's landed:
     - **Game** (battle): opponent progress bars, own board (`BattleBoard`), number pad (`BattleNumberPad`, hint omitted), keyboard controller, winner overlay (dismissible per [#0008](DECISIONS.md)).
 
 What does NOT yet exist (Phase 2 remainder):
-- **Losers keep solving locally.** The server already accepts late `submit-move` from non-winners after `room.status='finished'`, but the local client still disables the board when `finishedAt !== null` (`battle-board.tsx` line 79). Fix is to lift that local lock on the loser path while keeping the winner overlay dismissible.
-- **Two-context Playwright smoke** for battle. Two browser contexts, one room, end-to-end create → join → start → play → win. The harness lands here so Phase 3 inherits it. See [DECISIONS #0013](DECISIONS.md).
+- **Two-context Playwright smoke** for battle. Two browser contexts, one room, end-to-end create → join → start → play → win + a late-finisher path. The harness lands here so Phase 3 inherits it. See [DECISIONS #0013](DECISIONS.md).
 - **Battle UI polish** — opponent progress bars are minimal; the same-page lobby→game transition could be smoother.
 
-The Edge Function `hint` is intentionally not shipping — Chunk A removed Hint as a feature. Lobby settings panel, return-to-lobby/play-again, kick, public lobbies, and persistent completions all shipped in chunks D / F / G / H.
+The Edge Function `hint` is intentionally not shipping — Chunk A removed Hint as a feature. Lobby settings panel, return-to-lobby/play-again, kick, public lobbies, persistent completions, and "losers keep solving" all shipped in chunks D / F / G / H + the May 22 UX polish pass.
 
 ### Beyond Phase 2
 

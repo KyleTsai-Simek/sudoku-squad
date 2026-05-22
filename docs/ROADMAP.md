@@ -60,8 +60,7 @@ These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 wor
 - Race-condition test: both submit a completing move within milliseconds — exactly one wins.
 
 **Remaining work**
-- Two-context Playwright smoke that drives both sides automatically and asserts converged state (see Phase 2 Testing in [TODO.md](TODO.md)).
-- Lift the local board lock on the loser path so non-winners can keep solving after a winner is declared (server already accepts late moves).
+- Two-context Playwright smoke that drives both sides automatically and asserts converged state, including a late-finisher path (see Phase 2 Testing in [TODO.md](TODO.md)).
 
 ---
 

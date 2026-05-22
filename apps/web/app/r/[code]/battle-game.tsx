@@ -38,6 +38,7 @@ export function BattleGame({
 }: Props) {
   const board = useBattleStore((s) => s.board);
   const startedAt = useBattleStore((s) => s.startedAt);
+  const finishedAt = useBattleStore((s) => s.finishedAt);
   const ownProgressPct = useBattleStore((s) => s.ownProgressPct);
   const startBattle = useBattleStore((s) => s.startBattle);
   const applySettings = useBattleStore((s) => s.applySettings);
@@ -72,19 +73,40 @@ export function BattleGame({
     applySettings(settings);
   }, [settings, applySettings]);
 
-  // Mirror server-side "the room is now finished" into local store so the
-  // board disables. The overlay reads winnerPlayerId from props.
+  // The local board only locks when *this* player is the winner. Non-winners
+  // keep solving — the server accepts late submit-move from them on a
+  // status='finished' room (see submit-move/index.ts), and their own
+  // `enterValue` will flip `finishedAt` when their personal `won=true`
+  // comes back. Per DECISIONS #0008 + #0030.
   useEffect(() => {
-    if (winnerPlayerId !== null) markFinished();
-  }, [winnerPlayerId, markFinished]);
+    if (winnerPlayerId !== null && winnerPlayerId === room.own_player_id) {
+      markFinished();
+    }
+  }, [winnerPlayerId, markFinished, room.own_player_id]);
 
-  // Ticker for elapsed-time + countdown display.
+  // Late-finish path: when a non-winner finally completes their board (their
+  // own won=true), re-open the winner overlay so they can pick Return to
+  // lobby / Back to menu. The "Keep solving" button hides automatically
+  // because canKeepSolving below also requires finishedAt === null.
+  useEffect(() => {
+    if (
+      finishedAt !== null &&
+      winnerPlayerId !== null &&
+      winnerPlayerId !== room.own_player_id
+    ) {
+      setWinnerDismissed(false);
+    }
+  }, [finishedAt, winnerPlayerId, room.own_player_id]);
+
+  // Ticker for elapsed-time + countdown display. Keeps running for late
+  // solvers — they want to see their own elapsed even after the winner is
+  // announced. Freezes once *this* player's board is done.
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    if (startedAt === null || winnerPlayerId !== null) return;
+    if (startedAt === null || finishedAt !== null) return;
     const h = window.setInterval(() => setNow(Date.now()), 100);
     return () => window.clearInterval(h);
-  }, [startedAt, winnerPlayerId]);
+  }, [startedAt, finishedAt]);
 
   const inCountdown = startedAt !== null && now < startedAt;
   const countdownSeconds = inCountdown
@@ -96,7 +118,10 @@ export function BattleGame({
     return Math.max(0, now - startedAt);
   }, [now, startedAt]);
 
-  const canKeepSolving = winnerPlayerId !== null && winnerPlayerId !== room.own_player_id;
+  const canKeepSolving =
+    winnerPlayerId !== null &&
+    winnerPlayerId !== room.own_player_id &&
+    finishedAt === null;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center gap-4 px-3 py-4">
