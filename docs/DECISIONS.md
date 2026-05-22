@@ -17,6 +17,25 @@ Format:
 
 ---
 
+## 0017 — Bundled sample-puzzle pack as the single-player source until ingest lands
+**Date:** 2026-05-21
+**Status:** Accepted
+
+**Context.** Phase 1 single-player UI was ready to build before the Kaggle dataset was ingested. The `puzzles` table is empty. We needed *some* puzzles to play against so the UI work could be developed and verified end-to-end without blocking on the multi-GB dataset download.
+
+**Decision.** Ship a small hand-picked pack in `apps/web/lib/sample-puzzles.ts` (currently 5 puzzles across easy/medium/hard). Each puzzle is verified by the Norvig solver via `scripts/ingest/src/verify-samples.ts` (`pnpm --filter @sudoku-squad/ingest verify:samples`) to have a unique solution and a matching answer. Solutions live client-side in the bundled file — this is intentional for single-player because there is no one to cheat against.
+
+When the Kaggle ingest lands and `puzzles` is populated, single-player switches to fetching from `puzzles_public` (no solution column) and uses the same server-side completion check that multiplayer will use. The bundled pack can stay as an offline fallback for dev, or be deleted.
+
+**Alternatives considered.**
+- Block UI work until ingest finishes. Linear but slower — the dataset download + sampling is its own chunk of work and we'd lose the chance to verify the UI in parallel.
+- Manually insert a few rows directly into Supabase via SQL. Equivalent net effect but ties dev to a network call and credentials.
+- Generate puzzles on the fly. Out of scope — see [#0011](#0011) and [#0012](#0012).
+
+**Consequences.** The web app ships with a small bundled puzzle pack as long as `lib/sample-puzzles.ts` exists. The hint feature in single-player works because the bundled solution is local; this code path will need to change to a server RPC the moment we switch to Supabase puzzles. Documented in [STATUS.md](STATUS.md) gotcha #7.
+
+---
+
 ## 0016 — pnpm 11 build-script approval via `allowBuilds:` in `pnpm-workspace.yaml`
 **Date:** 2026-05-21
 **Status:** Accepted

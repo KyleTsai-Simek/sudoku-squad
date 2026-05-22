@@ -29,32 +29,35 @@ Working task list. Checkboxes get checked as work completes. New items added as 
 
 ## Phase 1 — Single-player web 🔄 ACTIVE
 
-### `packages/core` — game engine (first focus)
-- [ ] **Move reducer:** `applyMove(state: BoardState, move: Move): BoardState` — pure function, lives in `src/game/`. Handles `value`, `clear`, `note_toggle` move kinds. Refuses writes to given cells.
-- [ ] Unit tests for the reducer covering each move kind + edge cases
-- [ ] **Property tests** with `fast-check`: random valid move sequences preserve invariants. Specifically: no cell ever holds an invalid value; replaying a move log in seq order produces the same state as applying moves one-by-one; clearing a non-given cell always leaves `value=null`.
-- [ ] Notes mask helpers: `setNote`, `clearNote`, `hasNote`, `notesToArray` for the bitmask `NotesMask` type
-- [ ] Move history wrapper (for client-side undo) — keep separate from the reducer itself
+### `packages/core` — game engine ✅
+- [x] **Move reducer:** `applyMove(state: BoardState, move: Move): BoardState` — pure function, lives in `src/game/`. Handles `value`, `clear`, `note_toggle` move kinds. Refuses writes to given cells.
+- [x] Unit tests for the reducer covering each move kind + edge cases
+- [x] **Property tests** with `fast-check`: random valid move sequences preserve invariants — no invalid value, replay == fold, given cells immutable, clear leaves `value=null`+`notes=0`, validator never flags an empty cell.
+- [x] Notes mask helpers (`setNote`, `clearNote`, `toggleNote`, `hasNote`, `notesToArray`, `clearAllNotes`)
+- [x] Move history wrapper (`applyMoveWithHistory`, `undo`, `redo`) — separate module from the reducer
 
 ### `scripts/ingest` — puzzle data
+- [x] Sample puzzle pack bundled in `apps/web/lib/sample-puzzles.ts` (5 puzzles, solver-verified) — unblocks single-player UI until the real ingest lands. See [DECISIONS.md #0017](DECISIONS.md).
+- [x] `verify-samples.ts` script + `pnpm verify:samples` — solver checks the bundled pack for uniqueness and matching solutions.
 - [ ] Implement the Kaggle 9M CSV reader in `scripts/ingest/src/index.ts`
 - [ ] Download dataset to `scripts/ingest/data/` (gitignored)
 - [ ] For each candidate row: parse, run `hasUniqueSolution`, confirm dataset solution matches `solve()` output
 - [ ] Sample 500–1000 medium-difficulty rows, upsert to Supabase `puzzles` via service-role client
 - [ ] After ingest: re-run connectivity check — should now show non-zero rows and become a stronger RLS test
 - [ ] Tighten `check-connectivity.ts` to verify anon canNOT read `puzzles.solution` even when rows exist (insert test row → query as anon → confirm empty result)
+- [ ] Swap `apps/web` single-player to fetch from Supabase `puzzles_public` instead of the bundled pack; keep the pack as an offline fallback for dev
 
-### `apps/web` — single player UI
-- [ ] Replace placeholder home page with "New Game" CTA
-- [ ] Game route `/play/[seed]?` — seed lets a player share a specific puzzle even in single-player
-- [ ] Sudoku grid component (9×9, 3×3 box borders, selection highlight, row/col/box highlighting, same-value highlighting)
-- [ ] Number pad component (1–9, clear, notes toggle, undo)
-- [ ] Keyboard input handler (1–9 to enter, Backspace/0 to clear, N for notes mode, arrow keys to navigate)
-- [ ] Conflict rendering (red tint on cells in conflict; only when "show conflicts" setting is on)
-- [ ] Settings sheet (per-player in single-player; see GAME_DESIGN.md)
-- [ ] Timer
-- [ ] Completion celebration screen with "play again" CTA
-- [ ] Mobile-responsive layout audit on iPhone SE width (375px) and a large phone (420px)
+### `apps/web` — single player UI ✅ (modulo mobile audit)
+- [x] Replace placeholder home page with "New Game" CTA + Quick Start grid (5 sample puzzles)
+- [x] Game route `/play?seed=...` — seed lets a player share a specific puzzle even in single-player. Wrapped in `<Suspense>` for static prerendering.
+- [x] Sudoku grid component (9×9, 3×3 box borders, selection highlight, row/col/box highlighting, same-value highlighting)
+- [x] Number pad component (1–9, clear, notes toggle, undo, redo, hint)
+- [x] Keyboard input handler (1–9 to enter, Backspace/0/Delete to clear, N for notes mode, arrow keys to navigate, Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo)
+- [x] Conflict rendering (red tint on cells in conflict; only when "show conflicts" setting is on)
+- [x] Settings sheet (per-player in single-player; see GAME_DESIGN.md) — show conflicts, auto-check, highlight same value, auto-eliminate notes (placeholder for V2)
+- [x] Timer (pauses on completion)
+- [x] Completion celebration screen with "Play another" and "Back to menu" CTAs, showing elapsed time + hint count
+- [ ] Mobile-responsive layout audit on iPhone SE width (375px) and a large phone (420px) — uses clamp-based font sizing already; needs in-device test
 
 ### Tooling & CI
 - [ ] ESLint rule: ban DOM/Next/RN imports from `packages/core`
