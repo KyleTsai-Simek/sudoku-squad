@@ -63,9 +63,13 @@ interface PuzzleRow {
  * Materialize the player's board from their move log. Notes don't affect
  * win-detection so we just track value/clear.
  *
- * progressPct = % of non-given cells whose value matches the solution.
- * When pct === 100 the board is complete (because givens are baked into
- * solution at the same positions), so we use that as the win signal.
+ * progressPct = % of non-given cells with ANY value (right or wrong). We
+ * intentionally don't expose "% correct" via progress — that would leak
+ * correctness one move at a time (a flat progress bar after typing means the
+ * entry was wrong). For opt-in correctness signaling, the host can turn on
+ * settings.autoCheck, which surfaces cell_correct on the per-move response.
+ *
+ * `won` stays strict: every non-given cell must match the solution.
  */
 function materialize(
   givens: number[],
@@ -82,15 +86,18 @@ function materialize(
     else if (m.kind === 'clear') board[m.cell] = null;
     // note_toggle has no effect on board state
   }
+  let filled = 0;
   let correct = 0;
   let total = 0;
   for (let i = 0; i < 81; i++) {
     if (givens[i] !== 0) continue;
     total++;
+    if (board[i] !== null) filled++;
     if (board[i] === solution[i]) correct++;
   }
-  const progressPct = total === 0 ? 100 : Math.round((correct / total) * 100);
-  return { progressPct, won: progressPct === 100 };
+  const progressPct = total === 0 ? 100 : Math.round((filled / total) * 100);
+  const won = correct === total;
+  return { progressPct, won };
 }
 
 Deno.serve(async (req) => {

@@ -133,7 +133,7 @@ A player's membership in a room. Anonymous; identified by `(room_id, player_id)`
 | `color` | text | Auto-assigned from the 8-color palette ([#0026](DECISIONS.md)). |
 | `joined_at` | timestamptz | |
 | `is_host` | boolean | |
-| `progress_pct` | smallint | Cached % of cells correctly filled. Reset to 0 on each new round. |
+| `progress_pct` | smallint | Cached % of non-given cells the player has *filled* (right or wrong). Updated by `submit-move`. Doesn't leak correctness — for that, the host enables `settings.autoCheck` and clients flag wrong cells from the per-move `cell_correct` response. Reset to 0 on each new round. |
 | `has_returned` | boolean default true | Used by the return-to-lobby cycle ([#0030](DECISIONS.md)). Flipped to false when the room transitions `playing → finished`; flipped back to true when the player clicks "Return to lobby". The next-round Start blocks until all surviving members are `true`. |
 | PK | (`room_id`, `player_id`) | |
 
