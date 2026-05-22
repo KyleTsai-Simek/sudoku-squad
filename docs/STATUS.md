@@ -39,7 +39,11 @@ This doc captures *where we actually are*. Update it whenever a phase milestone 
 - **`supabase/migrations/0001_initial.sql` + `0002_puzzles_public_security_definer.sql` + `0003_puzzle_code_and_sp_rpc.sql`** — all three applied to the live project via `supabase db push --linked`. 0002 fixed a latent bug in the `puzzles_public` view. 0003 added a 6-char `code` column (deterministic base36 hash of `givens`), exposed it in the view, and added the `sp_get_puzzle(code)` RPC that returns the full row including `solution` — for single-player only.
 - **Live puzzle data:** 7500 puzzles ingested from the Kaggle 3M dataset (`radcliffe/3-million-sudoku-puzzles-with-ratings`). 2500 each in easy/medium/hard tiers — see [DECISIONS.md #0018](DECISIONS.md). Expert is currently 0 (the dataset has only ~100 puzzles rated >7.0; we'll revisit when we have a richer high-difficulty source). Every row has a unique 6-char code.
 - **Web app talks to Supabase.** Home page fetches the (code, difficulty) manifest from `puzzles_public`, "New game" CTAs pick a random unsolved puzzle of the chosen tier and navigate to `/play/[code]`. The play route calls the `sp_get_puzzle` RPC to fetch the full row (including solution, for hint/auto-check). Solved puzzle codes live in `localStorage` under `sudokusquad:solved` so the same puzzle isn't served twice.
-- **Deployment scaffolding:** Supabase project `enaavxfrjlqqslziyypq.supabase.co`. GitHub `KyleTsai-Simek/sudoku-squad`. Vercel not yet wired. Domain not registered.
+- **Deployment scaffolding:**
+  - Supabase project `enaavxfrjlqqslziyypq.supabase.co`. Supabase CLI linked locally; migrations push via `supabase db push --linked`.
+  - GitHub `KyleTsai-Simek/sudoku-squad`. CI green on `main` ([latest run](https://github.com/KyleTsai-Simek/sudoku-squad/actions)).
+  - **Vercel: live at https://sudoku-squad-web.vercel.app/.** Auto-deploys from `main`. Env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) configured in Vercel for Production/Preview/Development. Root directory set to `apps/web`.
+  - Domain not yet registered (target: `sudokusquad.com`).
 
 ### Verified working end-to-end
 

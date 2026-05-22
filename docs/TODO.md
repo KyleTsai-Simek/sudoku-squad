@@ -67,9 +67,11 @@ Working task list. Checkboxes get checked as work completes. New items added as 
 - [ ] Migrate `apps/web` from `next lint` to the ESLint CLI before Next.js 16 removes the wrapper (deprecation warning currently logged but build is green).
 
 ### Deploy
-- [ ] Vercel project connected to GitHub `main`; first deploy succeeds
+- [x] Vercel project connected to GitHub `main`; auto-deploys live at https://sudoku-squad-web.vercel.app/.
 - [ ] Favicon + meta tags (open graph card with project name)
 - [ ] Lighthouse pass: PWA-installable, good mobile score
+- [ ] Register `sudokusquad.com` and point at Vercel
+- [ ] Vercel + Supabase preview environment story (preview deployments today hit the *production* Supabase. Fine for V1 but worth thinking about before more users.)
 
 ---
 
