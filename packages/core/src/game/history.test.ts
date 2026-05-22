@@ -4,6 +4,7 @@ import {
   canRedo,
   canUndo,
   createHistory,
+  peekLastMove,
   redo,
   undo,
 } from './history';
@@ -128,6 +129,19 @@ describe('move history', () => {
     const r5 = undo(r4.state, r4.history);
     expect(r5.state.cells[0]?.value).toBeNull();
     expect(r5.state.cells[3]?.notes).not.toBe(0);
+  });
+
+  it('peekLastMove returns the most recent applied move (or null when empty)', () => {
+    const board = createBoard('test', EMPTY_GIVENS);
+    expect(peekLastMove(createHistory())).toBeNull();
+    const r1 = applyMoveWithHistory(board, createHistory(), {
+      kind: 'value',
+      cell: 5,
+      value: 7,
+    });
+    expect(peekLastMove(r1.history)).toEqual({ kind: 'value', cell: 5, value: 7 });
+    const r2 = undo(r1.state, r1.history);
+    expect(peekLastMove(r2.history)).toBeNull();
   });
 
   it('no-op moves do not change history', () => {

@@ -10,6 +10,7 @@ import {
   findConflicts,
   isCompleteWithSolution,
   isFilled,
+  peekLastMove,
   redo as redoHistory,
   undo as undoHistory,
 } from '@sudoku-squad/core';
@@ -136,11 +137,20 @@ export const useGameStore = create<GameState>((set, get) => ({
   setNotesMode: (on) => set({ notesMode: on }),
 
   enterValue: (value) => {
-    const { board, selected, history, puzzle, settings, notesMode, finishedAt } = get();
+    const { board, selected, puzzle, notesMode, finishedAt } = get();
     if (!board || !puzzle || selected === null || finishedAt !== null) return;
     const cell = board.cells[selected];
     if (!cell || cell.given !== null) return;
 
+    // Re-typing the value that's already in the cell acts as a clear (which
+    // itself becomes a smart-undo when the placement was the most recent
+    // move — see clearCell). Notes mode is a true toggle and falls through.
+    if (!notesMode && cell.value === value) {
+      get().clearCell();
+      return;
+    }
+
+    const { history, settings } = get();
     const move: Move = notesMode
       ? { kind: 'note_toggle', cell: selected, value }
       : { kind: 'value', cell: selected, value };
@@ -182,6 +192,23 @@ export const useGameStore = create<GameState>((set, get) => ({
   clearCell: () => {
     const { board, selected, history, puzzle, settings, finishedAt } = get();
     if (!board || !puzzle || selected === null || finishedAt !== null) return;
+    const cell = board.cells[selected];
+    if (!cell || cell.given !== null) return;
+
+    // Smart-clear: if the most recent move was placing exactly the value
+    // that's currently in this cell, treat the clear as an undo. That way
+    // auto-cleaned peer notes come back instead of being permanently lost.
+    const last = peekLastMove(history);
+    if (
+      last &&
+      last.kind === 'value' &&
+      last.cell === selected &&
+      cell.value === last.value
+    ) {
+      get().undo();
+      return;
+    }
+
     const result = applyMoveWithHistory(board, history, { kind: 'clear', cell: selected });
     if (result.state === board) return;
     const derived = recomputeDerived(result.state, settings, puzzle.solution);

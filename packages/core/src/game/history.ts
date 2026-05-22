@@ -136,3 +136,14 @@ export function canUndo(history: MoveHistory): boolean {
 export function canRedo(history: MoveHistory): boolean {
   return history.redoStack.length > 0;
 }
+
+/**
+ * Return the most recent applied move, or null if the undo stack is empty.
+ * Used by the stores to implement "smart clear" — if the user clears or
+ * re-types the value they just placed, we undo the placement instead of
+ * doing a destructive clear, so auto-cleaned peer notes come back.
+ */
+export function peekLastMove(history: MoveHistory): Move | null {
+  const top = history.undoStack[history.undoStack.length - 1];
+  return top ? top.move : null;
+}

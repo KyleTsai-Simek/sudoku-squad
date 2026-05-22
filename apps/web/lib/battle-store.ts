@@ -8,6 +8,7 @@ import {
   createBoard,
   createHistory,
   findConflicts,
+  peekLastMove,
   redo as redoHistory,
   undo as undoHistory,
 } from '@sudoku-squad/core';
@@ -142,13 +143,21 @@ export const useBattleStore = create<BattleState>((set, get) => ({
   setNotesMode: (on) => set({ notesMode: on }),
 
   enterValue: async (value) => {
-    const { board, selected, history, room, settings, notesMode, finishedAt, startedAt } = get();
+    const { board, selected, room, notesMode, finishedAt, startedAt } = get();
     if (!board || !room || selected === null || finishedAt !== null) return;
     // Countdown lock: startedAt is the future absolute moment input unlocks.
     if (startedAt !== null && Date.now() < startedAt) return;
     const cell = board.cells[selected];
     if (!cell || cell.given !== null) return;
 
+    // Re-typing the placed value acts as a clear (which itself becomes a
+    // smart-undo when the placement was the most recent move).
+    if (!notesMode && cell.value === value) {
+      await get().clearCell();
+      return;
+    }
+
+    const { history, settings } = get();
     const move: Move = notesMode
       ? { kind: 'note_toggle', cell: selected, value }
       : { kind: 'value', cell: selected, value };
@@ -216,13 +225,37 @@ export const useBattleStore = create<BattleState>((set, get) => ({
     const { board, selected, history, room, settings, finishedAt, startedAt } = get();
     if (!board || !room || selected === null || finishedAt !== null) return;
     if (startedAt !== null && Date.now() < startedAt) return;
-    const result = applyMoveWithHistory(board, history, { kind: 'clear', cell: selected });
-    if (result.state === board) return;
-    set({
-      board: result.state,
-      history: result.history,
-      conflicts: recomputeConflicts(result.state, settings.showConflicts),
-    });
+    const cell = board.cells[selected];
+    if (!cell || cell.given !== null) return;
+
+    // Smart-clear: if the most recent move was placing exactly the value
+    // currently in this cell, treat the clear as an undo so auto-cleaned
+    // peer notes come back. We still submit a `clear` to the server so the
+    // server's progress_pct stays in sync with what the user sees locally.
+    const last = peekLastMove(history);
+    const isSmartUndo =
+      !!last &&
+      last.kind === 'value' &&
+      last.cell === selected &&
+      cell.value === last.value;
+
+    if (isSmartUndo) {
+      // Local: pop the placement (which restores peer notes and empties the cell).
+      const undone = undoHistory(board, history);
+      set({
+        board: undone.state,
+        history: undone.history,
+        conflicts: recomputeConflicts(undone.state, settings.showConflicts),
+      });
+    } else {
+      const result = applyMoveWithHistory(board, history, { kind: 'clear', cell: selected });
+      if (result.state === board) return;
+      set({
+        board: result.state,
+        history: result.history,
+        conflicts: recomputeConflicts(result.state, settings.showConflicts),
+      });
+    }
 
     const res = await submitMove({
       room_id: room.room_id,

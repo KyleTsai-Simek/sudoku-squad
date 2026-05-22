@@ -7,13 +7,14 @@ import {
 } from '@/lib/battle-store';
 import type { CellValue } from '@sudoku-squad/core';
 import { PencilIcon } from './pencil-icon';
+import { EraserIcon, RedoIcon, UndoIcon } from './action-icons';
 
 function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
 }
 
 const BTN =
-  'flex h-12 items-center justify-center rounded-md border border-stone-300 bg-white px-3 text-sm font-medium text-stone-800 transition-colors active:translate-y-px disabled:opacity-40 hover:bg-stone-50';
+  'flex h-12 items-center justify-center gap-1.5 rounded-md border border-stone-300 bg-white px-3 text-sm font-medium text-stone-800 transition-colors active:translate-y-px disabled:opacity-40 hover:bg-stone-50';
 
 /**
  * Number pad for battle mode. Same UI as the SP NumberPad minus the Hint
@@ -73,6 +74,7 @@ export function BattleNumberPad() {
           className={BTN}
           aria-label="Clear cell"
         >
+          <EraserIcon />
           Clear
         </button>
         <button
@@ -82,6 +84,7 @@ export function BattleNumberPad() {
           className={BTN}
           aria-label="Undo"
         >
+          <UndoIcon />
           Undo
         </button>
         <button
@@ -91,6 +94,7 @@ export function BattleNumberPad() {
           className={BTN}
           aria-label="Redo"
         >
+          <RedoIcon />
           Redo
         </button>
       </div>
