@@ -45,8 +45,9 @@ Thumbs.db
 # Ingest data (large CSV dumps, never committed)
 scripts/ingest/data/
 *.csv
-# Small in-repo CSV fixtures are OK
+# Small in-repo CSV fixtures + the username wordlist source are OK
 !scripts/ingest/fixtures/*.csv
+!apps/web/lib/data/*.csv
 # Kaggle notebooks pulled for reference — never source-of-truth
 scripts/ingest/notebooks/
 

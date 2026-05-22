@@ -14,7 +14,7 @@ import {
   type RoomRow,
   type RoomState,
 } from '@/lib/rooms';
-import { getOrCreateUsername, setUsername } from '@/lib/username';
+import { getUsername, setLocalUsernameOverride } from '@/lib/username';
 import { BattleGame } from './battle-game';
 
 type Phase =
@@ -40,7 +40,7 @@ export function LobbyClient({ code }: { code: string }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const username = getOrCreateUsername();
+      const username = await getUsername();
       const res = await joinRoom({ code, username });
       if (cancelled) return;
       if (res.ok) {
@@ -179,7 +179,7 @@ export function LobbyClient({ code }: { code: string }) {
 
       <section className="w-full">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-stone-500">
-          Players ({players.length}/4)
+          Players ({players.length}/8)
         </h2>
         <ul className="flex flex-col gap-2">
           {players.length === 0 ? (
@@ -239,7 +239,7 @@ export function LobbyClient({ code }: { code: string }) {
             <button
               type="button"
               onClick={() => {
-                setUsername(usernameDraft);
+                setLocalUsernameOverride(usernameDraft);
                 setEditingUsername(false);
               }}
               className="rounded-md bg-stone-900 px-3 py-1.5 text-sm font-medium text-white"

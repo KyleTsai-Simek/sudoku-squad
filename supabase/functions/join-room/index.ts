@@ -19,7 +19,7 @@ import { errorResponse, jsonResponse } from '../_shared/errors.ts';
 import { getCallerUserId, serviceClient } from '../_shared/supabase.ts';
 import { nextColor } from '../_shared/room-code.ts';
 
-const MAX_PLAYERS = 4;
+const MAX_PLAYERS = 8;
 
 interface JoinRoomInput {
   code: string;

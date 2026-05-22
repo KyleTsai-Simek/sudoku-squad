@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { Difficulty } from '@sudoku-squad/core';
 import { getTierCounts, pickRandomUnsolved } from '@/lib/pick-puzzle';
 import { createRoom, joinRoom } from '@/lib/rooms';
-import { getOrCreateUsername } from '@/lib/username';
+import { getUsername } from '@/lib/username';
 
 interface TierState {
   total: number;
@@ -50,7 +50,7 @@ export function HomeClient() {
 
   async function startBattle(tier: Difficulty) {
     setLoadingBattle(tier);
-    const username = getOrCreateUsername();
+    const username = await getUsername();
     const res = await createRoom({ mode: 'battle', difficulty: tier, username });
     setLoadingBattle(null);
     if (res.ok) {
@@ -67,7 +67,7 @@ export function HomeClient() {
     if (!code) return;
     setJoinPending(true);
     setJoinError(null);
-    const username = getOrCreateUsername();
+    const username = await getUsername();
     const res = await joinRoom({ code, username });
     setJoinPending(false);
     if (res.ok) {

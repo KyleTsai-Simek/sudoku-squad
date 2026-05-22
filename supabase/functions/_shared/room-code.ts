@@ -19,15 +19,20 @@ export function generateRoomCode(): string {
 }
 
 /**
- * Auto-assign a color to a new room player. Cycles through a 4-color palette;
- * if 4 players are present, we return the next-in-cycle (visual collision but
- * never a crash). The Edge Function should also refuse a 5th joiner.
+ * Per-player color, drawn from the 8-color palette in [DECISIONS.md #0026].
+ * Picks the first slot not already used in the room; if all 8 are taken
+ * (shouldn't happen — join-room caps at MAX_PLAYERS = 8) we cycle. The
+ * function should never crash on a 9th joiner — that's a join-room concern.
  */
 const COLOR_PALETTE = [
   '#f59e0b', // amber-500
   '#0ea5e9', // sky-500
   '#10b981', // emerald-500
   '#f43f5e', // rose-500
+  '#8b5cf6', // violet-500
+  '#ea580c', // orange-600 (deep, distinct from amber)
+  '#14b8a6', // teal-500
+  '#d946ef', // fuchsia-500
 ];
 
 export function nextColor(takenColors: string[]): string {

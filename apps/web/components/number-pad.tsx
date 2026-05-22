@@ -15,7 +15,6 @@ export function NumberPad() {
   const clearCell = useGameStore((s) => s.clearCell);
   const undo = useGameStore((s) => s.undo);
   const redo = useGameStore((s) => s.redo);
-  const useHint = useGameStore((s) => s.useHint);
   const notesMode = useGameStore((s) => s.notesMode);
   const toggleNotesMode = useGameStore((s) => s.toggleNotesMode);
   const canUndo = useGameStore(selectCanUndo);
@@ -78,16 +77,6 @@ export function NumberPad() {
           aria-label="Redo"
         >
           Redo
-        </button>
-      </div>
-      <div className="grid grid-cols-1 gap-1.5">
-        <button
-          type="button"
-          onClick={useHint}
-          disabled={disabled}
-          className={cn(BTN, 'border-blue-300 text-blue-700 hover:bg-blue-50')}
-        >
-          Hint
         </button>
       </div>
     </div>

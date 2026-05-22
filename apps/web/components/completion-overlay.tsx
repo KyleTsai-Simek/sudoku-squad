@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGameStore } from '@/lib/game-store';
 import { pickRandomUnsolved } from '@/lib/pick-puzzle';
+import { fireWinConfetti } from '@/lib/confetti';
 
 function formatElapsed(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -21,6 +22,10 @@ export function CompletionOverlay() {
   const puzzle = useGameStore((s) => s.puzzle);
   const router = useRouter();
   const [loadingNext, setLoadingNext] = useState(false);
+
+  useEffect(() => {
+    if (finishedAt !== null) fireWinConfetti();
+  }, [finishedAt]);
 
   if (finishedAt === null || startedAt === null) return null;
   const elapsed = finishedAt - startedAt;
@@ -45,7 +50,7 @@ export function CompletionOverlay() {
         <p className="text-sm font-medium uppercase tracking-widest text-amber-600">
           Solved
         </p>
-        <h2 className="mt-2 text-2xl font-semibold">Nicely done.</h2>
+        <h2 className="mt-2 text-2xl font-semibold">You won!</h2>
         <p className="mt-2 text-stone-600">
           {formatElapsed(elapsed)}
           {hintsUsed > 0 ? ` · ${hintsUsed} hint${hintsUsed === 1 ? '' : 's'}` : ''}

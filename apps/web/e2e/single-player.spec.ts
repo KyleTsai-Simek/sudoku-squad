@@ -6,35 +6,42 @@ import { expect, test } from '@playwright/test';
  *
  *  1. Home renders.
  *  2. Navigating to /play/<sample-code> mounts the board.
- *  3. Hitting Hint enough times completes the puzzle.
- *  4. Completion overlay appears with the "Nicely done." headline.
+ *  3. The test fills the solution cell-by-cell via keyboard.
+ *  4. Completion overlay appears with the "You won!" headline.
  *
  * This is the load-bearing regression test for Phase 1. Keep it green.
  */
 
-// Pinned sample code from apps/web/lib/sample-puzzles.ts (sample-1, easy).
+// Pinned sample-1 from apps/web/lib/sample-puzzles.ts (easy).
 const SAMPLE_CODE = '3santv';
+const GIVENS =
+  '53..7....6..195....98....6.8...6...34..8.3..17...2...6.6....28....419..5....8..79';
+const SOLUTION =
+  '534678912672195348198342567859761423426853791713924856961537284287419635345286179';
 
-test('single-player: solve via hints to completion', async ({ page }) => {
+test('single-player: solve to completion via keyboard', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Sudoku Squad' })).toBeVisible();
 
   await page.goto(`/play/${SAMPLE_CODE}`);
   await expect(page.getByRole('grid', { name: 'Sudoku board' })).toBeVisible();
-  // First sample puzzle: row 1 column 1 is a given 5.
   await expect(
     page.getByRole('gridcell', { name: /row 1, column 1, value 5, given/ }),
   ).toBeVisible();
 
-  const hint = page.getByRole('button', { name: 'Hint' });
-  for (let i = 0; i < 90; i++) {
-    if (await page.getByRole('dialog', { name: 'Puzzle complete' }).isVisible()) break;
-    if (!(await hint.isEnabled())) break;
-    await hint.click();
+  // Click each empty cell and type its solution digit.
+  for (let i = 0; i < 81; i++) {
+    if (GIVENS[i] !== '.' && GIVENS[i] !== '0') continue;
+    const row = Math.floor(i / 9) + 1;
+    const col = (i % 9) + 1;
+    await page
+      .getByRole('gridcell', { name: new RegExp(`row ${row}, column ${col}, empty`) })
+      .click();
+    await page.keyboard.press(SOLUTION[i]!);
   }
 
   const overlay = page.getByRole('dialog', { name: 'Puzzle complete' });
   await expect(overlay).toBeVisible();
-  await expect(overlay.getByText('Nicely done.')).toBeVisible();
+  await expect(overlay.getByText('You won!')).toBeVisible();
   await expect(overlay.getByRole('button', { name: /Play another/ })).toBeVisible();
 });
