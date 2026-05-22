@@ -29,14 +29,16 @@ const TIERS: Difficulty[] = ['easy', 'medium', 'hard', 'expert'];
 
 /**
  * Rating bands (half-open: [lo, hi)) applied to the 3M dataset's numeric
- * `difficulty` column. Picked after auditing the source distribution — see
- * docs/DECISIONS.md #0031 (re-bucketing).
+ * `difficulty` column. Updated 2026-05-22 (afternoon) — old easy [0, 1.5)
+ * skewed too hard in practice because the band included rating-1.0-to-1.4
+ * puzzles that solved like medium. Narrowed easy and shifted the slack
+ * into medium/hard. See docs/DECISIONS.md #0032 (supersedes #0031).
  */
 const RATING_BANDS: ReadonlyArray<{ tier: Difficulty; lo: number; hi: number }> = [
-  { tier: 'easy',   lo: 0.0, hi: 1.5 },
-  { tier: 'medium', lo: 1.5, hi: 4.0 },
-  { tier: 'hard',   lo: 4.0, hi: 5.0 },
-  { tier: 'expert', lo: 5.0, hi: 7.0 },
+  { tier: 'easy',   lo: 0.0,  hi: 0.75 },
+  { tier: 'medium', lo: 0.75, hi: 2.5 },
+  { tier: 'hard',   lo: 2.5,  hi: 5.0 },
+  { tier: 'expert', lo: 5.0,  hi: 7.0 },
 ];
 
 /**

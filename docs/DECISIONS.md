@@ -17,9 +17,37 @@ Format:
 
 ---
 
+## 0032 — Narrowing easy: rebucket to [0, 0.75) / [0.75, 2.5) / [2.5, 5) / [5, 7)
+**Date:** 2026-05-22
+**Status:** Accepted (supersedes the band choice in #0031; per-(tier, clue-count) targets unchanged)
+
+**Context.** After #0031 shipped the four-tier bank with easy at `[0, 1.5)`, easy still played too hard for the casual entry point. Easy contained two visually-distinct populations: the bulk of rating-0.0 rows plus a long tail of rating-1.0-to-1.4 puzzles that solve like medium. The 3M dataset has a natural gap (no rows in `[0.5, 1.0)`), so a band ending at 0.75 effectively means "only rating-0.0 puzzles" — the gentlest the source supports.
+
+**Decision.** New bands (half-open):
+- `easy`   `[0.0, 0.75)` — uniformly rating-0.0 in practice.
+- `medium` `[0.75, 2.5)` — the old "easy hard end" + the lower half of old medium.
+- `hard`   `[2.5, 5.0)` — the upper half of old medium + the old hard.
+- `expert` `[5.0, 7.0)` — unchanged.
+
+Per-(tier, clue-count) targets (`TARGET_PER_CELL`) are unchanged. The 3M dataset's clue-count distribution is shape-invariant across rating bands, so the same targets remain feasible: every cell hit its mark on re-ingest with zero solver rejects across the 3M scan.
+
+Resulting bank: 10,000 rows, exactly 2,500 per tier. Rating medians: easy 0.0, medium 1.7, hard 3.1, expert 5.3 (vs. #0031's 0.0 / 2.2 / 4.3 / 5.3 — medium and hard both got harder by design; the slack moved up from easy).
+
+**Alternatives considered.**
+- **Easy at `[0, 1.0)`.** Cosmetically the same as `[0, 0.75)` because there are no rows in `[0.5, 1.0)`. Picking 0.75 makes the intent explicit (we want strictly the trivial population) and survives a hypothetical future dataset that does have rows in that gap.
+- **Easy at `[0, 0.5)`.** Same content as `[0, 0.75)` for this dataset, but worth choosing 0.75 in case a future re-ingest source has rows in `[0.5, 0.75)` that should count as easy.
+- **Don't shift medium up; just steal from easy.** Would leave easy at `[0, 0.75)` and medium at `[0.75, 4)`. Tested mentally; medium ends up too wide (covers both visibly-easy 1.0s and visibly-hard 3.0s in the same bucket). Better to shift both boundaries together.
+
+**Consequences.**
+- Truncated `puzzles`, `player_completions`, `rooms` (cascading to `room_players` and `moves`) and re-ingested. Same migration story as #0031 — fine for V1 with no real users.
+- Any URL someone bookmarked from a previous bank now 404s. The bundled sample pack (`apps/web/lib/sample-puzzles.ts`) is unaffected — those codes are pinned by hand to specific puzzles and the codes are deterministic from givens, so they still resolve via the bundled fallback even if the same puzzles aren't in the new DB sample.
+- The Vercel UI's per-tier picker now shows much milder easy puzzles. Player feedback will tell us whether medium and hard remain accessible at the new boundaries.
+
+---
+
 ## 0031 — Re-bucketing the puzzle bank: 4 tiers, per-(tier, clues) targets
 **Date:** 2026-05-22
-**Status:** Accepted
+**Status:** Superseded by #0032 (bands shifted; per-(tier, clue-count) targets retained)
 
 **Context.** The original V1 bank was 7,500 puzzles (2,500 easy/medium/hard, 0 expert) sampled by streaming the Kaggle 3M CSV in order and admitting the first 2,500 hits per rating band. An audit found this skewed easy heavily toward rating 0 (53% of easy were exactly rating 0.0) and left expert empty because the old band `rating > 7.0` matches only ~100 of 3M rows. We also wanted a clue-count gradient: easy should have more clues, expert fewer, matching how players think about difficulty.
 

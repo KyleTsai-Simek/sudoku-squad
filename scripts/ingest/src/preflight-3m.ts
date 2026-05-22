@@ -17,12 +17,14 @@ interface NewTier {
   hi: number;
 }
 
-// User's proposed new bands. Half-open so every rating belongs to exactly one tier.
+// Proposed bands. Half-open so every rating belongs to exactly one tier.
+// Updated 2026-05-22 (afternoon pass) — old easy [0, 1.5) was still skewing too
+// hard. Narrowing easy and absorbing the slack into medium / hard.
 const NEW_TIERS: NewTier[] = [
-  { name: 'easy',   lo: 0,   hi: 1.5 },
-  { name: 'medium', lo: 1.5, hi: 4.0 },
-  { name: 'hard',   lo: 4.0, hi: 5.0 },
-  { name: 'expert', lo: 5.0, hi: 7.0 },
+  { name: 'easy',   lo: 0,    hi: 0.75 },
+  { name: 'medium', lo: 0.75, hi: 2.5 },
+  { name: 'hard',   lo: 2.5,  hi: 5.0 },
+  { name: 'expert', lo: 5.0,  hi: 7.0 },
 ];
 
 function tierFor(rating: number): string | null {

@@ -205,9 +205,9 @@ async function main(): Promise<void> {
   // 4. Bucket boundaries used at ingest
   console.log('=== Ingest-time bucket boundaries (scripts/ingest/src/index.ts) ===');
   console.log('  By numeric rating (Kaggle 3M dataset `difficulty` column), half-open [lo, hi):');
-  console.log('    easy    [0.0, 1.5)');
-  console.log('    medium  [1.5, 4.0)');
-  console.log('    hard    [4.0, 5.0)');
+  console.log('    easy    [0.0, 0.75)');
+  console.log('    medium  [0.75, 2.5)');
+  console.log('    hard    [2.5, 5.0)');
   console.log('    expert  [5.0, 7.0)');
   console.log('    (rows with rating ≥ 7.0 are skipped — outside every band)');
   console.log();
