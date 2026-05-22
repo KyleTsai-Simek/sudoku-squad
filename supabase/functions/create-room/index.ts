@@ -31,6 +31,7 @@ interface CreateRoomInput {
   mode: Mode;
   difficulty: Difficulty;
   username: string;
+  is_public?: boolean;
 }
 
 function parseInput(body: unknown): CreateRoomInput | null {
@@ -41,11 +42,16 @@ function parseInput(body: unknown): CreateRoomInput | null {
   if (typeof b.username !== 'string') return null;
   const username = b.username.trim();
   if (username.length === 0 || username.length > 20) return null;
-  return {
+  const out: CreateRoomInput = {
     mode: b.mode as Mode,
     difficulty: b.difficulty as Difficulty,
     username,
   };
+  if (b.is_public !== undefined) {
+    if (typeof b.is_public !== 'boolean') return null;
+    out.is_public = b.is_public;
+  }
+  return out;
 }
 
 Deno.serve(async (req) => {
@@ -72,7 +78,7 @@ Deno.serve(async (req) => {
       'expected { mode: "battle"|"coop", difficulty: "easy"|"medium"|"hard"|"expert", username: 1..20 chars }',
     );
   }
-  const { mode, difficulty, username } = parsed;
+  const { mode, difficulty, username, is_public = false } = parsed;
 
   const admin = serviceClient();
 
@@ -104,6 +110,7 @@ Deno.serve(async (req) => {
         puzzle_code: puzzleCode,
         status: 'lobby',
         settings: {},
+        is_public,
       })
       .select('id, code')
       .single();

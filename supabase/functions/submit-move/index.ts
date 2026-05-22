@@ -129,9 +129,13 @@ Deno.serve(async (req) => {
     return errorResponse('internal', `room lookup failed: ${roomErr.message}`, 500);
   }
   if (!room) return errorResponse('not_found', 'room not found', 404);
-  if (room.status !== 'playing') {
-    return errorResponse('bad_request', `room status is ${room.status}; cannot submit moves`, 409);
+  if (room.status === 'lobby') {
+    return errorResponse('bad_request', 'game has not started', 409);
   }
+  // status='playing' or 'finished' both accept moves. Losers can finish their
+  // own boards after the room has already been won — per DECISIONS #0008 +
+  // #0030. The winner-update below has a `where status='playing'` guard so a
+  // late finisher cannot steal the win.
 
   // Caller must be in this room.
   const { data: playerRow, error: playerErr } = await admin
@@ -219,7 +223,8 @@ Deno.serve(async (req) => {
 
   let isWinner = false;
   if (won && room.mode === 'battle') {
-    // Atomic: only become the winner if no one else has already.
+    // Atomic: only become the winner if no one else has already AND the room
+    // is still 'playing' (late finishers can't steal the win).
     const { data: claimed, error: winErr } = await admin
       .from('rooms')
       .update({
@@ -235,6 +240,19 @@ Deno.serve(async (req) => {
       return errorResponse('internal', `room finish update failed: ${winErr.message}`, 500);
     }
     isWinner = claimed?.winner_player_id === userId;
+
+    if (isWinner) {
+      // Game just ended. Per DECISIONS #0030, mark every player as "not yet
+      // returned to lobby" so the next-round Start blocks until they click
+      // "Return to lobby" (or get kicked).
+      const { error: hrErr } = await admin
+        .from('room_players')
+        .update({ has_returned: false })
+        .eq('room_id', room_id);
+      if (hrErr) {
+        console.error('has_returned reset failed', hrErr);
+      }
+    }
   }
 
   // Persistent completion tally. Multiplayer wins always count; non-winners

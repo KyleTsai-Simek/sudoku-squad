@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   fetchRoom,
   fetchRoomPlayers,
   joinRoom,
+  kickPlayer,
   startGame,
   subscribeToRoom,
   subscribeToRoomPlayers,
@@ -29,6 +31,7 @@ function cn(...parts: Array<string | false | null | undefined>): string {
 }
 
 export function LobbyClient({ code }: { code: string }) {
+  const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: 'joining' });
   const [players, setPlayers] = useState<RoomPlayerProgress[]>([]);
   const [roomRow, setRoomRow] = useState<RoomRow | null>(null);
@@ -60,11 +63,24 @@ export function LobbyClient({ code }: { code: string }) {
   useEffect(() => {
     if (phase.kind !== 'in_lobby') return;
     const roomId = phase.room.room_id;
+    const ownPlayerId = phase.room.own_player_id;
     let cancelled = false;
+    // First fetch returns []  while RLS catches up post-join; we need at least
+    // one non-empty list to confirm the caller is in the room before we treat
+    // an empty list as a kick.
+    let seenSelf = false;
 
     async function refreshPlayers() {
       const list = await fetchRoomPlayers(roomId);
-      if (!cancelled) setPlayers(list);
+      if (cancelled) return;
+      setPlayers(list);
+      const stillIn = list.some((p) => p.player_id === ownPlayerId);
+      if (stillIn) {
+        seenSelf = true;
+      } else if (seenSelf) {
+        // We were in the room and now we're not → host kicked us.
+        router.push('/?kicked=1');
+      }
     }
     async function refreshRoom() {
       const r = await fetchRoom(roomId);
@@ -154,6 +170,8 @@ export function LobbyClient({ code }: { code: string }) {
 
   const isHost = room.own_is_host;
   const enoughPlayers = players.length >= 2;
+  const stragglers = players.filter((p) => !p.has_returned);
+  const allReady = stragglers.length === 0;
   const otherHost = players.find((p) => p.is_host && p.player_id !== room.own_player_id);
 
   return (
@@ -198,7 +216,12 @@ export function LobbyClient({ code }: { code: string }) {
                 key={p.player_id}
                 className="flex items-center justify-between rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm"
               >
-                <span className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    'flex items-center gap-3',
+                    !p.has_returned && 'opacity-60',
+                  )}
+                >
                   <span
                     aria-hidden
                     className="inline-block h-3 w-3 rounded-full"
@@ -215,19 +238,45 @@ export function LobbyClient({ code }: { code: string }) {
                       you
                     </span>
                   ) : null}
+                  {!p.has_returned ? (
+                    <span
+                      aria-label="still in last game"
+                      className="inline-flex items-center gap-0.5"
+                    >
+                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-stone-400 [animation-delay:-0.3s]" />
+                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-stone-400 [animation-delay:-0.15s]" />
+                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-stone-400" />
+                    </span>
+                  ) : null}
                 </span>
-                {isYou && !editingUsername ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUsernameDraft(p.username);
-                      setEditingUsername(true);
-                    }}
-                    className="text-xs text-stone-500 underline-offset-2 hover:underline"
-                  >
-                    rename
-                  </button>
-                ) : null}
+                <div className="flex items-center gap-3">
+                  {isYou && !editingUsername ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUsernameDraft(p.username);
+                        setEditingUsername(true);
+                      }}
+                      className="text-xs text-stone-500 underline-offset-2 hover:underline"
+                    >
+                      rename
+                    </button>
+                  ) : null}
+                  {isHost && !isYou ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await kickPlayer({
+                          room_id: room.room_id,
+                          player_id: p.player_id,
+                        });
+                      }}
+                      className="text-xs text-red-600 underline-offset-2 hover:underline"
+                    >
+                      kick
+                    </button>
+                  ) : null}
+                </div>
               </li>
             );
           })}
@@ -266,6 +315,7 @@ export function LobbyClient({ code }: { code: string }) {
       <LobbySettingsPanel
         roomId={room.room_id}
         settings={settings}
+        isPublic={roomRow?.is_public ?? false}
         isHost={isHost}
         locked={status !== 'lobby'}
       />
@@ -276,14 +326,16 @@ export function LobbyClient({ code }: { code: string }) {
             <button
               type="button"
               onClick={onStart}
-              disabled={startPending || !enoughPlayers}
+              disabled={startPending || !enoughPlayers || !allReady}
               className="w-full rounded-xl bg-stone-900 px-5 py-4 text-base font-semibold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {startPending
                 ? 'Starting…'
                 : !enoughPlayers
                   ? 'Waiting for at least 2 players…'
-                  : 'Start battle'}
+                  : !allReady
+                    ? `Waiting on ${stragglers.length} player${stragglers.length === 1 ? '' : 's'}…`
+                    : 'Start battle'}
             </button>
             {startError ? (
               <p className="mt-2 text-xs text-red-600">{startError}</p>

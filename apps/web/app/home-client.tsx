@@ -7,6 +7,7 @@ import { getTierCounts, pickRandomUnsolved } from '@/lib/pick-puzzle';
 import { getCompletionCount } from '@/lib/completions';
 import { createRoom, joinRoom } from '@/lib/rooms';
 import { getUsername, readCachedUsername } from '@/lib/username';
+import { PublicLobbyList } from '@/components/public-lobby-list';
 
 interface TierState {
   total: number;
@@ -199,6 +200,8 @@ export function HomeClient() {
           Create a room and share the link — first to finish wins. Coop coming next.
         </p>
       </section>
+
+      <PublicLobbyList />
 
       <section className="w-full">
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-500">

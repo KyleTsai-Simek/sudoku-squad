@@ -1,7 +1,7 @@
 'use client';
 
 import type { Difficulty } from '@sudoku-squad/core';
-import { ensureAuthClient } from './supabase';
+import { ensureAuthClient, getSupabase } from './supabase';
 
 export type RoomMode = 'battle' | 'coop';
 export type RoomStatus = 'lobby' | 'playing' | 'finished';
@@ -116,6 +116,7 @@ export async function createRoom(args: {
   mode: RoomMode;
   difficulty: Difficulty;
   username: string;
+  is_public?: boolean;
 }): Promise<Result<RoomState>> {
   const res = await invoke<CreateRoomResponse>('create-room', args);
   if (!res.ok) return res;
@@ -202,6 +203,7 @@ export async function subscribeToRoomPlayers(
 
 export interface RoomPlayerProgress extends RoomPlayer {
   progress_pct: number;
+  has_returned: boolean;
 }
 
 export async function fetchRoomPlayers(roomId: string): Promise<RoomPlayerProgress[]> {
@@ -209,7 +211,7 @@ export async function fetchRoomPlayers(roomId: string): Promise<RoomPlayerProgre
   if (!client) return [];
   const { data, error } = await client
     .from('room_players')
-    .select('player_id, username, color, is_host, progress_pct')
+    .select('player_id, username, color, is_host, progress_pct, has_returned')
     .eq('room_id', roomId)
     .order('joined_at', { ascending: true });
   if (error) {
@@ -219,6 +221,14 @@ export async function fetchRoomPlayers(roomId: string): Promise<RoomPlayerProgre
   return data ?? [];
 }
 
+export async function returnToLobby(roomId: string): Promise<Result<void>> {
+  const res = await invoke<{ has_returned: boolean }>('return-to-lobby', {
+    room_id: roomId,
+  });
+  if (!res.ok) return res;
+  return { ok: true, value: undefined };
+}
+
 export interface RoomRow {
   id: string;
   code: string;
@@ -226,19 +236,21 @@ export interface RoomRow {
   status: RoomStatus;
   puzzle_code: string;
   settings: RoomSettings;
+  is_public: boolean;
   winner_player_id: string | null;
   started_at: string | null;
   finished_at: string | null;
 }
+
+const ROOM_COLS =
+  'id, code, mode, status, puzzle_code, settings, is_public, winner_player_id, started_at, finished_at';
 
 export async function fetchRoom(roomId: string): Promise<RoomRow | null> {
   const client = await ensureAuthClient();
   if (!client) return null;
   const { data, error } = await client
     .from('rooms')
-    .select(
-      'id, code, mode, status, puzzle_code, settings, winner_player_id, started_at, finished_at',
-    )
+    .select(ROOM_COLS)
     .eq('id', roomId)
     .maybeSingle();
   if (error) {
@@ -247,6 +259,51 @@ export async function fetchRoom(roomId: string): Promise<RoomRow | null> {
   }
   if (!data) return null;
   return { ...data, settings: normalizeRoomSettings(data.settings) };
+}
+
+export interface PublicLobby {
+  id: string;
+  code: string;
+  mode: RoomMode;
+  status: RoomStatus;
+  created_at: string;
+}
+
+/**
+ * List currently-open public rooms (status in lobby/playing). Used by the
+ * home page. Cheap query — `rooms_public_idx` partial index covers it.
+ */
+export async function fetchPublicLobbies(): Promise<PublicLobby[]> {
+  const client = getSupabase();
+  if (!client) return [];
+  const { data, error } = await client
+    .from('rooms')
+    .select('id, code, mode, status, created_at')
+    .eq('is_public', true)
+    .in('status', ['lobby', 'playing'])
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) {
+    console.error('fetchPublicLobbies error', error);
+    return [];
+  }
+  return data ?? [];
+}
+
+export async function subscribeToPublicLobbies(onChange: () => void): Promise<() => void> {
+  const client = getSupabase();
+  if (!client) return () => {};
+  const channel = client
+    .channel('public_lobbies')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'rooms' },
+      onChange,
+    )
+    .subscribe();
+  return () => {
+    client.removeChannel(channel);
+  };
 }
 
 export async function subscribeToRoom(
@@ -296,11 +353,30 @@ export async function startGame(roomId: string): Promise<Result<void>> {
 
 export async function updateRoomSettings(args: {
   room_id: string;
-  settings: Partial<RoomSettings>;
-}): Promise<Result<RoomSettings>> {
-  const res = await invoke<{ settings: RoomSettings }>('update-room-settings', args);
+  settings?: Partial<RoomSettings>;
+  is_public?: boolean;
+}): Promise<Result<{ settings: RoomSettings; is_public: boolean }>> {
+  const res = await invoke<{ settings: RoomSettings; is_public: boolean }>(
+    'update-room-settings',
+    args,
+  );
   if (!res.ok) return res;
-  return { ok: true, value: normalizeRoomSettings(res.value.settings) };
+  return {
+    ok: true,
+    value: {
+      settings: normalizeRoomSettings(res.value.settings),
+      is_public: res.value.is_public,
+    },
+  };
+}
+
+export async function kickPlayer(args: {
+  room_id: string;
+  player_id: string;
+}): Promise<Result<void>> {
+  const res = await invoke<{ kicked: boolean }>('kick-player', args);
+  if (!res.ok) return res;
+  return { ok: true, value: undefined };
 }
 
 export interface SubmitMoveResponse {

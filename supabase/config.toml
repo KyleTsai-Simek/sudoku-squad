@@ -64,3 +64,25 @@ entrypoint = "./functions/update-room-settings/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/update-room-settings/*.html" ]
+
+[functions.kick-player]
+enabled = true
+verify_jwt = true
+import_map = "./functions/kick-player/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/kick-player/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/kick-player/*.html" ]
+
+[functions.return-to-lobby]
+enabled = true
+verify_jwt = true
+import_map = "./functions/return-to-lobby/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/return-to-lobby/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/return-to-lobby/*.html" ]

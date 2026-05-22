@@ -1,22 +1,24 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { fireWinConfetti } from '@/lib/confetti';
-import type { RoomPlayerProgress } from '@/lib/rooms';
+import { returnToLobby, type RoomPlayerProgress } from '@/lib/rooms';
 
 interface Props {
+  roomId: string;
   winnerPlayerId: string | null;
   ownPlayerId: string;
   players: RoomPlayerProgress[];
   onDismiss: () => void;
-  /** True if the player can keep solving (they didn't win). Used by Chunk H's
-   *  "Return to lobby" flow to render a secondary action. */
+  /** True if the player can keep solving (they didn't win). */
   canKeepSolving: boolean;
   dismissed: boolean;
 }
 
 export function BattleWinnerOverlay({
+  roomId,
   winnerPlayerId,
   ownPlayerId,
   players,
@@ -24,10 +26,10 @@ export function BattleWinnerOverlay({
   canKeepSolving,
   dismissed,
 }: Props) {
+  const router = useRouter();
+  const [returning, setReturning] = useState(false);
   const visible = winnerPlayerId !== null && !dismissed;
 
-  // Confetti on first appearance only. Winner sees it; losers see it too — same
-  // celebratory feel for the whole room.
   useEffect(() => {
     if (visible) fireWinConfetti();
   }, [visible]);
@@ -35,6 +37,16 @@ export function BattleWinnerOverlay({
   if (!visible) return null;
   const winner = players.find((p) => p.player_id === winnerPlayerId);
   const youWon = winnerPlayerId === ownPlayerId;
+
+  async function onReturn() {
+    setReturning(true);
+    const res = await returnToLobby(roomId);
+    setReturning(false);
+    if (res.ok) {
+      // We're back in the lobby; the parent's room subscription will re-route.
+      onDismiss();
+    }
+  }
 
   return (
     <div
@@ -54,6 +66,14 @@ export function BattleWinnerOverlay({
           <h2 className="mt-2 text-2xl font-semibold">Nicely done.</h2>
         ) : null}
         <div className="mt-6 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={onReturn}
+            disabled={returning}
+            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
+          >
+            {returning ? 'Returning…' : 'Return to lobby'}
+          </button>
           {canKeepSolving ? (
             <button
               type="button"
@@ -63,12 +83,13 @@ export function BattleWinnerOverlay({
               Keep solving
             </button>
           ) : null}
-          <Link
-            href="/"
-            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+          <button
+            type="button"
+            onClick={() => router.push('/')}
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
           >
             Back to menu
-          </Link>
+          </button>
         </div>
       </div>
     </div>

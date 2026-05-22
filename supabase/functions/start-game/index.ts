@@ -1,11 +1,13 @@
 // Edge Function: start-game
 //
-//   1. Authenticate caller.
-//   2. Verify caller is the host of the named room.
-//   3. Refuse if status is not 'lobby'.
-//   4. In battle, require ≥ 2 players. (Coop is OK solo, but battle solo is weird.)
-//   5. Set status = 'playing', started_at = now(). The Realtime publication on
-//      `rooms` fans the change out to subscribers.
+// Host-only. Two flavors of "start":
+//   - First start: room.status='lobby', puzzle_code already chosen on create.
+//     Just transitions to 'playing' + sets started_at.
+//   - Replay: room cycled back to 'lobby' after a previous game (per DECISIONS
+//     #0030). Refuses if any room_players.has_returned=false. On success:
+//     clears `moves`, picks a NEW random puzzle_code for the room's difficulty
+//     (inferred from the current puzzle), resets progress_pct/winner/finished_at,
+//     sets a fresh started_at, transitions to 'playing'.
 
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { handlePreflight } from '../_shared/cors.ts';
@@ -49,10 +51,9 @@ Deno.serve(async (req) => {
 
   const admin = serviceClient();
 
-  // Load room + caller's room_player row in two cheap queries.
   const { data: room, error: roomErr } = await admin
     .from('rooms')
-    .select('id, mode, status, started_at')
+    .select('id, mode, status, puzzle_code')
     .eq('id', parsed.room_id)
     .maybeSingle();
   if (roomErr) {
@@ -68,6 +69,7 @@ Deno.serve(async (req) => {
     );
   }
 
+  // Host check.
   const { data: caller, error: callerErr } = await admin
     .from('room_players')
     .select('is_host')
@@ -82,28 +84,79 @@ Deno.serve(async (req) => {
     return errorResponse('forbidden', 'only the host can start the game', 403);
   }
 
-  // Battle requires at least 2 players (no point racing yourself).
-  if (room.mode === 'battle') {
-    const { count, error: cntErr } = await admin
-      .from('room_players')
-      .select('*', { count: 'exact', head: true })
-      .eq('room_id', room.id);
-    if (cntErr) {
-      return errorResponse('internal', `player count failed: ${cntErr.message}`, 500);
-    }
-    if ((count ?? 0) < MIN_BATTLE_PLAYERS) {
-      return errorResponse(
-        'too_few_players',
-        `battle needs at least ${MIN_BATTLE_PLAYERS} players`,
-        409,
-      );
-    }
+  // Load all players (used for cap check + has_returned validation).
+  const { data: players, error: playersErr } = await admin
+    .from('room_players')
+    .select('player_id, has_returned')
+    .eq('room_id', room.id);
+  if (playersErr) {
+    return errorResponse('internal', `players read failed: ${playersErr.message}`, 500);
+  }
+  const allPlayers = players ?? [];
+  if (room.mode === 'battle' && allPlayers.length < MIN_BATTLE_PLAYERS) {
+    return errorResponse(
+      'too_few_players',
+      `battle needs at least ${MIN_BATTLE_PLAYERS} players`,
+      409,
+    );
+  }
+  const stragglers = allPlayers.filter((p) => !p.has_returned);
+  if (stragglers.length > 0) {
+    return errorResponse(
+      'players_not_ready',
+      `${stragglers.length} player(s) haven't returned to the lobby yet`,
+      409,
+    );
+  }
+
+  // Look up current puzzle's difficulty to roll a fresh puzzle for this round.
+  const { data: prevPuzzle, error: prevErr } = await admin
+    .from('puzzles')
+    .select('difficulty')
+    .eq('code', room.puzzle_code)
+    .maybeSingle();
+  if (prevErr || !prevPuzzle) {
+    return errorResponse(
+      'internal',
+      `puzzle lookup failed: ${prevErr?.message ?? 'no row'}`,
+      500,
+    );
+  }
+  const { data: nextCode, error: pickErr } = await admin.rpc('pick_random_puzzle_code', {
+    p_difficulty: prevPuzzle.difficulty,
+  });
+  if (pickErr || !nextCode) {
+    return errorResponse('internal', `next puzzle pick failed: ${pickErr?.message ?? 'none'}`, 500);
+  }
+
+  // Wipe previous-round state. Order matters — clear moves before the room
+  // update since moves.room_id is on cascade-delete already (room stays).
+  const { error: delMovesErr } = await admin.from('moves').delete().eq('room_id', room.id);
+  if (delMovesErr) {
+    return errorResponse('internal', `moves clear failed: ${delMovesErr.message}`, 500);
+  }
+  const { error: resetPlayersErr } = await admin
+    .from('room_players')
+    .update({ progress_pct: 0 })
+    .eq('room_id', room.id);
+  if (resetPlayersErr) {
+    return errorResponse(
+      'internal',
+      `room_players reset failed: ${resetPlayersErr.message}`,
+      500,
+    );
   }
 
   const startedAt = new Date().toISOString();
   const { error: updErr } = await admin
     .from('rooms')
-    .update({ status: 'playing', started_at: startedAt })
+    .update({
+      status: 'playing',
+      puzzle_code: nextCode,
+      started_at: startedAt,
+      finished_at: null,
+      winner_player_id: null,
+    })
     .eq('id', room.id);
   if (updErr) {
     return errorResponse('internal', `room update failed: ${updErr.message}`, 500);
@@ -113,5 +166,6 @@ Deno.serve(async (req) => {
     room_id: room.id,
     status: 'playing',
     started_at: startedAt,
+    puzzle_code: nextCode,
   });
 });

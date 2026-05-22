@@ -139,6 +139,7 @@ export function BattleGame({
       )}
 
       <BattleWinnerOverlay
+        roomId={room.room_id}
         winnerPlayerId={winnerPlayerId}
         ownPlayerId={room.own_player_id}
         players={players}

@@ -16,15 +16,25 @@ import { normalizeSettings, type RoomSettings } from '../_shared/settings.ts';
 
 interface Input {
   room_id: string;
-  settings: Partial<RoomSettings>;
+  settings?: Partial<RoomSettings>;
+  is_public?: boolean;
 }
 
 function parseInput(body: unknown): Input | null {
   if (!body || typeof body !== 'object') return null;
   const b = body as Record<string, unknown>;
   if (typeof b.room_id !== 'string' || b.room_id.length === 0) return null;
-  if (!b.settings || typeof b.settings !== 'object') return null;
-  return { room_id: b.room_id, settings: b.settings as Partial<RoomSettings> };
+  const out: Input = { room_id: b.room_id };
+  if (b.settings !== undefined) {
+    if (!b.settings || typeof b.settings !== 'object') return null;
+    out.settings = b.settings as Partial<RoomSettings>;
+  }
+  if (b.is_public !== undefined) {
+    if (typeof b.is_public !== 'boolean') return null;
+    out.is_public = b.is_public;
+  }
+  if (out.settings === undefined && out.is_public === undefined) return null;
+  return out;
 }
 
 Deno.serve(async (req) => {
@@ -54,7 +64,7 @@ Deno.serve(async (req) => {
 
   const { data: room, error: roomErr } = await admin
     .from('rooms')
-    .select('id, status, settings')
+    .select('id, status, settings, is_public')
     .eq('id', parsed.room_id)
     .maybeSingle();
   if (roomErr) {
@@ -83,18 +93,26 @@ Deno.serve(async (req) => {
     return errorResponse('forbidden', 'only the host can change settings', 403);
   }
 
-  const merged = normalizeSettings({
-    ...(room.settings as Record<string, unknown>),
-    ...parsed.settings,
-  });
+  const merged = parsed.settings
+    ? normalizeSettings({
+        ...(room.settings as Record<string, unknown>),
+        ...parsed.settings,
+      })
+    : normalizeSettings(room.settings);
+  const nextIsPublic =
+    parsed.is_public !== undefined ? parsed.is_public : (room.is_public as boolean);
+
+  const patch: Record<string, unknown> = {};
+  if (parsed.settings) patch.settings = merged;
+  if (parsed.is_public !== undefined) patch.is_public = parsed.is_public;
 
   const { error: updErr } = await admin
     .from('rooms')
-    .update({ settings: merged })
+    .update(patch)
     .eq('id', parsed.room_id);
   if (updErr) {
     return errorResponse('internal', `update failed: ${updErr.message}`, 500);
   }
 
-  return jsonResponse({ settings: merged });
+  return jsonResponse({ settings: merged, is_public: nextIsPublic });
 });
