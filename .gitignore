@@ -38,6 +38,7 @@ test-results/
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 !.vscode/settings.json.example
 .idea/
 

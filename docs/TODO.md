@@ -29,40 +29,41 @@ Live at https://sudoku-squad-web.vercel.app/. Engine + UI + ingest + tests + CI 
 
 ---
 
-## Phase 2 — Battle mode 🔄 Next
+## Phase 2 — Battle mode 🔄 In progress
 
-See [ROADMAP.md Phase 2](ROADMAP.md) for scope detail. Open questions to settle before this ships are tracked in [DECISIONS.md → Open questions](DECISIONS.md).
+See [ROADMAP.md Phase 2](ROADMAP.md) for scope.
 
 ### Backend
-- [ ] Edge Function `create_room({mode, difficulty}) -> {room_id, code}`. Picks a random unsolved-for-host puzzle of the chosen difficulty and writes `rooms.puzzle_code`. Generates a fresh 6-char base36 room code (retry on `unique(rooms.code)` conflict).
-- [ ] Edge Function `join_room({code, username}) -> {room_id, player_id, color}`. Refuses joining a `playing` room in battle mode (mid-game join policy — needs confirmation, see DECISIONS open questions).
-- [ ] Edge Function `submit_move({room_id, cell, kind, value})` — validates, assigns `seq`, inserts into `moves`, broadcasts on `room:{room_id}`.
-- [ ] Edge Function `check_completion({room_id, player_id})` — server-side win check against `puzzles.solution`. Returns "win" / "not yet" without revealing which cells are wrong.
-- [ ] Edge Function `hint({room_id, player_id, cell}) -> {value}` — multiplayer hint path. Replaces SP's `sp_get_puzzle` flow for the multiplayer context. Tracks hints used per-player (for the "X used a hint" indicator).
-- [ ] Channel naming convention: `room:{room_id}`. One channel per room, three payload kinds (`move`, `presence`, `game_event`).
+- [x] Migrations 0005 (`pick_random_puzzle_code`), 0006 (RLS recursion fix via `is_room_member`), 0007 (Realtime publications).
+- [x] Edge Function `create-room({mode, difficulty, username}) → {room_id, room_code, player_id, color, mode, puzzle_code}`.
+- [x] Edge Function `join-room({code, username}) → {room_id, room_code, player_id, color, is_host, rejoined, ...}`. Enforces mid-game-join policy per [DECISIONS #0024](DECISIONS.md). Rejoin is idempotent.
+- [ ] Edge Function `start-game({room_id})` — host-only. Transitions room.status `lobby → playing`. Sets `started_at`. Broadcasts `game_event: game_started`.
+- [ ] Edge Function `submit-move({room_id, cell, kind, value})` — validates, assigns `seq`, inserts into `moves`, broadcasts.
+- [ ] Edge Function `check-completion({room_id, player_id})` — server-side win check against `puzzles.solution`. Returns `win` / `not yet` without revealing which cells are wrong. On win in battle: set `room.winner_player_id`, transition `room.status` to `finished`, broadcast.
+- [ ] Edge Function `hint({room_id, player_id, cell}) → {value}` — multiplayer hint path. Counts toward visible "X used a hint" indicator in battle.
 
-### `packages/core` — sync (new module)
-- [ ] Supabase client factory (accepts injected client; web/RN each provide one).
-- [ ] `useRoom(roomCode)` hook: subscribes, returns `room`, `players`, own board state, move sender.
-- [ ] Optimistic move apply + server echo reconciliation (rollback on rejection).
+### `packages/core` — sync (new module, lands in this phase)
+- [ ] `useRoom(roomCode)` hook (or `subscribeToRoom` helper if hooks feel premature): subscribes to `room_players` + `moves` + `rooms`, returns `{ room, players, ownPlayerId, ownBoard }`.
+- [ ] Optimistic move apply: take a `Move` from the local reducer, send to `submit-move`, reconcile when the server echo arrives. Rollback on rejection.
 - [ ] Move log replay on rejoin.
-- [ ] Tests: types only initially, then a unit test for the reconciler.
+- [ ] Tests for the reconciler (deterministic).
 
 ### `apps/web` — battle UI
-- [ ] Enable "New Battle" CTA on the home page (currently a disabled placeholder).
-- [ ] Room route `/r/[code]`.
-- [ ] Lobby state: player list, host's Start button, share link with copy button.
-- [ ] Lobby settings panel (host-editable, locks at Start): show conflicts, auto-check, hints availability. Read-only for non-hosts.
-- [ ] Mid-game join handling: battle = "this game has already started" screen with "Start a new one" option.
-- [ ] In-game: own board + opponents' progress bars (sidebar or top strip).
-- [ ] Battle winner overlay: announces winner, dismissible, losers can continue solving per [DECISIONS #0008](DECISIONS.md).
-- [ ] Play-again flow (shows immediately for winner, after finish/quit for losers).
-- [ ] Username picker (with localStorage remember-last).
+- [x] Home page sections: Solo / Battle a friend / Have a code? Battle CTAs call `create-room`, code input calls `join-room`.
+- [x] `lib/supabase.ts` — `ensureAuthClient()` signs in anonymously and persists the session so refreshes preserve `auth.uid()`.
+- [x] `lib/rooms.ts` — `createRoom`, `joinRoom`, `fetchRoomPlayers`, `subscribeToRoomPlayers` with typed errors.
+- [x] `lib/username.ts` — localStorage-backed handle with random `adj-noun-NN` default.
+- [x] `/r/[code]` lobby route: room code display, copy share link button, player list with realtime updates, rename (local), error states (not found / full / over / in progress).
+- [ ] Host "Start" button — wires up `start-game` Edge Function. Disabled when fewer than 2 players in battle mode.
+- [ ] Lobby settings panel (host-editable, locks at Start): show conflicts, auto-check, hints availability.
+- [ ] Battle game view: own board + opponent progress bars (sidebar or top strip). Reuses `SudokuBoard` + `NumberPad`.
+- [ ] Server-broadcast Win overlay (announces winner; dismissible; losers can continue solving per [DECISIONS #0008](DECISIONS.md)).
+- [ ] Play-again flow.
 
 ### Testing
 - [ ] Two-browser manual test: both join, both play, one finishes, winner declared correctly.
 - [ ] Race-condition test: both submit a completing move within milliseconds — exactly one wins.
-- [ ] Playwright two-context smoke (Phase 3 explicitly requires this for coop; nice to start the harness in Phase 2).
+- [ ] Playwright two-context smoke ([DECISIONS #0013](DECISIONS.md)) — the harness lands here so Phase 3 inherits it.
 
 ---
 

@@ -1,0 +1,19 @@
+/**
+ * CORS for browser callers. Every public Edge Function should reply OK to
+ * preflight and echo the headers back on the real response.
+ *
+ * Tightened to specific origins in production once we have a final domain.
+ */
+export const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+export function handlePreflight(req: Request): Response | null {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+  return null;
+}

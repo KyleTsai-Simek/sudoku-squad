@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Difficulty } from '@sudoku-squad/core';
 import { getTierCounts, pickRandomUnsolved } from '@/lib/pick-puzzle';
+import { createRoom, joinRoom } from '@/lib/rooms';
+import { getOrCreateUsername } from '@/lib/username';
 
 interface TierState {
   total: number;
@@ -22,7 +24,11 @@ const TIER_BLURB: Record<Difficulty, string> = {
 export function HomeClient() {
   const router = useRouter();
   const [counts, setCounts] = useState<Record<Difficulty, TierState> | null>(null);
-  const [loadingTier, setLoadingTier] = useState<Difficulty | null>(null);
+  const [loadingSolo, setLoadingSolo] = useState<Difficulty | null>(null);
+  const [loadingBattle, setLoadingBattle] = useState<Difficulty | null>(null);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinPending, setJoinPending] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,11 +41,40 @@ export function HomeClient() {
     };
   }, []);
 
-  async function startNew(tier: Difficulty) {
-    setLoadingTier(tier);
+  async function startSolo(tier: Difficulty) {
+    setLoadingSolo(tier);
     const code = await pickRandomUnsolved(tier);
-    setLoadingTier(null);
+    setLoadingSolo(null);
     if (code) router.push(`/play/${code}`);
+  }
+
+  async function startBattle(tier: Difficulty) {
+    setLoadingBattle(tier);
+    const username = getOrCreateUsername();
+    const res = await createRoom({ mode: 'battle', difficulty: tier, username });
+    setLoadingBattle(null);
+    if (res.ok) {
+      router.push(`/r/${res.value.room_code}`);
+    } else {
+      // Surface the error inline. For V1 we just alert; refine later.
+      alert(`Could not start battle: ${res.error.message}`);
+    }
+  }
+
+  async function onJoin(e: FormEvent) {
+    e.preventDefault();
+    const code = joinCode.trim().toLowerCase();
+    if (!code) return;
+    setJoinPending(true);
+    setJoinError(null);
+    const username = getOrCreateUsername();
+    const res = await joinRoom({ code, username });
+    setJoinPending(false);
+    if (res.ok) {
+      router.push(`/r/${res.value.room_code}`);
+      return;
+    }
+    setJoinError(roomErrorMessage(res.error.code, res.error.message));
   }
 
   return (
@@ -51,75 +86,139 @@ export function HomeClient() {
         </p>
       </div>
 
-      <section className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-        {TIERS.map((tier) => {
-          const t = counts?.[tier];
-          const total = t?.total ?? 0;
-          const unsolved = t?.unsolved ?? 0;
-          const empty = total === 0;
-          const allDone = total > 0 && unsolved === 0;
-          const isLoading = loadingTier === tier;
-
-          return (
-            <button
-              key={tier}
-              type="button"
-              onClick={() => startNew(tier)}
-              disabled={empty || isLoading}
-              className={
-                'group flex flex-col items-start gap-1 rounded-xl border px-5 py-4 text-left transition-colors ' +
-                (empty
-                  ? 'cursor-not-allowed border-dashed border-stone-300 text-stone-400'
-                  : 'border-stone-900 bg-stone-900 text-white hover:bg-stone-800 disabled:opacity-60')
-              }
-            >
-              <span className="text-xs font-medium uppercase tracking-widest">
-                {tier}
-              </span>
-              <span className="text-lg font-semibold">
-                {empty
-                  ? 'Coming soon'
-                  : isLoading
-                    ? 'Picking…'
-                    : allDone
-                      ? `Replay (${total})`
-                      : 'New game'}
-              </span>
-              <span
+      <section className="w-full">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-500">
+          Solo
+        </h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {TIERS.map((tier) => {
+            const t = counts?.[tier];
+            const total = t?.total ?? 0;
+            const unsolved = t?.unsolved ?? 0;
+            const empty = total === 0;
+            const allDone = total > 0 && unsolved === 0;
+            const isLoading = loadingSolo === tier;
+            return (
+              <button
+                key={tier}
+                type="button"
+                onClick={() => startSolo(tier)}
+                disabled={empty || isLoading}
                 className={
-                  'text-xs ' +
-                  (empty ? 'text-stone-400' : 'text-stone-300 group-hover:text-stone-200')
+                  'group flex flex-col items-start gap-1 rounded-xl border px-5 py-4 text-left transition-colors ' +
+                  (empty
+                    ? 'cursor-not-allowed border-dashed border-stone-300 text-stone-400'
+                    : 'border-stone-900 bg-stone-900 text-white hover:bg-stone-800 disabled:opacity-60')
                 }
               >
-                {empty
-                  ? '—'
-                  : `${unsolved} unsolved · ${total} total · ${TIER_BLURB[tier]}`}
-              </span>
-            </button>
-          );
-        })}
+                <span className="text-xs font-medium uppercase tracking-widest">
+                  {tier}
+                </span>
+                <span className="text-lg font-semibold">
+                  {empty
+                    ? 'Coming soon'
+                    : isLoading
+                      ? 'Picking…'
+                      : allDone
+                        ? `Replay (${total})`
+                        : 'New game'}
+                </span>
+                <span
+                  className={
+                    'text-xs ' +
+                    (empty ? 'text-stone-400' : 'text-stone-300 group-hover:text-stone-200')
+                  }
+                >
+                  {empty
+                    ? '—'
+                    : `${unsolved} unsolved · ${total} total · ${TIER_BLURB[tier]}`}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
-      <div className="flex w-full gap-3">
-        <button
-          type="button"
-          disabled
-          className="flex-1 cursor-not-allowed rounded-xl border border-dashed border-stone-300 px-5 py-4 text-center text-sm font-medium text-stone-400"
-          title="Phase 2"
-        >
-          Battle (soon)
-        </button>
-        <button
-          type="button"
-          disabled
-          className="flex-1 cursor-not-allowed rounded-xl border border-dashed border-stone-300 px-5 py-4 text-center text-sm font-medium text-stone-400"
-          title="Phase 3"
-        >
-          Coop (soon)
-        </button>
-      </div>
+      <section className="w-full">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-500">
+          Battle a friend
+        </h2>
+        <div className="grid grid-cols-3 gap-3">
+          {(['easy', 'medium', 'hard'] as const).map((tier) => {
+            const isLoading = loadingBattle === tier;
+            return (
+              <button
+                key={tier}
+                type="button"
+                onClick={() => startBattle(tier)}
+                disabled={isLoading}
+                className="flex flex-col items-start gap-1 rounded-xl border border-amber-500 bg-white px-4 py-3 text-left hover:bg-amber-50 disabled:opacity-60"
+              >
+                <span className="text-xs font-medium uppercase tracking-widest text-amber-700">
+                  {tier}
+                </span>
+                <span className="text-sm font-semibold text-stone-900">
+                  {isLoading ? 'Creating…' : 'Start battle'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-xs text-stone-500">
+          Create a room and share the link — first to finish wins. Coop coming next.
+        </p>
+      </section>
 
-      <p className="text-xs text-stone-400">Phase 1 in progress · single-player web</p>
+      <section className="w-full">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-500">
+          Have a code?
+        </h2>
+        <form onSubmit={onJoin} className="flex gap-2">
+          <input
+            type="text"
+            inputMode="text"
+            autoCapitalize="off"
+            autoComplete="off"
+            spellCheck={false}
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value)}
+            placeholder="6-char room code"
+            maxLength={6}
+            className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-mono lowercase tracking-widest text-stone-900 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={joinPending || joinCode.trim().length === 0}
+            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
+          >
+            {joinPending ? 'Joining…' : 'Join'}
+          </button>
+        </form>
+        {joinError ? (
+          <p className="mt-2 text-xs text-red-600">{joinError}</p>
+        ) : null}
+      </section>
+
+      <p className="text-xs text-stone-400">Phase 2 in progress · battle mode</p>
     </main>
   );
+}
+
+function roomErrorMessage(code: string, fallback: string): string {
+  switch (code) {
+    case 'not_found':
+      return "No room with that code. Double-check the URL.";
+    case 'room_in_progress':
+      return 'This battle has already started.';
+    case 'room_finished':
+      return 'This room is already over.';
+    case 'room_full':
+      return 'This room is full.';
+    case 'unauthenticated':
+      return "Couldn't sign in. Try refreshing.";
+    case 'no_supabase':
+      return 'Multiplayer is not available in this environment.';
+    default:
+      return fallback;
+  }
 }

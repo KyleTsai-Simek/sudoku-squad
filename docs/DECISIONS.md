@@ -17,6 +17,70 @@ Format:
 
 ---
 
+## 0025 — Disconnect grace period: 2 minutes
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** The original ARCHITECTURE.md plan was 60 s. That's tight on mobile networks where a tunnel pop, screen lock, or 5G→LTE handoff can take ~30 s on its own.
+
+**Decision.** A player has **120 s (2 minutes)** from disconnect to rejoin and pick up where they left off without their seat being freed. After that:
+- In **battle**, their seat is freed; the game continues for everyone else.
+- In **coop**, their seat is freed; their cursor disappears; the room continues.
+
+Their move log is preserved either way — rejoining within the same room code restores their state.
+
+**Alternatives considered.**
+- **60 s.** Reasonable on desktop home wifi, frustrating on mobile.
+- **5 minutes.** Generous, but holds an empty seat for far too long if someone genuinely abandoned.
+- **No grace period (instant drop).** Simplest, but a single tunnel pop drops a player out of a tight battle.
+
+**Consequences.** The lobby UI shows a "reconnecting…" badge during the grace window. The cleanup runs as a server-side timer (or on the next move from any other player — easiest is the latter). When the timer fires, server broadcasts a `player_left` event on the room channel.
+
+---
+
+## 0024 — Mid-game join policy: battle locks at Start, coop is open
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** Need to decide what happens when someone clicks a battle/coop room link after the game has already started. Letting joins continue mid-race is unfair (a fresh player has an unbeatable head start in battle). Letting them join mid-coop is fine and often desirable.
+
+**Decision.**
+- **Battle.** Once `rooms.status` transitions to `'playing'`, `join_room` refuses new joiners with a `room_in_progress` error. The client renders a "this battle has already started — start a new one" screen with a "New game" CTA.
+- **Coop.** Joining is allowed at any time during `'lobby'` or `'playing'`. The new player picks up the current board state on join.
+- **Finished rooms.** Both modes refuse joins with `room_finished`. The client offers "Play again" (creates a fresh room with the same players invited).
+
+**Alternatives considered.**
+- **Lock both at Start.** Symmetric and simple, but loses the "drop in to help" coop feel.
+- **Open both, with battle starting newcomers from scratch.** Newcomer can't catch up; effectively eliminated before they start typing. Worse UX than refusing.
+- **Battle: allow late join, count toward "didn't win" but no penalty.** Adds a third loser type and complicates the winner overlay.
+
+**Consequences.**
+- `join_room` Edge Function checks `(room.status, room.mode)` and returns one of three states: `ok` / `room_in_progress` / `room_finished`.
+- The lobby route renders three branches off this state. Lobby copy is mode-aware.
+- "Play again" creates a *new* room — preserves the move log of the old one for any future stats feature.
+
+---
+
+## 0023 — Edge Functions (not SQL RPCs) for multiplayer endpoints
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** Multiplayer needs `create_room`, `join_room`, `submit_move`, `check_completion`, `hint`. Each is a small bit of server-authoritative logic that validates inputs, mutates state across multiple tables, and (for `submit_move`) broadcasts on a Realtime channel. SQL RPCs (PL/pgSQL functions exposed via PostgREST) are the lighter alternative.
+
+**Decision.** All multiplayer endpoints are **TypeScript Edge Functions** in `supabase/functions/`. Each function uses the service-role key to bypass RLS and is the sole authority for its mutation. PostgREST and RPCs (`sp_get_puzzle`) keep their narrow role: simple reads / single-player solution delivery.
+
+**Alternatives considered.**
+- **SQL RPCs (PL/pgSQL).** Smaller stack, faster cold start (no Deno). But: the move-validation logic (compute correctness without leaking solution to the client; check completion; broadcast on a Realtime channel) is harder to express in PL/pgSQL than TS. Test setup is also worse — no obvious unit-test path.
+- **Mixed: simple ones as RPCs, complex ones as Edge Functions.** Two patterns to remember. Cost of consistency > cost of one extra Deno cold start.
+- **Roll our own Node server.** Most flexibility, defeats the point of choosing Supabase.
+
+**Consequences.**
+- One toolchain (Deno + `supabase functions serve` for local dev, `supabase functions deploy` for ship). One auth pattern (functions take the user's anon JWT, derive `auth.uid()` from it server-side; service-role client for the actual mutation).
+- Cold starts on Supabase Edge Functions are ~150–250 ms; acceptable for the cadence of game events (`submit_move` is hot enough to stay warm; `create_room` only runs once per game).
+- All five functions live under `supabase/functions/` and share a `_shared/` utilities module (Supabase client constructors, error shape, etc.).
+
+---
+
 ## 0022 — Single-player gets the solution; multiplayer never does
 **Date:** 2026-05-22
 **Status:** Accepted
@@ -461,26 +525,26 @@ Resolved items get moved into the log above. These are still TBD. Items grouped 
 
 ## Decide before Phase 2 ships
 
-1. **Mid-game join behavior** — working assumption: battle is locked after Start, coop is open anytime. Confirm before the lobby UI ships, because it changes the lobby copy and the room URL behavior for late arrivals.
-2. **Edge Function vs. SQL RPC for `submit_move`** — TS flexibility vs. simpler stack. Leaning Edge Function (matches `create_room`/`join_room`). Decide before the first Edge Function lands.
-3. **Username profanity filter** — not needed for friend-and-family beta. Defer; revisit when a public-launch ask is real.
+1. **Username profanity filter** — not needed for friend-and-family beta. Defer; revisit when a public-launch ask is real.
 
 ## Decide during Phase 2/3
 
-4. **Battle tiebreak when no one finishes within N minutes** — needed? Threshold? Leaning "no hard time limit in V1; people quit naturally."
-5. **Host migration in coop** — automatic transfer to the longest-tenured remaining player, or require acknowledgement?
-6. **Disconnect grace period** — 60 s in ARCHITECTURE; may be too tight for mobile. Leaning 2 minutes.
-7. **Mobile cursor visualization in coop** — phones have no persistent cursor. Working assumption: ring persists on last-tapped cell, fades after ~3 s of inactivity. Validate during coop UI work.
-8. **`board_snapshots` table** — add now for fast rejoin or wait until measurable problem? Leaning wait.
+2. **Battle tiebreak when no one finishes within N minutes** — needed? Threshold? Leaning "no hard time limit in V1; people quit naturally."
+3. **Host migration in coop** — automatic transfer to the longest-tenured remaining player, or require acknowledgement?
+4. **Mobile cursor visualization in coop** — phones have no persistent cursor. Working assumption: ring persists on last-tapped cell, fades after ~3 s of inactivity. Validate during coop UI work.
+5. **`board_snapshots` table** — add now for fast rejoin or wait until measurable problem? Leaning wait.
 
 ## Open longer-term
 
-9. **Visual identity** — color palette, typography, logo, completion celebration style. Current interim is Tailwind stone-900 + amber-200 accents (sufficient for V1 demo, not committed to). Needs a design pass before any public-facing push.
-10. **Expert tier sourcing** — the 3M Kaggle dataset has only ~100 puzzles rated > 7.0, not enough for a 2 500-row sample (per #0018). Find or generate a higher-difficulty source before re-enabling the tier.
-11. **Vercel ↔ Supabase preview environment** — preview deploys currently hit the *production* Supabase project. Fine for V1; revisit before more users.
+6. **Visual identity** — color palette, typography, logo, completion celebration style. Current interim is Tailwind stone-900 + amber-200 accents (sufficient for V1 demo, not committed to). Needs a design pass before any public-facing push.
+7. **Expert tier sourcing** — the 3M Kaggle dataset has only ~100 puzzles rated > 7.0, not enough for a 2 500-row sample (per #0018). Find or generate a higher-difficulty source before re-enabling the tier.
+8. **Vercel ↔ Supabase preview environment** — preview deploys currently hit the *production* Supabase project. Fine for V1; revisit before more users.
 
 ## Recently resolved (and where it landed)
 
+- **Edge Function vs SQL RPC for multiplayer endpoints** — resolved in #0023 (TS Edge Functions across the board).
+- **Mid-game join behavior** — resolved in #0024 (battle locks at Start, coop is open anytime, finished refuses).
+- **Disconnect grace period** — resolved in #0025 (2 minutes).
 - **Puzzle code format** — resolved in #0019 (6-char lowercase base36, deterministic from givens).
 - **Room code format** — resolved in #0021 (6-char lowercase base36, random, retried on collision).
 - **Cross-mode puzzle reference** — resolved in #0020 (`rooms.puzzle_code` FK to `puzzles.code`).

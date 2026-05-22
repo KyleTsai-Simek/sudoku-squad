@@ -271,7 +271,30 @@ The two `code` columns share a format but live in independent tables and URL nam
 
 ---
 
-## 11. Open architectural questions
+## 11. Edge Functions (Phase 2+)
+
+Per [DECISIONS.md #0023](DECISIONS.md), multiplayer mutations go through TypeScript Edge Functions, not SQL RPCs. Each function lives at `supabase/functions/<name>/`, uses the service-role client to bypass RLS, and is the authority for its mutation.
+
+| Function | Input | Output | Status |
+|---|---|---|---|
+| `create-room` | `{mode, difficulty, username}` | `{room_id, room_code, player_id, color, mode, puzzle_code}` | ✅ deployed |
+| `join-room` | `{code, username}` | `{room_id, room_code, mode, status, puzzle_code, player_id, color, is_host, rejoined}` | ✅ deployed |
+| `start-game` | `{room_id}` | `{status: 'playing', started_at}` | pending |
+| `submit-move` | `{room_id, cell, kind, value}` | `{seq, accepted: true}` (rejected → 4xx) | pending |
+| `check-completion` | `{room_id, player_id}` | `{state: 'win' | 'not_yet'}` | pending |
+| `hint` | `{room_id, player_id, cell}` | `{value}` | pending |
+
+Shared helpers in `supabase/functions/_shared/`:
+- `cors.ts` — preflight + headers
+- `errors.ts` — typed error response shape `{ error: { code, message } }`
+- `supabase.ts` — `serviceClient()` (admin), `callerClient(authHeader)` (JWT-bound), `getCallerUserId(req)`
+- `room-code.ts` — random 6-char base36 generator + color palette helpers
+
+The web client invokes via `supabase.functions.invoke(name, { body })` after `ensureAuthClient()` has signed the visitor in anonymously.
+
+---
+
+## 12. Open architectural questions
 
 See the live list in [DECISIONS.md](DECISIONS.md) → "Open questions (live)". The biggest ones blocking Phase 2:
 
