@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createBoard, isFilled } from './board';
+import { createBoard, digitCounts, isFilled } from './board';
+import { applyMove } from '../game/reducer';
 
 const EMPTY_GIVENS = Array<number>(81).fill(0);
 const SOLVED_BOARD: number[] = [
@@ -45,5 +46,37 @@ describe('isFilled', () => {
   it('is false for an empty board', () => {
     const board = createBoard('test', EMPTY_GIVENS);
     expect(isFilled(board)).toBe(false);
+  });
+});
+
+describe('digitCounts', () => {
+  it('is empty for an empty board', () => {
+    const board = createBoard('test', EMPTY_GIVENS);
+    const counts = digitCounts(board);
+    expect(counts.size).toBe(0);
+  });
+
+  it('counts each digit 1..9 exactly 9 times on a solved board', () => {
+    const board = createBoard('test', SOLVED_BOARD);
+    const counts = digitCounts(board);
+    for (let v = 1; v <= 9; v++) {
+      expect(counts.get(v as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9)).toBe(9);
+    }
+  });
+
+  it('combines givens and player values', () => {
+    let board = createBoard('test', EMPTY_GIVENS);
+    board = applyMove(board, { kind: 'value', cell: 0, value: 5 });
+    board = applyMove(board, { kind: 'value', cell: 1, value: 5 });
+    const counts = digitCounts(board);
+    expect(counts.get(5)).toBe(2);
+    expect(counts.has(7)).toBe(false);
+  });
+
+  it("doesn't count notes, only values", () => {
+    let board = createBoard('test', EMPTY_GIVENS);
+    board = applyMove(board, { kind: 'note_toggle', cell: 0, value: 5 });
+    const counts = digitCounts(board);
+    expect(counts.size).toBe(0);
   });
 });

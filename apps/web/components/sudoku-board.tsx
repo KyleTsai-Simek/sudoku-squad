@@ -1,6 +1,11 @@
 'use client';
 
-import { notesToArray, unitsFor, cellValue as effectiveCellValue } from '@sudoku-squad/core';
+import {
+  notesToArray,
+  unitsFor,
+  cellValue as effectiveCellValue,
+  digitCounts,
+} from '@sudoku-squad/core';
 import type { CellIndex } from '@sudoku-squad/core';
 import { useGameStore } from '@/lib/game-store';
 
@@ -21,6 +26,11 @@ export function SudokuBoard() {
 
   const selUnits = selected !== null ? unitsFor(selected) : null;
   const selValue = selected !== null ? effectiveCellValue(board.cells[selected]!) : null;
+  // Digits whose 9 instances are all placed. When the selected cell holds one
+  // of these, the same-value highlight goes soft green instead of amber — see
+  // QoL change #2.
+  const counts = digitCounts(board);
+  const selectedDigitComplete = selValue !== null && (counts.get(selValue) ?? 0) === 9;
 
   return (
     <div
@@ -54,12 +64,14 @@ export function SudokuBoard() {
         const lastRow = row === 8 ? 'border-b-0' : '';
 
         // Pick a single background class so Tailwind's stylesheet order doesn't
-        // let `bg-white` shadow conditional overrides.
+        // let `bg-white` shadow conditional overrides. The selected cell and
+        // same-value cells go SOFT GREEN instead of amber when the selected
+        // digit is complete (all 9 instances placed) — QoL change.
         let bg = 'bg-white';
         if (isConflict && isSelected) bg = 'bg-red-200';
-        else if (isSelected) bg = 'bg-amber-200';
+        else if (isSelected) bg = selectedDigitComplete ? 'bg-emerald-200' : 'bg-amber-200';
         else if (isConflict) bg = 'bg-red-100';
-        else if (sameValue) bg = 'bg-amber-100';
+        else if (sameValue) bg = selectedDigitComplete ? 'bg-emerald-100' : 'bg-amber-100';
         else if (inSelectedUnit) bg = 'bg-amber-50';
 
         // Same dance for text color.

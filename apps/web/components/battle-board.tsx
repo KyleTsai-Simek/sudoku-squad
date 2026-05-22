@@ -1,6 +1,11 @@
 'use client';
 
-import { notesToArray, unitsFor, cellValue as effectiveCellValue } from '@sudoku-squad/core';
+import {
+  notesToArray,
+  unitsFor,
+  cellValue as effectiveCellValue,
+  digitCounts,
+} from '@sudoku-squad/core';
 import type { CellIndex } from '@sudoku-squad/core';
 import { useBattleStore } from '@/lib/battle-store';
 
@@ -28,6 +33,9 @@ export function BattleBoard() {
 
   const selUnits = selected !== null ? unitsFor(selected) : null;
   const selValue = selected !== null ? effectiveCellValue(board.cells[selected]!) : null;
+  // See sudoku-board.tsx for the rationale on the completed-digit green tint.
+  const counts = digitCounts(board);
+  const selectedDigitComplete = selValue !== null && (counts.get(selValue) ?? 0) === 9;
 
   return (
     <div
@@ -59,9 +67,9 @@ export function BattleBoard() {
 
         let bg = 'bg-white';
         if (isConflict && isSelected) bg = 'bg-red-200';
-        else if (isSelected) bg = 'bg-amber-200';
+        else if (isSelected) bg = selectedDigitComplete ? 'bg-emerald-200' : 'bg-amber-200';
         else if (isConflict) bg = 'bg-red-100';
-        else if (sameValue) bg = 'bg-amber-100';
+        else if (sameValue) bg = selectedDigitComplete ? 'bg-emerald-100' : 'bg-amber-100';
         else if (inSelectedUnit) bg = 'bg-amber-50';
 
         let textColor = 'text-stone-900';

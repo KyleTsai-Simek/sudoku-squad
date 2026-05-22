@@ -31,3 +31,22 @@ export function isFilled(board: BoardState): boolean {
 export function cellValue(cell: Cell): CellValue | null {
   return cell.given ?? cell.value;
 }
+
+/**
+ * Count how many cells hold each digit 1..9 (combining givens + player values).
+ * A digit with count === 9 is considered "complete" — every instance of that
+ * digit has been placed somewhere on the board. The UI uses this for soft-green
+ * tinting and to flag completed buttons on the number pad.
+ *
+ * Returns a Map; callers that want just the completed set can do
+ * `new Set([...counts].filter(([, n]) => n === 9).map(([v]) => v))`.
+ */
+export function digitCounts(board: BoardState): Map<CellValue, number> {
+  const out = new Map<CellValue, number>();
+  for (const cell of board.cells) {
+    const v = cellValue(cell);
+    if (v === null) continue;
+    out.set(v, (out.get(v) ?? 0) + 1);
+  }
+  return out;
+}
