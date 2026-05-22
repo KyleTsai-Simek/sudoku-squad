@@ -9,10 +9,11 @@ interface Shortcut {
 
 const SHORTCUTS: Shortcut[] = [
   { keys: ['↑', '↓', '←', '→'], description: 'Move selection' },
+  { keys: ['Tab'], description: 'Move right (wraps in row)' },
   { keys: ['1', '–', '9'], description: 'Enter a value' },
-  { keys: ['Shift', '+', '1', '–', '9'], description: 'Toggle a pencil-mark (any mode)' },
-  { keys: ['0', '/', 'Backspace'], description: 'Clear the cell' },
   { keys: ['Space'], description: 'Toggle notes mode' },
+  { keys: ['Shift', '+', '1', '–', '9'], description: 'Add a note' },
+  { keys: ['0', '/', 'Backspace'], description: 'Clear the cell' },
   { keys: ['⌘', '/', 'Ctrl', '+', 'Z'], description: 'Undo' },
   { keys: ['⌘', '/', 'Ctrl', '+', 'Shift', '+', 'Z'], description: 'Redo' },
   { keys: ['?'], description: 'Show this overlay' },
@@ -84,15 +85,11 @@ export function KeyboardShortcutsOverlay() {
             Done
           </button>
         </div>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-sm">
+        <div className="divide-y divide-stone-100 text-sm">
           {SHORTCUTS.map((s, i) => (
             <ShortcutRow key={i} keys={s.keys} description={s.description} />
           ))}
-        </dl>
-        <p className="mt-4 text-xs text-stone-500">
-          Tip: tapping <Kbd>Space</Kbd> flips between Normal and Notes mode. Use{' '}
-          <Kbd>Shift</Kbd>+digit when you only want to drop a single pencil-mark.
-        </p>
+        </div>
       </div>
     </div>
   );
@@ -100,8 +97,8 @@ export function KeyboardShortcutsOverlay() {
 
 function ShortcutRow({ keys, description }: { keys: string[]; description: string }) {
   return (
-    <>
-      <dt className="flex flex-wrap items-center gap-1">
+    <div className="flex items-center gap-4 py-2.5">
+      <div className="flex min-w-[8.5rem] flex-wrap items-center gap-1">
         {keys.map((k, i) =>
           k === '+' || k === '/' || k === '–' ? (
             <span key={i} className="text-stone-400">
@@ -111,9 +108,9 @@ function ShortcutRow({ keys, description }: { keys: string[]; description: strin
             <Kbd key={i}>{k}</Kbd>
           ),
         )}
-      </dt>
-      <dd className="text-stone-700">{description}</dd>
-    </>
+      </div>
+      <div className="text-stone-700">{description}</div>
+    </div>
   );
 }
 
