@@ -23,22 +23,24 @@ import { readCsvRows } from './csv';
 import { puzzleCodeFor } from './code';
 import { hasUniqueSolution, solve } from './solver';
 
-type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
+type Difficulty = 'medium' | 'hard' | 'expert' | 'killer';
 
-const TIERS: Difficulty[] = ['easy', 'medium', 'hard', 'expert'];
+const TIERS: Difficulty[] = ['medium', 'hard', 'expert', 'killer'];
 
 /**
  * Rating bands (half-open: [lo, hi)) applied to the 3M dataset's numeric
- * `difficulty` column. Updated 2026-05-22 (afternoon) — old easy [0, 1.5)
- * skewed too hard in practice because the band included rating-1.0-to-1.4
- * puzzles that solved like medium. Narrowed easy and shifted the slack
- * into medium/hard. See docs/DECISIONS.md #0032 (supersedes #0031).
+ * `difficulty` column. Updated 2026-05-22 (evening) — after the rename
+ * (#0034) the radcliffe-sourced tiers shifted up one level. What used to
+ * land as easy/medium/hard/expert now lands as medium/hard/expert/killer.
+ * The bands themselves are unchanged from #0032 (same rating cuts), only
+ * the tier label changed. warmup + easy are sourced separately via QQWing
+ * (#0033) and aren't part of this radcliffe ingest.
  */
 const RATING_BANDS: ReadonlyArray<{ tier: Difficulty; lo: number; hi: number }> = [
-  { tier: 'easy',   lo: 0.0,  hi: 0.75 },
-  { tier: 'medium', lo: 0.75, hi: 2.5 },
-  { tier: 'hard',   lo: 2.5,  hi: 5.0 },
-  { tier: 'expert', lo: 5.0,  hi: 7.0 },
+  { tier: 'medium', lo: 0.0,  hi: 0.75 },
+  { tier: 'hard',   lo: 0.75, hi: 2.5 },
+  { tier: 'expert', lo: 2.5,  hi: 5.0 },
+  { tier: 'killer', lo: 5.0,  hi: 7.0 },
 ];
 
 /**
@@ -52,14 +54,15 @@ const RATING_BANDS: ReadonlyArray<{ tier: Difficulty; lo: number; hi: number }> 
  * and leave the bucket short rather than fail.
  */
 const TARGET_PER_CELL: Record<Difficulty, Record<number, number>> = {
-  // Stronger lean toward MORE clues. Mode at 27.
-  easy:   { 23: 50,  24: 100, 25: 250, 26: 600, 27: 1000, 28: 500 },
-  // Roughly balanced around 24-25.
-  medium: { 22: 100, 23: 400, 24: 700, 25: 700, 26: 450,  27: 150 },
-  // Lean toward FEWER clues. Mode at 23.
-  hard:   { 21: 150, 22: 750, 23: 950, 24: 500, 25: 125,  26: 25 },
+  // Stronger lean toward MORE clues. Mode at 27. (Was 'easy' pre-rename.)
+  medium: { 23: 50,  24: 100, 25: 250, 26: 600, 27: 1000, 28: 500 },
+  // Roughly balanced around 24-25. (Was 'medium' pre-rename.)
+  hard:   { 22: 100, 23: 400, 24: 700, 25: 700, 26: 450,  27: 150 },
+  // Lean toward FEWER clues. Mode at 23. (Was 'hard' pre-rename.)
+  expert: { 21: 150, 22: 750, 23: 950, 24: 500, 25: 125,  26: 25 },
   // Strong lean toward fewest clues. Take all available at clue counts 20-21.
-  expert: { 20: 4,   21: 87,  22: 800, 23: 1200, 24: 350, 25: 50, 26: 9 },
+  // (Was 'expert' pre-rename; now the hidden 'killer' tier.)
+  killer: { 20: 4,   21: 87,  22: 800, 23: 1200, 24: 350, 25: 50, 26: 9 },
 };
 
 const BATCH_SIZE = 500;
@@ -135,14 +138,16 @@ function countClues(givens: ReadonlyArray<number>): number {
 
 /**
  * Difficulty by clue count is the standard heuristic when the dataset lacks
- * a rating column. Bands are conservative and match how most public packs
- * (and the Norvig writeup) describe difficulty.
+ * a rating column. After the #0034 rename, the radcliffe ingest tier set is
+ * medium/hard/expert/killer (no longer easy through expert) — what used to
+ * be labeled easy here is now medium, etc. The shift is purely nominal; the
+ * clue thresholds are unchanged.
  */
 function difficultyFromClues(clues: number): Difficulty {
-  if (clues >= 36) return 'easy';
-  if (clues >= 30) return 'medium';
-  if (clues >= 26) return 'hard';
-  return 'expert';
+  if (clues >= 36) return 'medium';
+  if (clues >= 30) return 'hard';
+  if (clues >= 26) return 'expert';
+  return 'killer';
 }
 
 /** Classify by numeric rating using the current RATING_BANDS. Returns null
@@ -154,14 +159,17 @@ function tierForRating(n: number): Difficulty | null {
   return null;
 }
 
-/** Map a free-form difficulty label from the dataset to one of our four tiers. */
+/** Map a free-form difficulty label from the dataset to one of our radcliffe
+ *  tiers. Post-rename, the radcliffe set is medium/hard/expert/killer; this
+ *  function therefore maps a CSV's 'easy' to our 'medium', etc. — the
+ *  radcliffe source's "easy" is no longer the easiest tier we ship. */
 function normalizeDifficulty(label: string): Difficulty | null {
   const v = label.trim().toLowerCase();
   if (!v) return null;
-  if (v === 'easy' || v === 'simple' || v === '1') return 'easy';
-  if (v === 'medium' || v === 'moderate' || v === '2') return 'medium';
-  if (v === 'hard' || v === 'difficult' || v === '3') return 'hard';
-  if (v === 'expert' || v === 'evil' || v === 'insane' || v === '4') return 'expert';
+  if (v === 'easy' || v === 'simple' || v === '1') return 'medium';
+  if (v === 'medium' || v === 'moderate' || v === '2') return 'hard';
+  if (v === 'hard' || v === 'difficult' || v === '3') return 'expert';
+  if (v === 'expert' || v === 'evil' || v === 'insane' || v === '4') return 'killer';
   // Numeric rating: use the current bands.
   const n = Number(v);
   if (Number.isFinite(n)) return tierForRating(n);
@@ -317,7 +325,7 @@ async function main(): Promise<void> {
   }
 
   const counters = buildCellCounters();
-  const buckets: Record<Difficulty, SampledPuzzle[]> = { easy: [], medium: [], hard: [], expert: [] };
+  const buckets: Record<Difficulty, SampledPuzzle[]> = { medium: [], hard: [], expert: [], killer: [] };
   const rejects = { parse: 0, nonUnique: 0, mismatch: 0 };
   let scanned = 0;
 

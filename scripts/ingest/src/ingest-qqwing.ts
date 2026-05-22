@@ -29,6 +29,10 @@ import { hasUniqueSolution, solve } from './solver';
 
 const SIMPLE = 1; // qqwing.Difficulty.SIMPLE
 
+/** Tiers produced by the QQWing ingest. After the #0034 rename: warmup
+ *  unchanged; what was 'beginner' is now 'easy'. */
+type QqwingTier = 'warmup' | 'easy';
+
 interface Args {
   dryRun: boolean;
   count: number;
@@ -49,12 +53,12 @@ function parseArgs(): Args {
 // clues 29-34 → beginner. Within each tier the bias keeps the per-clue-count
 // shape monotonic — warmup leans toward 38-40 (almost-done puzzles), beginner
 // leans toward 29-30 (still trivial, but with some hunting).
-const TARGET_PER_CELL: Record<'warmup' | 'beginner', Record<number, number>> = {
+const TARGET_PER_CELL: Record<QqwingTier, Record<number, number>> = {
   warmup:   { 35: 100, 36: 200, 37: 300, 38: 500, 39: 700, 40: 700 }, // sum 2500
-  beginner: { 29: 700, 30: 700, 31: 400, 32: 300, 33: 250, 34: 150 }, // sum 2500
+  easy: { 29: 700, 30: 700, 31: 400, 32: 300, 33: 250, 34: 150 }, // sum 2500
 };
 
-function tierTotal(tier: 'warmup' | 'beginner'): number {
+function tierTotal(tier: QqwingTier): number {
   return Object.values(TARGET_PER_CELL[tier]).reduce((a, b) => a + b, 0);
 }
 
@@ -129,21 +133,21 @@ interface CellState {
   target: number;
 }
 
-function buildCounters(): Record<'warmup' | 'beginner', Map<number, CellState>> {
+function buildCounters(): Record<QqwingTier, Map<number, CellState>> {
   return {
     warmup: new Map(Object.entries(TARGET_PER_CELL.warmup).map(([c, t]) => [Number(c), { filled: 0, target: t }])),
-    beginner: new Map(Object.entries(TARGET_PER_CELL.beginner).map(([c, t]) => [Number(c), { filled: 0, target: t }])),
+    easy: new Map(Object.entries(TARGET_PER_CELL.easy).map(([c, t]) => [Number(c), { filled: 0, target: t }])),
   };
 }
 
 /** Pick a (tier, clues) cell that still has remaining target, weighted by
  *  remaining capacity. Returns null when every cell is full. */
-function pickCell(counters: Record<'warmup' | 'beginner', Map<number, CellState>>):
-  | { tier: 'warmup' | 'beginner'; clues: number }
+function pickCell(counters: Record<QqwingTier, Map<number, CellState>>):
+  | { tier: QqwingTier; clues: number }
   | null {
-  const open: Array<{ tier: 'warmup' | 'beginner'; clues: number; remaining: number }> = [];
+  const open: Array<{ tier: QqwingTier; clues: number; remaining: number }> = [];
   let total = 0;
-  for (const tier of ['warmup', 'beginner'] as const) {
+  for (const tier of ['warmup', 'easy'] as const) {
     for (const [c, s] of counters[tier]) {
       const remaining = s.target - s.filled;
       if (remaining > 0) {
@@ -163,10 +167,10 @@ function pickCell(counters: Record<'warmup' | 'beginner', Map<number, CellState>
 
 async function main(): Promise<void> {
   const args = parseArgs();
-  const overallTarget = args.count > 0 && args.count !== 5000 ? args.count : tierTotal('warmup') + tierTotal('beginner');
+  const overallTarget = args.count > 0 && args.count !== 5000 ? args.count : tierTotal('warmup') + tierTotal('easy');
   console.log(`Generating naked-singles-only puzzles via QQWing (target ${overallTarget}) ...`);
   console.log('Per-cell targets:');
-  for (const tier of ['warmup', 'beginner'] as const) {
+  for (const tier of ['warmup', 'easy'] as const) {
     const parts = Object.entries(TARGET_PER_CELL[tier]).map(([c, n]) => `${c}c=${n}`).join(' ');
     console.log(`  ${tier.padEnd(9)} ${parts}  (sum ${tierTotal(tier)})`);
   }
@@ -182,7 +186,7 @@ async function main(): Promise<void> {
 
   const counters = buildCounters();
   const rows: Array<{
-    difficulty: 'warmup' | 'beginner';
+    difficulty: QqwingTier;
     code: string;
     givens: number[];
     solution: number[];

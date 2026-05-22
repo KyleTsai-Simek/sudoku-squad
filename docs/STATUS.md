@@ -32,10 +32,12 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
   - `check-connectivity.ts` — 4 RLS sanity checks against the live project.
   - `verify-samples.ts` — verifies the bundled sample pack against the solver and the code algorithm.
 - **`supabase/migrations/`** — `0001_initial.sql` → `0011_room_players_has_returned.sql` (eleven migrations), all applied to the live project via `supabase db push --linked`. Highlights: 0006 RLS recursion fix via `is_room_member`, 0007 Realtime publications, 0008 `issued_usernames`, 0009 `player_completions` + completion RPCs, 0010 `rooms.is_public`, 0011 `room_players.has_returned`. Schema documented in [ARCHITECTURE.md §4](ARCHITECTURE.md).
-- **Live puzzle data:** **15,000 rows** in the `puzzles` table across **six tiers**:
-  - The original 10,000 sourced from `radcliffe/3-million-sudoku-puzzles-with-ratings` on Kaggle, 2,500 each in easy / medium / hard / expert. Bands: easy `[0, 0.75)`, medium `[0.75, 2.5)`, hard `[2.5, 5)`, expert `[5, 7)`. See [DECISIONS #0032](DECISIONS.md).
-  - Plus 5,000 added 2026-05-22 via local QQWing generation (npm `qqwing@1.3.4`), filtered to naked-singles-only and augmented to higher clue counts. 2,500 each in **warmup** (rating `[-10, -5)`, clues 35–40) and **beginner** (rating `[-5, 0)`, clues 29–34). See [DECISIONS #0033](DECISIONS.md).
-  - Rating medians across all tiers: warmup -7.5, beginner -2.5, easy 0.0, medium 1.7, hard 3.1, expert 5.3.
+- **Live puzzle data:** **15,000 rows** in the `puzzles` table across **six tiers** (after the #0034 shift-rename, five visible + one hidden):
+  - **warmup** (visible) — 2,500 from QQWing, rating `[-10, -5)`, clues 35–40.
+  - **easy** (visible) — 2,500 from QQWing, rating `[-5, 0)`, clues 29–34. (Was labeled "beginner" pre-rename.)
+  - **medium / hard / expert** (visible) — 7,500 from the Kaggle 3M radcliffe set, in radcliffe rating bands `[0, 0.75)` / `[0.75, 2.5)` / `[2.5, 5)`. (Was labeled easy / medium / hard pre-rename.)
+  - **killer** (hidden — not in the picker) — 2,500 from radcliffe, rating `[5, 7)`. Reserved for a future "evil mode" surface. (Was labeled "expert" pre-rename.)
+  - Rating medians: warmup -7.5, easy -2.5, medium 0.0, hard 1.7, expert 3.1, killer 5.3.
 - **`apps/web`** — Next.js 15 + React 19 + Tailwind 3.
   - Routes: `/` (home with per-tier "New game" CTAs + public-lobby list), `/play/[code]` (SP game screen), `/r/[code]` (multiplayer lobby + battle game).
   - SP components: `SudokuBoard`, `NumberPad`, `KeyboardController`, `KeyboardShortcutsOverlay`, `Timer`, `SettingsSheet`, `CompletionOverlay`, `PencilIcon`, `ActionIcons` (Eraser/Undo/Redo).

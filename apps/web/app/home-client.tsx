@@ -14,24 +14,30 @@ interface TierState {
   unsolved: number;
 }
 
-const TIERS: Difficulty[] = ['warmup', 'beginner', 'easy', 'medium', 'hard', 'expert'];
+/**
+ * Visible tiers for the solo picker. After the 2026-05-22 rename, the bank
+ * shifted up by one — what was Beginner is now Easy, etc. `killer` is the
+ * hidden top tier (present in the DB but intentionally not surfaced).
+ * See DECISIONS #0034.
+ */
+const TIERS: Difficulty[] = ['warmup', 'easy', 'medium', 'hard', 'expert'];
 
 const TIER_LABEL: Record<Difficulty, string> = {
   warmup: 'Warm-up',
-  beginner: 'Beginner',
   easy: 'Easy',
   medium: 'Medium',
   hard: 'Hard',
   expert: 'Expert',
+  killer: 'Killer', // hidden — never rendered because TIERS excludes it
 };
 
 const TIER_BLURB: Record<Difficulty, string> = {
   warmup: 'Almost done already.',
-  beginner: 'Gentle introduction.',
-  easy: 'Warm up.',
-  medium: 'Standard.',
-  hard: 'Real work.',
-  expert: 'Bring tea.',
+  easy: 'Gentle introduction.',
+  medium: 'A relaxed solve.',
+  hard: 'Standard puzzle.',
+  expert: 'Real work.',
+  killer: '—', // unused (hidden tier)
 };
 
 export function HomeClient() {

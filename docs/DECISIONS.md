@@ -17,6 +17,40 @@ Format:
 
 ---
 
+## 0034 — Shift tier labels up one, hide former-expert as `killer`
+**Date:** 2026-05-22
+**Status:** Accepted (renames the tier labels established in #0033 + #0032)
+
+**Context.** After #0033 added warmup + beginner below the radcliffe-sourced tiers, the visible tier set was warmup / beginner / easy / medium / hard / expert. Play-testing the new beginner tier confirmed it solved like what "easy" should feel like, and the old "easy" (rating 0.0 from radcliffe) felt more like a relaxed-medium. So the labels were one notch too low across the board. Shift everything up one, drop the explicit beginner label, and hide the former-expert tier behind a new internal-only `killer` name.
+
+**Decision.** Rename the puzzles.difficulty values:
+
+| Old label | New label | Where it shows |
+|---|---|---|
+| warmup | warmup | visible (UI label "Warm-up") |
+| beginner | easy | visible |
+| easy | medium | visible |
+| medium | hard | visible |
+| hard | expert | visible |
+| expert | **killer** | **hidden** (no UI button; reserved for a future "evil mode" exposure) |
+
+The `Difficulty` type in `packages/core/src/types/index.ts` keeps all six values; a new `DIFFICULTIES_VISIBLE` constant lists the five exposed in the picker. The home page reads from that constant.
+
+Migration 0013 does the rename in reverse order (`expert → killer` first so the rest can cascade without colliding), then re-installs the `CHECK (difficulty IN ('warmup','easy','medium','hard','expert','killer'))` constraint.
+
+**Alternatives considered.**
+- **Keep beginner and just relabel the radcliffe tiers.** Would have left a visible "Beginner" between "Warm-up" and "Easy" — but the QQWing beginner content IS easy by every reasonable definition, so labeling it that way is clearer.
+- **Expose `killer` in the UI under the same name.** Rejected — the word reads as a meaningful brand choice we haven't earned yet; punt on the name until we have player feedback on the harder tiers.
+- **Don't shift; rebalance content inside the existing labels.** Would require re-running both ingest pipelines with new band cuts. The shift-rename is metadata-only and reversible.
+
+**Consequences.**
+- Existing in-progress games / completion records reference puzzle codes, not difficulty labels. Unaffected.
+- Battle and coop CTAs still expose `easy / medium / hard` buttons; those now point to easier content (what used to be beginner/easy/medium). The battle smoke continues to pass.
+- The hidden `killer` tier is still solver-verified and pickable via direct URL `/play/{code}`. If a user finds a killer puzzle's code, they can play it. We just don't surface it from the picker.
+- `scripts/ingest/src/index.ts` `RATING_BANDS` now points to `medium / hard / expert / killer` (radcliffe). `ingest-qqwing.ts` now writes to `warmup / easy` (QQWing). Future re-ingest will use these names.
+
+---
+
 ## 0033 — Two easier-than-easy tiers via QQWing generation, rated in [-10, 0)
 **Date:** 2026-05-22
 **Status:** Accepted

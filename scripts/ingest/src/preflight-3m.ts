@@ -20,11 +20,15 @@ interface NewTier {
 // Proposed bands. Half-open so every rating belongs to exactly one tier.
 // Updated 2026-05-22 (afternoon pass) — old easy [0, 1.5) was still skewing too
 // hard. Narrowing easy and absorbing the slack into medium / hard.
+// Tier labels updated 2026-05-22 per #0034 (shift-up-one rename). The
+// rating bands themselves are unchanged from #0032 — only the tier label
+// pinned to each band shifted. QQWing-sourced warmup + easy don't appear
+// here (they don't come from this CSV).
 const NEW_TIERS: NewTier[] = [
-  { name: 'easy',   lo: 0,    hi: 0.75 },
-  { name: 'medium', lo: 0.75, hi: 2.5 },
-  { name: 'hard',   lo: 2.5,  hi: 5.0 },
-  { name: 'expert', lo: 5.0,  hi: 7.0 },
+  { name: 'medium', lo: 0,    hi: 0.75 },
+  { name: 'hard',   lo: 0.75, hi: 2.5 },
+  { name: 'expert', lo: 2.5,  hi: 5.0 },
+  { name: 'killer', lo: 5.0,  hi: 7.0 },
 ];
 
 function tierFor(rating: number): string | null {

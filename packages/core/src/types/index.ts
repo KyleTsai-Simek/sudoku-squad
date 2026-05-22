@@ -45,12 +45,25 @@ export type RoomId = string;
 /** Short shareable code for a multiplayer room. Format per docs/DECISIONS.md #0021. */
 export type RoomCode = string;
 
-export type Difficulty = 'warmup' | 'beginner' | 'easy' | 'medium' | 'hard' | 'expert';
+export type Difficulty = 'warmup' | 'easy' | 'medium' | 'hard' | 'expert' | 'killer';
 
-/** Ordered easiest-to-hardest. Useful for UI lists. */
+/** Ordered easiest-to-hardest. Useful for UI lists. `killer` is the hidden
+ *  top tier — present in the data and the type so the DB can hold it, but
+ *  intentionally not surfaced via the home-page picker yet. See
+ *  docs/DECISIONS.md #0034. */
 export const DIFFICULTIES_ORDERED: ReadonlyArray<Difficulty> = [
   'warmup',
-  'beginner',
+  'easy',
+  'medium',
+  'hard',
+  'expert',
+  'killer',
+];
+
+/** Difficulty tiers exposed in the UI (home-page picker, battle/coop CTAs).
+ *  Excludes `killer` which stays hidden for now. */
+export const DIFFICULTIES_VISIBLE: ReadonlyArray<Difficulty> = [
+  'warmup',
   'easy',
   'medium',
   'hard',
