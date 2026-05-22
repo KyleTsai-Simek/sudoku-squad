@@ -19,7 +19,12 @@ import type {
   MoveHistory,
   PuzzleCode,
 } from '@sudoku-squad/core';
-import { submitMove, type RoomState } from './rooms';
+import {
+  submitMove,
+  DEFAULT_ROOM_SETTINGS,
+  type RoomSettings,
+  type RoomState,
+} from './rooms';
 
 /**
  * Battle-mode local state. Like game-store.ts but:
@@ -34,16 +39,6 @@ import { submitMove, type RoomState } from './rooms';
  * loop lands when coop's LWW semantics force the issue.
  */
 
-interface BattleSettings {
-  showConflicts: boolean;
-  highlightSameValue: boolean;
-}
-
-const DEFAULT_SETTINGS: BattleSettings = {
-  showConflicts: true,
-  highlightSameValue: true,
-};
-
 interface BattleState {
   room: RoomState | null;
   puzzleCode: PuzzleCode | null;
@@ -51,15 +46,26 @@ interface BattleState {
   history: MoveHistory;
   selected: CellIndex | null;
   notesMode: boolean;
-  settings: BattleSettings;
+  settings: RoomSettings;
   conflicts: Set<CellIndex>;
+  /** Server-flagged incorrect cells when settings.autoCheck is on. */
+  incorrect: Set<CellIndex>;
   startedAt: number | null;
   finishedAt: number | null;
   ownProgressPct: number;
   lastError: string | null;
 
   // actions
-  startBattle: (room: RoomState, puzzleCode: PuzzleCode, givens: number[]) => void;
+  /** `gameStartsAt` is the absolute timestamp (ms) at which input is unlocked
+   *  — i.e. `serverStartedAt + 5000`. The elapsed display reads from this. */
+  startBattle: (
+    room: RoomState,
+    puzzleCode: PuzzleCode,
+    givens: number[],
+    settings: RoomSettings,
+    gameStartsAt: number,
+  ) => void;
+  applySettings: (settings: RoomSettings) => void;
   selectCell: (cell: CellIndex | null) => void;
   moveSelection: (dx: number, dy: number) => void;
   toggleNotesMode: () => void;
@@ -68,7 +74,6 @@ interface BattleState {
   clearCell: () => Promise<void>;
   undo: () => void;
   redo: () => void;
-  setSetting: <K extends keyof BattleSettings>(key: K, value: BattleSettings[K]) => void;
   markFinished: () => void;
 }
 
@@ -83,14 +88,15 @@ export const useBattleStore = create<BattleState>((set, get) => ({
   history: createHistory(),
   selected: null,
   notesMode: false,
-  settings: DEFAULT_SETTINGS,
+  settings: { ...DEFAULT_ROOM_SETTINGS },
   conflicts: new Set(),
+  incorrect: new Set(),
   startedAt: null,
   finishedAt: null,
   ownProgressPct: 0,
   lastError: null,
 
-  startBattle: (room, puzzleCode, givens) => {
+  startBattle: (room, puzzleCode, givens, settings, gameStartsAt) => {
     const board = createBoard(puzzleCode, givens);
     set({
       room,
@@ -99,11 +105,23 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       history: createHistory(),
       selected: null,
       notesMode: false,
-      conflicts: recomputeConflicts(board, get().settings.showConflicts),
-      startedAt: Date.now(),
+      settings,
+      conflicts: recomputeConflicts(board, settings.showConflicts),
+      incorrect: new Set(),
+      startedAt: gameStartsAt,
       finishedAt: null,
       ownProgressPct: 0,
       lastError: null,
+    });
+  },
+
+  applySettings: (settings) => {
+    const { board } = get();
+    set({
+      settings,
+      conflicts: board ? recomputeConflicts(board, settings.showConflicts) : new Set(),
+      // Clear incorrect flags when autoCheck flips off; otherwise leave them.
+      incorrect: settings.autoCheck ? get().incorrect : new Set(),
     });
   },
 
@@ -122,8 +140,10 @@ export const useBattleStore = create<BattleState>((set, get) => ({
   setNotesMode: (on) => set({ notesMode: on }),
 
   enterValue: async (value) => {
-    const { board, selected, history, room, settings, notesMode, finishedAt } = get();
+    const { board, selected, history, room, settings, notesMode, finishedAt, startedAt } = get();
     if (!board || !room || selected === null || finishedAt !== null) return;
+    // Countdown lock: startedAt is the future absolute moment input unlocks.
+    if (startedAt !== null && Date.now() < startedAt) return;
     const cell = board.cells[selected];
     if (!cell || cell.given !== null) return;
 
@@ -149,15 +169,24 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       set({ lastError: res.error.message });
       return;
     }
-    set({ ownProgressPct: res.value.progress_pct, lastError: null });
+    // Update incorrect set from server's autoCheck verdict.
+    const inc = new Set(get().incorrect);
+    if (res.value.cell_correct === true) inc.delete(move.cell);
+    if (res.value.cell_correct === false) inc.add(move.cell);
+    set({
+      ownProgressPct: res.value.progress_pct,
+      incorrect: inc,
+      lastError: null,
+    });
     if (res.value.won) {
       set({ finishedAt: Date.now() });
     }
   },
 
   clearCell: async () => {
-    const { board, selected, history, room, settings, finishedAt } = get();
+    const { board, selected, history, room, settings, finishedAt, startedAt } = get();
     if (!board || !room || selected === null || finishedAt !== null) return;
+    if (startedAt !== null && Date.now() < startedAt) return;
     const result = applyMoveWithHistory(board, history, { kind: 'clear', cell: selected });
     if (result.state === board) return;
     set({
@@ -176,7 +205,10 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       set({ lastError: res.error.message });
       return;
     }
-    set({ ownProgressPct: res.value.progress_pct, lastError: null });
+    // Cleared cells can no longer be "wrong".
+    const inc = new Set(get().incorrect);
+    inc.delete(selected);
+    set({ ownProgressPct: res.value.progress_pct, incorrect: inc, lastError: null });
   },
 
   undo: () => {
@@ -203,16 +235,6 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       history: result.history,
       conflicts: recomputeConflicts(result.state, settings.showConflicts),
     });
-  },
-
-  setSetting: (key, value) => {
-    const settings = { ...get().settings, [key]: value };
-    const { board } = get();
-    if (!board) {
-      set({ settings });
-      return;
-    }
-    set({ settings, conflicts: recomputeConflicts(board, settings.showConflicts) });
   },
 
   markFinished: () => {

@@ -6,6 +6,33 @@ import { ensureAuthClient } from './supabase';
 export type RoomMode = 'battle' | 'coop';
 export type RoomStatus = 'lobby' | 'playing' | 'finished';
 
+/** Mirrors supabase/functions/_shared/settings.ts. Keep in sync. */
+export interface RoomSettings {
+  showConflicts: boolean;
+  autoCheck: boolean;
+  highlightSameValue: boolean;
+}
+
+export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
+  showConflicts: true,
+  autoCheck: false,
+  highlightSameValue: true,
+};
+
+export function normalizeRoomSettings(input: unknown): RoomSettings {
+  if (!input || typeof input !== 'object') return { ...DEFAULT_ROOM_SETTINGS };
+  const i = input as Record<string, unknown>;
+  return {
+    showConflicts:
+      typeof i.showConflicts === 'boolean' ? i.showConflicts : DEFAULT_ROOM_SETTINGS.showConflicts,
+    autoCheck: typeof i.autoCheck === 'boolean' ? i.autoCheck : DEFAULT_ROOM_SETTINGS.autoCheck,
+    highlightSameValue:
+      typeof i.highlightSameValue === 'boolean'
+        ? i.highlightSameValue
+        : DEFAULT_ROOM_SETTINGS.highlightSameValue,
+  };
+}
+
 export interface RoomPlayer {
   player_id: string;
   username: string;
@@ -198,6 +225,7 @@ export interface RoomRow {
   mode: RoomMode;
   status: RoomStatus;
   puzzle_code: string;
+  settings: RoomSettings;
   winner_player_id: string | null;
   started_at: string | null;
   finished_at: string | null;
@@ -208,14 +236,17 @@ export async function fetchRoom(roomId: string): Promise<RoomRow | null> {
   if (!client) return null;
   const { data, error } = await client
     .from('rooms')
-    .select('id, code, mode, status, puzzle_code, winner_player_id, started_at, finished_at')
+    .select(
+      'id, code, mode, status, puzzle_code, settings, winner_player_id, started_at, finished_at',
+    )
     .eq('id', roomId)
     .maybeSingle();
   if (error) {
     console.error('fetchRoom error', error);
     return null;
   }
-  return data;
+  if (!data) return null;
+  return { ...data, settings: normalizeRoomSettings(data.settings) };
 }
 
 export async function subscribeToRoom(
@@ -263,12 +294,23 @@ export async function startGame(roomId: string): Promise<Result<void>> {
   return { ok: true, value: undefined };
 }
 
+export async function updateRoomSettings(args: {
+  room_id: string;
+  settings: Partial<RoomSettings>;
+}): Promise<Result<RoomSettings>> {
+  const res = await invoke<{ settings: RoomSettings }>('update-room-settings', args);
+  if (!res.ok) return res;
+  return { ok: true, value: normalizeRoomSettings(res.value.settings) };
+}
+
 export interface SubmitMoveResponse {
   seq: number;
   accepted: boolean;
   progress_pct: number;
   won: boolean;
   is_winner: boolean;
+  /** Present only when `room.settings.autoCheck` is true and the move was a `value`. */
+  cell_correct?: boolean;
 }
 
 export async function submitMove(args: {

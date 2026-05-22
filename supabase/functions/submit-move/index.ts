@@ -18,6 +18,7 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { handlePreflight } from '../_shared/cors.ts';
 import { errorResponse, jsonResponse } from '../_shared/errors.ts';
+import { normalizeSettings } from '../_shared/settings.ts';
 import { getCallerUserId, serviceClient } from '../_shared/supabase.ts';
 
 const MOVE_KINDS = new Set(['value', 'clear', 'note_toggle']);
@@ -121,7 +122,7 @@ Deno.serve(async (req) => {
   // Load room.
   const { data: room, error: roomErr } = await admin
     .from('rooms')
-    .select('id, mode, status, puzzle_code')
+    .select('id, mode, status, puzzle_code, settings')
     .eq('id', room_id)
     .maybeSingle();
   if (roomErr) {
@@ -236,11 +237,39 @@ Deno.serve(async (req) => {
     isWinner = claimed?.winner_player_id === userId;
   }
 
+  // Persistent completion tally. Multiplayer wins always count; non-winners
+  // who finish the same puzzle later via the loser-keep-solving flow also
+  // call here (chunk H — for now this only fires for winners).
+  if (won) {
+    const { error: cErr } = await admin.from('player_completions').upsert(
+      {
+        player_id: userId,
+        puzzle_code: room.puzzle_code,
+        mode: room.mode,
+      },
+      { onConflict: 'player_id,puzzle_code' },
+    );
+    if (cErr) {
+      // Non-fatal — the count is recoverable. Log + continue.
+      console.error('player_completions upsert failed', cErr);
+    }
+  }
+
+  // Auto-check: when settings.autoCheck is on, tell the client whether THIS
+  // cell now matches the solution. For clear/note_toggle there's no value to
+  // compare, so cell_correct stays undefined.
+  const settings = normalizeSettings(room.settings);
+  let cellCorrect: boolean | undefined;
+  if (settings.autoCheck && kind === 'value' && value !== null && value !== undefined) {
+    cellCorrect = value === p.solution[cell];
+  }
+
   return jsonResponse({
     seq,
     accepted: true,
     progress_pct: progressPct,
     won,
     is_winner: isWinner,
+    ...(cellCorrect !== undefined ? { cell_correct: cellCorrect } : {}),
   });
 });

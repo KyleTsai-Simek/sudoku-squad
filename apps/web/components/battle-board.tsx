@@ -21,6 +21,7 @@ export function BattleBoard() {
   const selectCell = useBattleStore((s) => s.selectCell);
   const settings = useBattleStore((s) => s.settings);
   const conflicts = useBattleStore((s) => s.conflicts);
+  const incorrect = useBattleStore((s) => s.incorrect);
   const finishedAt = useBattleStore((s) => s.finishedAt);
 
   if (!board) return null;
@@ -44,6 +45,7 @@ export function BattleBoard() {
         const sameValue =
           settings.highlightSameValue && selValue !== null && ev === selValue;
         const isConflict = conflicts.has(i as CellIndex);
+        const isIncorrect = incorrect.has(i as CellIndex);
         const isGiven = cell.given !== null;
         const value = ev;
 
@@ -62,7 +64,8 @@ export function BattleBoard() {
         else if (inSelectedUnit) bg = 'bg-amber-50';
 
         let textColor = 'text-stone-900';
-        if (!isGiven && value !== null) textColor = 'text-blue-700';
+        if (isIncorrect && !isGiven) textColor = 'text-red-600';
+        else if (!isGiven && value !== null) textColor = 'text-blue-700';
 
         return (
           <button

@@ -15,7 +15,7 @@ import {
 } from '@sudoku-squad/core';
 import type { BoardState, CellIndex, CellValue, Move, MoveHistory } from '@sudoku-squad/core';
 import type { FetchedPuzzle } from './puzzle-source';
-import { markSolved } from './solved-tracker';
+import { recordSinglePlayerCompletion } from './completions';
 
 export interface GameSettings {
   showConflicts: boolean;
@@ -146,7 +146,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (result.state === board) return;
     const derived = recomputeDerived(result.state, settings, puzzle.solution);
     const won = isWon(result.state, puzzle.solution);
-    if (won) markSolved(puzzle.code);
+    if (won) void recordSinglePlayerCompletion(puzzle.code);
     set({
       board: result.state,
       history: result.history,
@@ -189,7 +189,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const result = redoHistory(board, history);
     const derived = recomputeDerived(result.state, settings, puzzle.solution);
     const won = isWon(result.state, puzzle.solution);
-    if (won && get().finishedAt === null) markSolved(puzzle.code);
+    if (won && get().finishedAt === null) void recordSinglePlayerCompletion(puzzle.code);
     set({
       board: result.state,
       history: result.history,
@@ -241,7 +241,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (result.state === board) return;
     const derived = recomputeDerived(result.state, settings, puzzle.solution);
     const won = isWon(result.state, puzzle.solution);
-    if (won) markSolved(puzzle.code);
+    if (won) void recordSinglePlayerCompletion(puzzle.code);
     set({
       board: result.state,
       history: result.history,

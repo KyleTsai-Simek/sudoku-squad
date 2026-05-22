@@ -4,8 +4,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Difficulty } from '@sudoku-squad/core';
 import { getTierCounts, pickRandomUnsolved } from '@/lib/pick-puzzle';
+import { getCompletionCount } from '@/lib/completions';
 import { createRoom, joinRoom } from '@/lib/rooms';
-import { getUsername } from '@/lib/username';
+import { getUsername, readCachedUsername } from '@/lib/username';
 
 interface TierState {
   total: number;
@@ -29,12 +30,23 @@ export function HomeClient() {
   const [joinCode, setJoinCode] = useState('');
   const [joinPending, setJoinPending] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [completed, setCompleted] = useState<number | null>(null);
+  const [username, setUsernameState] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? readCachedUsername() : null,
+  );
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const c = await getTierCounts();
-      if (!cancelled) setCounts(c);
+      const [c, n, u] = await Promise.all([
+        getTierCounts(),
+        getCompletionCount(),
+        getUsername(),
+      ]);
+      if (cancelled) return;
+      setCounts(c);
+      setCompleted(n);
+      setUsernameState(u);
     })();
     return () => {
       cancelled = true;
@@ -84,6 +96,25 @@ export function HomeClient() {
         <p className="mt-3 text-base text-stone-600">
           Multiplayer sudoku — play together or race to the finish.
         </p>
+        {username || completed !== null ? (
+          <p className="mt-4 inline-flex items-center gap-3 rounded-full border border-stone-200 bg-white px-4 py-1.5 text-xs text-stone-600">
+            {username ? (
+              <span>
+                <span className="text-stone-400">you’re</span>{' '}
+                <span className="font-medium text-stone-900">{username}</span>
+              </span>
+            ) : null}
+            {username && completed !== null ? <span className="text-stone-300">·</span> : null}
+            {completed !== null ? (
+              <span>
+                <span className="font-medium text-stone-900">{completed}</span>{' '}
+                <span className="text-stone-400">
+                  puzzle{completed === 1 ? '' : 's'} solved
+                </span>
+              </span>
+            ) : null}
+          </p>
+        ) : null}
       </div>
 
       <section className="w-full">

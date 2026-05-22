@@ -15,6 +15,8 @@ import {
   type RoomState,
 } from '@/lib/rooms';
 import { getUsername, setLocalUsernameOverride } from '@/lib/username';
+import { LobbySettingsPanel } from '@/components/lobby-settings-panel';
+import { DEFAULT_ROOM_SETTINGS } from '@/lib/rooms';
 import { BattleGame } from './battle-game';
 
 type Phase =
@@ -136,11 +138,15 @@ export function LobbyClient({ code }: { code: string }) {
   const status = roomRow?.status ?? room.status;
   const winnerPlayerId = roomRow?.winner_player_id ?? null;
 
+  const settings = roomRow?.settings ?? DEFAULT_ROOM_SETTINGS;
+
   if (status === 'playing' || status === 'finished') {
     return (
       <BattleGame
         room={room}
         players={players}
+        settings={settings}
+        serverStartedAt={roomRow?.started_at ?? null}
         winnerPlayerId={status === 'finished' ? winnerPlayerId : null}
       />
     );
@@ -256,6 +262,13 @@ export function LobbyClient({ code }: { code: string }) {
           </div>
         ) : null}
       </section>
+
+      <LobbySettingsPanel
+        roomId={room.room_id}
+        settings={settings}
+        isHost={isHost}
+        locked={status !== 'lobby'}
+      />
 
       <section className={cn('w-full text-center', !isHost && 'text-stone-500')}>
         {isHost ? (

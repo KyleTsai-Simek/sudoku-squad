@@ -2,7 +2,7 @@
 
 import type { Difficulty } from '@sudoku-squad/core';
 import { listPuzzles, type PuzzleSummary } from './puzzle-source';
-import { getSolvedSet } from './solved-tracker';
+import { getCompletedSet } from './completions';
 
 let cache: Promise<PuzzleSummary[]> | null = null;
 
@@ -23,7 +23,7 @@ export async function pickRandomUnsolved(
   difficulty: Difficulty,
 ): Promise<string | null> {
   const all = await getManifest();
-  const solved = getSolvedSet();
+  const solved = await getCompletedSet();
 
   const ofTier = all.filter((p) => p.difficulty === difficulty);
   if (ofTier.length === 0) return null;
@@ -41,7 +41,7 @@ export async function getTierCounts(): Promise<
   Record<Difficulty, { total: number; unsolved: number }>
 > {
   const all = await getManifest();
-  const solved = getSolvedSet();
+  const solved = await getCompletedSet();
   const out: Record<Difficulty, { total: number; unsolved: number }> = {
     easy: { total: 0, unsolved: 0 },
     medium: { total: 0, unsolved: 0 },
