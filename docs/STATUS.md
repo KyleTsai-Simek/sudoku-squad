@@ -28,15 +28,17 @@ This doc captures *where we actually are*. Update it whenever a phase milestone 
   - **`csv.ts` + `index.ts`** — full ingest pipeline. Streams a Kaggle CSV, buckets per tier (by `difficulty` column when present, else clue count), solver-verifies each candidate (uniqueness + claimed-solution match), and inserts a balanced 10 000-puzzle sample (2 500 × 4 tiers) into Supabase via service-role. `--dry-run` and `--csv <path>` flags. Repeatable fixture-based dry-run: `pnpm --filter @sudoku-squad/ingest ingest:dry-fixture` reports `easy=0 medium=2 hard=0 expert=3` against `fixtures/synthetic.csv` (5 valid + 2 deliberately-bad rows).
   - 4/4 solver tests passing (incl. world-hardest).
 - **`apps/web`** — Next.js 15 + React 19 + Tailwind 3. **Single-player vertical slice complete:**
-  - `/` — landing page with **New Game** CTA + Quick Start grid (5 sample puzzles) + Battle/Coop placeholders.
-  - `/play?seed=...` — full game screen.
+  - `/` — landing page (`HomeClient`) with per-tier "New game" CTAs showing live `unsolved / total` counts + Battle/Coop placeholders. Fetches the (code, difficulty) manifest from `puzzles_public` once on mount, caches in memory.
+  - `/play/[code]` — full game screen, dynamic route. `play-client.tsx` calls `loadPuzzle(code)` which tries the bundled sample pack first (so the smoke test works without Supabase env) and falls back to the `sp_get_puzzle` RPC.
   - Components: `SudokuBoard`, `NumberPad`, `KeyboardController`, `Timer`, `SettingsSheet`, `CompletionOverlay`.
-  - Game state lives in a Zustand store (`lib/game-store.ts`).
-  - Sample puzzle pack lives in `lib/sample-puzzles.ts` (5 puzzles, solver-verified). Replace with Supabase fetch once ingest lands. See [DECISIONS.md #0017](DECISIONS.md).
+  - Game state lives in a Zustand store (`lib/game-store.ts`). On completion, the code is added to `localStorage` via `solved-tracker.ts`.
+  - `lib/puzzle-source.ts` — `loadPuzzle(code)` and `listPuzzles()`. Bundled fallback in `lib/sample-puzzles.ts` (5 puzzles with pinned codes that match the algorithm). Per [DECISIONS.md #0017](DECISIONS.md).
+  - `lib/pick-puzzle.ts` — `pickRandomUnsolved(tier)` and `getTierCounts()`, used by the home page CTAs.
   - Interaction verified in-browser (Claude Preview): cell selection, row/col/box + same-value highlights, conflict highlighting (rule-based, no solution leak), notes mode (UI wired), keyboard input, undo/redo, hint (reveals correct value from solution; locally OK in single-player), timer, settings, completion overlay with elapsed time + hint count.
   - Build green (`pnpm --filter @sudoku-squad/web build`), zero console errors at runtime.
-- **`supabase/migrations/0001_initial.sql` + `0002_puzzles_public_security_definer.sql`** — both applied to the live project. 0002 fixed a latent bug in the `puzzles_public` view (`security_invoker = true` made it inherit anon's lack of RLS allow on `puzzles`, returning 0 rows even when the table was full).
-- **Live puzzle data:** 7500 puzzles ingested from the Kaggle 3M dataset (`radcliffe/3-million-sudoku-puzzles-with-ratings`). 2500 each in easy/medium/hard tiers — see [DECISIONS.md #0018](DECISIONS.md). Expert is currently 0 (the dataset has only ~100 puzzles rated >7.0; we'll revisit when we have a richer high-difficulty source).
+- **`supabase/migrations/0001_initial.sql` + `0002_puzzles_public_security_definer.sql` + `0003_puzzle_code_and_sp_rpc.sql`** — all three applied to the live project via `supabase db push --linked`. 0002 fixed a latent bug in the `puzzles_public` view. 0003 added a 6-char `code` column (deterministic base36 hash of `givens`), exposed it in the view, and added the `sp_get_puzzle(code)` RPC that returns the full row including `solution` — for single-player only.
+- **Live puzzle data:** 7500 puzzles ingested from the Kaggle 3M dataset (`radcliffe/3-million-sudoku-puzzles-with-ratings`). 2500 each in easy/medium/hard tiers — see [DECISIONS.md #0018](DECISIONS.md). Expert is currently 0 (the dataset has only ~100 puzzles rated >7.0; we'll revisit when we have a richer high-difficulty source). Every row has a unique 6-char code.
+- **Web app talks to Supabase.** Home page fetches the (code, difficulty) manifest from `puzzles_public`, "New game" CTAs pick a random unsolved puzzle of the chosen tier and navigate to `/play/[code]`. The play route calls the `sp_get_puzzle` RPC to fetch the full row (including solution, for hint/auto-check). Solved puzzle codes live in `localStorage` under `sudokusquad:solved` so the same puzzle isn't served twice.
 - **Deployment scaffolding:** Supabase project `enaavxfrjlqqslziyypq.supabase.co`. GitHub `KyleTsai-Simek/sudoku-squad`. Vercel not yet wired. Domain not registered.
 
 ### Verified working end-to-end
@@ -59,7 +61,7 @@ This doc captures *where we actually are*. Update it whenever a phase milestone 
 
 ## What does NOT yet exist
 
-- **Web app fetching from Supabase** — single-player still uses the bundled `apps/web/lib/sample-puzzles.ts`. The `puzzles` table now has real data, so the next step is swapping the fetch and (for Phase 2 cleanliness) keeping the hint/completion check server-side. Tracked in TODO.
+- (no live blockers right now — single-player is fully wired to Supabase via the `sp_get_puzzle` RPC; bundled `sample-puzzles.ts` is kept as an offline fallback for the smoke test)
 - **Auto-eliminate notes** — Setting exposed in the sheet but disabled (placeholder for V2).
 - **ESLint rules** for `packages/core` purity — wired. `no-restricted-imports` blocks `next/*`, `react-dom/*`, `react-native/*`, `expo/*`, and any path into `scripts/ingest`; `no-restricted-globals` blocks DOM globals (`window`, `document`, `localStorage`, etc.). Run via `pnpm --filter @sudoku-squad/core lint`. Web still uses `next lint` (deprecated but currently green).
 - **Playwright** — config + first smoke landed (`apps/web/e2e/single-player.spec.ts`). The smoke loads `/`, navigates to `/play?seed=sample-1`, mashes the Hint button to fill the board, and asserts the completion overlay. Run via `pnpm --filter @sudoku-squad/web test:e2e` (~4 s locally).
@@ -76,8 +78,8 @@ This doc captures *where we actually are*. Update it whenever a phase milestone 
 3. **Tailwind class precedence in the sudoku board.** A handful of cell states (selected/conflict/sameValue/inUnit) all set background and text colors. Tailwind v3 orders classes by stylesheet position, not className order — so combining `bg-white` (unconditional) with `bg-amber-200` (conditional) had `bg-white` winning. The board now picks exactly one `bg-*` class and one `text-*` color via a small lookup. If you add new states, extend that lookup rather than appending a conditional class.
 4. **The connectivity check shows a yellow note when `puzzles` is empty.** Expected. Once ingest populates the table, the same check becomes a definitive RLS test.
 5. **Next.js 15 promoted `typedRoutes` out of `experimental`.** `next.config.ts` reflects this.
-6. **`useSearchParams` requires a Suspense boundary** for static prerendering. `/play` wraps `PlayClient` in `<Suspense>` for this reason; if you add another search-param-using component to a server-rendered page, do the same.
-7. **`puzzles.solution` must never reach the client during multiplayer.** Single-player today uses the bundled pack — solutions are intentionally client-side because there's no one to cheat against. When ingest lands and SP starts fetching from Supabase, that flow must use `puzzles_public` (no solution) + server-side hint/win-check, exactly like multiplayer.
+6. **Next.js's `.env.local` lives next to the app, not in the monorepo root.** The dev server reads it from `apps/web/.env.local`. We symlink it: `apps/web/.env.local -> ../../.env.local`. The symlink is gitignored; if you clone fresh, recreate it. Without it, `NEXT_PUBLIC_SUPABASE_*` won't reach the client and the home page falls back to the 5 bundled samples.
+7. **`puzzles.solution` must never reach the client during *multiplayer*.** Single-player ships with the solution because the `sp_get_puzzle` RPC returns the full row — there's no other player to cheat against. The RPC is V1-SP-only; multiplayer (Phase 2+) MUST NOT call it. It uses Edge Functions that track room/player context and return only the answer for one cell at a time.
 
 ---
 

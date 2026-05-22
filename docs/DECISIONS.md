@@ -17,6 +17,38 @@ Format:
 
 ---
 
+## 0019 — Puzzle codes: 6-char deterministic base36 hash of givens
+**Date:** 2026-05-22
+**Status:** Accepted
+
+**Context.** The single-player flow needs a short, URL-friendly puzzle identifier — short enough to share comfortably, opaque enough that "puzzle 1" doesn't leak ordering, deterministic so the same puzzle always has the same id across re-ingests and so the in-repo sample puzzles can match Supabase rows.
+
+**Decision.** `code = base36( first 40 bits of md5(concat(givens)) mod 36^6 )`, padded to 6 chars. Lowercase a-z + 0-9. Stored as `puzzles.code text not null unique`, indexed.
+
+| Property | Value |
+|---|---|
+| Length | 6 |
+| Alphabet | `0-9a-z` (base36) |
+| Collision space | 36^6 ≈ 2.18B |
+| P(collision) at 7 500 rows | ~1.3e-5 (negligible) |
+| P(collision) at 1 M rows | ~0.0002 (0.02 %) |
+| P(collision) at 10 M rows | ~0.023 (2.3 %) |
+
+Computed identically in Postgres (PL/pgSQL `puzzle_code_for(smallint[])`) and TypeScript (`scripts/ingest/src/code.ts`). The TS test `code.test.ts` pins two hashes; if the algorithm ever changes both must move together AND we re-hash existing rows in a follow-up migration.
+
+**Alternatives considered.**
+- **nanoid(6) random alphabet.** Larger collision space (64^6 ≈ 68 B) so safer at scale, but not deterministic — re-ingest produces different codes, and the in-repo sample pack would need bespoke codes that drift from Supabase.
+- **Sequential base36 of `bigserial`.** Shortest possible (~4 chars at 1 M, ~5 at 10 M), no collision risk. Rejected because it leaks total puzzle count and ordering, and is awkward to compute for in-repo samples.
+- **8 chars instead of 6.** Comfortably collision-free at 10 M+ scale. Rejected as longer than necessary for our planned scale.
+- **Crockford base32 (no I/L/O/U).** Smaller alphabet (32) gives slightly less collision headroom; the disambiguation only matters for verbally-shared codes. URLs make it moot.
+
+**Consequences.**
+- URLs look like `/play/cbotju`. Short, shareable, opaque.
+- If we ever scale past ~1 M live puzzles, collision probability becomes noticeable (~0.02 %). The unique constraint catches it; the TS ingest needs to gain a retry-with-salt path. The migration's safety-net `do $$` block does this for the initial backfill.
+- The same algorithm runs at ingest time (to compute the code before insert) and in `apps/web/lib/sample-puzzles.ts` (codes pinned to compile-time values). `verify-samples` checks the pinning.
+
+---
+
 ## 0018 — V1 puzzle pool: 7 500 rows from the Kaggle 3M dataset, no expert tier yet
 **Date:** 2026-05-22
 **Status:** Accepted (supersedes parts of [#0011](#0011))

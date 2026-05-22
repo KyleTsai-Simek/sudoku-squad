@@ -20,6 +20,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import { readCsvRows } from './csv';
+import { puzzleCodeFor } from './code';
 import { hasUniqueSolution, solve } from './solver';
 
 type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
@@ -47,6 +48,7 @@ interface CandidateRow {
 
 interface SampledPuzzle {
   difficulty: Difficulty;
+  code: string;
   givens: number[];
   solution: number[];
 }
@@ -265,7 +267,12 @@ async function main(): Promise<void> {
       continue;
     }
 
-    buckets[tier].push({ difficulty: tier, givens, solution: solved });
+    buckets[tier].push({
+      difficulty: tier,
+      code: puzzleCodeFor(givens),
+      givens,
+      solution: solved,
+    });
 
     if (tiersFull(buckets)) {
       console.log(`All tiers reached target after ${scanned} rows.`);
@@ -286,7 +293,12 @@ async function main(): Promise<void> {
   }
 
   // Flatten into a single insert array.
-  const rows: Array<{ difficulty: Difficulty; givens: number[]; solution: number[] }> = [];
+  const rows: Array<{
+    difficulty: Difficulty;
+    code: string;
+    givens: number[];
+    solution: number[];
+  }> = [];
   for (const t of TIERS) rows.push(...buckets[t]);
 
   if (!admin) {

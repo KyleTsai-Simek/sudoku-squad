@@ -14,7 +14,8 @@ import {
   undo as undoHistory,
 } from '@sudoku-squad/core';
 import type { BoardState, CellIndex, CellValue, Move, MoveHistory } from '@sudoku-squad/core';
-import type { SamplePuzzle } from './sample-puzzles';
+import type { FetchedPuzzle } from './puzzle-source';
+import { markSolved } from './solved-tracker';
 
 export interface GameSettings {
   showConflicts: boolean;
@@ -31,7 +32,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
 };
 
 interface GameState {
-  puzzle: SamplePuzzle | null;
+  puzzle: FetchedPuzzle | null;
   board: BoardState | null;
   history: MoveHistory;
   selected: CellIndex | null;
@@ -44,7 +45,7 @@ interface GameState {
   incorrect: Set<CellIndex>; // populated only when autoCheck is on
 
   // actions
-  startGame: (puzzle: SamplePuzzle) => void;
+  startGame: (puzzle: FetchedPuzzle) => void;
   resetGame: () => void;
   selectCell: (cell: CellIndex | null) => void;
   moveSelection: (dx: number, dy: number) => void;
@@ -95,7 +96,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   incorrect: new Set(),
 
   startGame: (puzzle) => {
-    const board = createBoard(puzzle.id, puzzle.givens);
+    const board = createBoard(puzzle.code, puzzle.givens);
     const { settings } = get();
     const derived = recomputeDerived(board, settings, puzzle.solution);
     set({
@@ -145,6 +146,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (result.state === board) return;
     const derived = recomputeDerived(result.state, settings, puzzle.solution);
     const won = isWon(result.state, puzzle.solution);
+    if (won) markSolved(puzzle.code);
     set({
       board: result.state,
       history: result.history,
@@ -187,6 +189,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const result = redoHistory(board, history);
     const derived = recomputeDerived(result.state, settings, puzzle.solution);
     const won = isWon(result.state, puzzle.solution);
+    if (won && get().finishedAt === null) markSolved(puzzle.code);
     set({
       board: result.state,
       history: result.history,
@@ -238,6 +241,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (result.state === board) return;
     const derived = recomputeDerived(result.state, settings, puzzle.solution);
     const won = isWon(result.state, puzzle.solution);
+    if (won) markSolved(puzzle.code);
     set({
       board: result.state,
       history: result.history,

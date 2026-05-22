@@ -44,7 +44,7 @@ Working task list. Checkboxes get checked as work completes. New items added as 
 - [x] Ran the ingest against the real dataset. 7500 rows in Supabase (2500 each easy/medium/hard, 0 expert by design).
 - [x] Migration 0002 applied — `puzzles_public` is now a security-definer view (anon can read), `solution` still hidden.
 - [x] `check-connectivity.ts` tightened: now asserts (a) anon reads `puzzles_public`, (b) anon's direct read of `puzzles` returns 0 rows despite 7500 existing, (c) anon cannot request `solution` from `puzzles_public`.
-- [ ] Swap `apps/web` single-player to fetch from Supabase `puzzles_public` instead of the bundled pack; keep the pack as an offline fallback. (Hint/completion check needs an Edge Function so the solution stays server-side. Phase 2 prep.)
+- [x] Swap `apps/web` single-player to fetch from Supabase. Home page lists by tier from `puzzles_public`, `/play/[code]` calls `sp_get_puzzle(code)` for the full row including solution. Bundled pack kept as offline fallback (smoke test uses it). Migration 0003 added the column, view, and RPC. Solved codes tracked in `localStorage`. Phase 2 will replace `sp_get_puzzle` for multiplayer with Edge Functions.
 - [ ] Revisit expert tier when we have a high-difficulty source (the 3M dataset has only ~100 puzzles rated >7.0; insufficient for a 2500-row sample).
 
 ### `apps/web` — single player UI ✅ (modulo mobile audit)

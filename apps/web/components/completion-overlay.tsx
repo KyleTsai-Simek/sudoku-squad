@@ -1,7 +1,9 @@
 'use client';
 
-import { useGameStore } from '@/lib/game-store';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useGameStore } from '@/lib/game-store';
+import { pickRandomUnsolved } from '@/lib/pick-puzzle';
 
 function formatElapsed(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -16,10 +18,21 @@ export function CompletionOverlay() {
   const startedAt = useGameStore((s) => s.startedAt);
   const finishedAt = useGameStore((s) => s.finishedAt);
   const hintsUsed = useGameStore((s) => s.hintsUsed);
+  const puzzle = useGameStore((s) => s.puzzle);
   const router = useRouter();
+  const [loadingNext, setLoadingNext] = useState(false);
 
   if (finishedAt === null || startedAt === null) return null;
   const elapsed = finishedAt - startedAt;
+
+  async function onPlayAnother() {
+    if (!puzzle) return;
+    setLoadingNext(true);
+    const next = await pickRandomUnsolved(puzzle.difficulty);
+    setLoadingNext(false);
+    if (next) router.push(`/play/${next}`);
+    else router.push('/');
+  }
 
   return (
     <div
@@ -40,10 +53,11 @@ export function CompletionOverlay() {
         <div className="mt-6 flex flex-col gap-2">
           <button
             type="button"
-            onClick={() => router.push('/play')}
-            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+            onClick={onPlayAnother}
+            disabled={loadingNext}
+            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
           >
-            Play another
+            {loadingNext ? 'Loading…' : `Play another ${puzzle?.difficulty ?? ''}`}
           </button>
           <button
             type="button"
