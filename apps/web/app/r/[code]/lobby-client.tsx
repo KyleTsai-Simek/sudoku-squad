@@ -500,14 +500,49 @@ export function LobbyClient({ code }: { code: string }) {
         onPendingChange={(d) => setPendingSync((n) => Math.max(0, n + d))}
       />
 
-      {/* Non-host: a quiet inline status. The host's Start CTA renders as a
-          fixed FAB below (outside this scroll column). */}
-      {!isHost ? (
+      {/* Inline Start button — same action as the floating FAB. We render
+          both so users who scroll past the lobby flow naturally encounter a
+          Start at the bottom even if they didn't notice the FAB. The two
+          buttons are wired to the same onStart/disabled state, so one
+          updates the other instantly. */}
+      {isHost ? (
+        <section className="w-full text-center">
+          <button
+            type="button"
+            onClick={onStart}
+            disabled={startPending || !enoughPlayers || !allReady || pendingSync > 0}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-5 py-4 text-base font-semibold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pendingSync > 0 ? (
+              <span
+                aria-hidden
+                className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+              />
+            ) : null}
+            <span>
+              {startPending
+                ? 'Starting…'
+                : pendingSync > 0
+                  ? 'Syncing…'
+                  : !enoughPlayers
+                    ? 'Waiting for at least 2 players…'
+                    : !allReady
+                      ? `Waiting on ${stragglers.length} player${stragglers.length === 1 ? '' : 's'}…`
+                      : liveMode === 'coop'
+                        ? 'Start co-op'
+                        : 'Start battle'}
+            </span>
+          </button>
+          {startError ? (
+            <p className="mt-2 text-xs text-red-600">{startError}</p>
+          ) : null}
+        </section>
+      ) : (
         <section className="w-full text-center text-sm text-stone-500">
           Waiting for the host
           {otherHost ? ` (${otherHost.username})` : ''} to start…
         </section>
-      ) : null}
+      )}
 
       <p className="text-xs text-stone-400">
         Share the room code with friends. Game begins when the host clicks Start.
