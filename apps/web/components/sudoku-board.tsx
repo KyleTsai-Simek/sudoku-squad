@@ -90,7 +90,14 @@ export function SudokuBoard() {
             disabled={finishedAt !== null}
             className={cn(
               'relative flex items-center justify-center outline-none transition-colors',
-              'aspect-square text-[clamp(1rem,4.2vw,1.75rem)] font-medium',
+              // Container-query font sizing: value scales with the cell width
+              // (cqw), not the viewport, so small-screen cells get proportional
+              // digits instead of the old clamp floor. overflow-hidden +
+              // min-w/h-0 guarantee glyph ascenders/descenders or sub-pixel
+              // rounding can't perturb the row, which would otherwise cascade
+              // into neighbors via aspect-square.
+              'aspect-square overflow-hidden [container-type:inline-size]',
+              'min-w-0 min-h-0 text-[min(55cqw,1.75rem)] font-medium',
               // Unify the base border color for all four sides. Without this,
               // Tailwind's preflight leaves border-top-color and border-left-color
               // at the default gray-200 even though their width is 0. At
@@ -123,7 +130,7 @@ export function SudokuBoard() {
 function NotesGrid({ mask, highlight }: { mask: number; highlight: number | null }) {
   const notes = new Set(notesToArray(mask));
   return (
-    <div className="grid h-full w-full grid-cols-3 grid-rows-3 p-0.5 text-[clamp(0.5rem,1.5vw,0.7rem)] leading-none text-stone-500">
+    <div className="grid h-full w-full grid-cols-3 grid-rows-3 text-[min(24cqw,0.7rem)] leading-none text-stone-500">
       {Array.from({ length: 9 }, (_, i) => i + 1).map((n) => {
         const present = notes.has(n as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9);
         const isHighlighted = present && highlight === n;

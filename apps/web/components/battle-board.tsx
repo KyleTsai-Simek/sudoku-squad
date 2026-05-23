@@ -87,7 +87,9 @@ export function BattleBoard() {
             disabled={finishedAt !== null}
             className={cn(
               'relative flex items-center justify-center outline-none transition-colors',
-              'aspect-square text-[clamp(1rem,4.2vw,1.75rem)] font-medium',
+              // See sudoku-board.tsx for the container-query + overflow rationale.
+              'aspect-square overflow-hidden [container-type:inline-size]',
+              'min-w-0 min-h-0 text-[min(55cqw,1.75rem)] font-medium',
               // See sudoku-board.tsx for why this base color matters.
               'border-stone-300',
               bg,
@@ -114,7 +116,7 @@ export function BattleBoard() {
 function NotesGrid({ mask, highlight }: { mask: number; highlight: number | null }) {
   const notes = new Set(notesToArray(mask));
   return (
-    <div className="grid h-full w-full grid-cols-3 grid-rows-3 p-0.5 text-[clamp(0.5rem,1.5vw,0.7rem)] leading-none text-stone-500">
+    <div className="grid h-full w-full grid-cols-3 grid-rows-3 text-[min(24cqw,0.7rem)] leading-none text-stone-500">
       {Array.from({ length: 9 }, (_, i) => i + 1).map((n) => {
         const present = notes.has(n as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9);
         const isHighlighted = present && highlight === n;

@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-05-23 (batched submit-move + resync triggers landed; see [DECISIONS #0037](DECISIONS.md))
+**Last updated:** 2026-05-23 (board font sizing switched to container queries to fix small-screen note cramping; batched submit-move + resync triggers earlier the same day, see [DECISIONS #0037](DECISIONS.md))
 **Current phase:** Phase 2 — battle mode is fully playable end-to-end with the May 22 UX expansion landed (chunks A–H) plus a UX-polish pass (board pixel-snap, auto-clean peer notes, spacebar notes toggle + `?` shortcuts overlay, Notes button visual rework). The May 23 sync rewrite ([#0036](DECISIONS.md): atomic seq counter, idempotency, parallel submits, coop server-overlay store, fail-resync) plus the same-day batching-and-resync followup ([#0037](DECISIONS.md): per-room opportunistic batching, batch RPC, gap/reconnect/visibility resync) are the latest landings. Remaining items are polish + the two-tab Playwright smoke; coop / iOS are the next phases.
 **Branch:** `main`
 **Live:** https://sudoku-squad-web.vercel.app/
@@ -108,7 +108,7 @@ The Edge Function `hint` is intentionally not shipping — Chunk A removed Hint 
 - **Coop mode / iOS** — Phases 3–4.
 - **Favicon / Open Graph metadata** — placeholder Next.js favicon; no OG image yet.
 - **Lighthouse / PWA-installable manifest.**
-- **Mobile audit** — uses clamp-based font sizing; needs in-device test on 375 px (iPhone SE) and ~420 px.
+- **Mobile audit** — board fonts switched from viewport-clamp to container-query sizing (2026-05-23): cell values are `min(55cqw, 1.75rem)` and notes are `min(24cqw, 0.7rem)`, with each cell `[container-type:inline-size] overflow-hidden min-w-0 min-h-0` so glyph overflow can't perturb the grid. Verified at 320/375/1280 px; in-device confirmation still wanted.
 - **Custom domain** (target: `sudokusquad.com`).
 - **`next lint` → ESLint CLI migration** — `apps/web` still uses the deprecated wrapper. Build is currently green but Next.js 16 will remove the wrapper.
 
