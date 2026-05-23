@@ -146,24 +146,29 @@ export function HomeClient() {
 
       {view.kind === 'mode' && (
         <>
-          <div className="flex w-full flex-col gap-3">
-            <ModeButton
-              label="Single-player"
-              description="One puzzle, just you."
-              onClick={() => setView({ kind: 'sp' })}
-            />
-            <ModeButton
-              label="Co-op"
-              description="Same board, solve together."
-              loading={loadingMp === 'coop'}
-              onClick={() => startMultiplayer('coop')}
-            />
-            <ModeButton
-              label="Battle"
-              description="Same puzzle, race to finish."
-              loading={loadingMp === 'battle'}
-              onClick={() => startMultiplayer('battle')}
-            />
+          <div className="flex w-full flex-col gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-stone-500">
+              Start a game
+            </h2>
+            <div className="flex w-full flex-col gap-3">
+              <ModeButton
+                label="Single-player"
+                description="One puzzle, just you."
+                onClick={() => setView({ kind: 'sp' })}
+              />
+              <ModeButton
+                label="Co-op"
+                description="Same board, solve together."
+                loading={loadingMp === 'coop'}
+                onClick={() => startMultiplayer('coop')}
+              />
+              <ModeButton
+                label="Battle"
+                description="Same puzzle, race to finish."
+                loading={loadingMp === 'battle'}
+                onClick={() => startMultiplayer('battle')}
+              />
+            </div>
           </div>
 
           {/* Compact join-by-code input. Sits below the three primary
