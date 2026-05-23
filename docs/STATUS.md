@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-05-23 (board font sizing switched to container queries to fix small-screen note cramping; batched submit-move + resync triggers earlier the same day, see [DECISIONS #0037](DECISIONS.md))
+**Last updated:** 2026-05-23 (lobby UX pass: host-swappable mode toggle, FAB start button, opponent-progress flex layout + self-bold, coop per-player colored progress with "last placer wins credit" rule [DECISIONS #0038](DECISIONS.md); earlier the same day: container-query board font sizing; batched submit-move + resync triggers [DECISIONS #0037](DECISIONS.md))
 **Current phase:** Phase 2 — battle mode is fully playable end-to-end with the May 22 UX expansion landed (chunks A–H) plus a UX-polish pass (board pixel-snap, auto-clean peer notes, spacebar notes toggle + `?` shortcuts overlay, Notes button visual rework). The May 23 sync rewrite ([#0036](DECISIONS.md): atomic seq counter, idempotency, parallel submits, coop server-overlay store, fail-resync) plus the same-day batching-and-resync followup ([#0037](DECISIONS.md): per-room opportunistic batching, batch RPC, gap/reconnect/visibility resync) are the latest landings. Remaining items are polish + the two-tab Playwright smoke; coop / iOS are the next phases.
 **Branch:** `main`
 **Live:** https://sudoku-squad-web.vercel.app/

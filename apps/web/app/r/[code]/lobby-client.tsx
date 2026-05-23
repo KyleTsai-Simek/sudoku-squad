@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   changeDifficulty,
+  changeMode,
   fetchPuzzleDifficulty,
   fetchRoom,
   fetchRoomPlayers,
@@ -14,6 +15,7 @@ import {
   subscribeToRoom,
   subscribeToRoomPlayers,
   type RoomError,
+  type RoomMode,
   type RoomPlayerProgress,
   type RoomRow,
   type RoomState,
@@ -47,6 +49,8 @@ export function LobbyClient({ code }: { code: string }) {
   // once the server-driven `currentDifficulty` (resolved from the room's
   // updated puzzle_code) catches up. The selector reads optimistic-first.
   const [optimisticDifficulty, setOptimisticDifficulty] = useState<Difficulty | null>(null);
+  // Same pattern for the mode toggle: optimistic first, server confirms.
+  const [optimisticMode, setOptimisticMode] = useState<RoomMode | null>(null);
   // Count of in-flight sync writes (difficulty + settings). The Start
   // button disables (with a spinner) while > 0 so users can't race a Start
   // against a pending change. Toggle buttons themselves stay enabled and
@@ -159,6 +163,34 @@ export function LobbyClient({ code }: { code: string }) {
     }
   }, [currentDifficulty, optimisticDifficulty]);
 
+  // Live mode: prefer the server-confirmed roomRow value, fall back to the
+  // join-time room snapshot. Optimistic overrides win for instant feedback.
+  const phaseRoomMode = phase.kind === 'in_lobby' ? phase.room.mode : null;
+  const liveMode: RoomMode =
+    optimisticMode ?? roomRow?.mode ?? phaseRoomMode ?? 'battle';
+
+  // Clear the optimistic mode once the server confirms.
+  useEffect(() => {
+    if (optimisticMode !== null && roomRow?.mode === optimisticMode) {
+      setOptimisticMode(null);
+    }
+  }, [roomRow?.mode, optimisticMode]);
+
+  const onChangeMode = useCallback(
+    async (next: RoomMode) => {
+      if (phase.kind !== 'in_lobby') return;
+      setOptimisticMode(next);
+      setPendingSync((n) => n + 1);
+      const res = await changeMode({ room_id: phase.room.room_id, mode: next });
+      setPendingSync((n) => Math.max(0, n - 1));
+      if (!res.ok) {
+        setOptimisticMode(null);
+        setStartError(res.error.message);
+      }
+    },
+    [phase],
+  );
+
   const onCopyShare = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -185,12 +217,21 @@ export function LobbyClient({ code }: { code: string }) {
   const phaseRoom = phase.kind === 'in_lobby' ? phase.room : null;
   const livePuzzleCode = roomRow?.puzzle_code ?? phaseRoom?.puzzle_code ?? '';
   const liveStatusRaw = roomRow?.status ?? phaseRoom?.status ?? 'lobby';
+  // liveRoom carries the most-current puzzle, status, AND mode through to
+  // the game surfaces. Without the mode merge, a host who flips mode in the
+  // lobby and then starts would still hand the join-time mode to BattleGame
+  // / CoopGame and the wrong surface would render.
   const liveRoom = useMemo<RoomState | null>(
     () =>
       phaseRoom
-        ? { ...phaseRoom, puzzle_code: livePuzzleCode, status: liveStatusRaw }
+        ? {
+            ...phaseRoom,
+            puzzle_code: livePuzzleCode,
+            status: liveStatusRaw,
+            mode: roomRow?.mode ?? phaseRoom.mode,
+          }
         : null,
-    [phaseRoom, livePuzzleCode, liveStatusRaw],
+    [phaseRoom, livePuzzleCode, liveStatusRaw, roomRow?.mode],
   );
 
   if (phase.kind === 'joining') {
@@ -236,7 +277,8 @@ export function LobbyClient({ code }: { code: string }) {
     // Without the merge, two players who joined at different moments would
     // fetch DIFFERENT puzzles' givens. See the useMemo where liveRoom is
     // built (above the early returns) for the stability rationale.
-    if (room.mode === 'coop') {
+    // Use liveRoom.mode (not room.mode) — see the liveRoom useMemo above.
+    if (liveRoom.mode === 'coop') {
       return (
         <CoopGame
           room={liveRoom}
@@ -260,8 +302,9 @@ export function LobbyClient({ code }: { code: string }) {
 
   const isHost = room.own_is_host;
   // Battle needs at least 2 players (a race against yourself is silly); coop
-  // can start solo and pick up friends mid-game (#0024).
-  const enoughPlayers = room.mode === 'battle' ? players.length >= 2 : players.length >= 1;
+  // can start solo and pick up friends mid-game (#0024). Use liveMode so
+  // toggling mode in the lobby immediately updates the player-count gate.
+  const enoughPlayers = liveMode === 'battle' ? players.length >= 2 : players.length >= 1;
   const stragglers = players.filter((p) => !p.has_returned);
   const allReady = stragglers.length === 0;
   const otherHost = players.find((p) => p.is_host && p.player_id !== room.own_player_id);
@@ -273,7 +316,7 @@ export function LobbyClient({ code }: { code: string }) {
           ← Menu
         </Link>
         <span className="text-xs font-medium uppercase tracking-widest text-stone-500">
-          {room.mode} · lobby
+          {liveMode === 'coop' ? 'co-op' : liveMode} · lobby
         </span>
       </header>
 
@@ -411,6 +454,43 @@ export function LobbyClient({ code }: { code: string }) {
         )}
       </section>
 
+      <section className="w-full">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-500">
+          Mode
+          {!isHost ? <span className="ml-2 text-stone-400 normal-case tracking-normal">— host chooses</span> : null}
+        </h2>
+        {isHost && status === 'lobby' ? (
+          <div className="grid grid-cols-2 gap-2">
+            {(['battle', 'coop'] as const).map((m) => {
+              const selected = liveMode === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => onChangeMode(m)}
+                  disabled={selected}
+                  className={cn(
+                    'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                    selected
+                      ? 'border-stone-900 bg-stone-900 text-white'
+                      : 'border-stone-300 bg-white text-stone-700 hover:border-stone-500',
+                  )}
+                >
+                  {m === 'coop' ? 'Co-op' : 'Battle'}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="inline-flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
+            <span className="text-xs uppercase tracking-widest text-stone-500">selected</span>
+            <span className="font-semibold text-stone-900">
+              {liveMode === 'coop' ? 'Co-op' : 'Battle'}
+            </span>
+          </div>
+        )}
+      </section>
+
       <LobbySettingsPanel
         roomId={room.room_id}
         settings={settings}
@@ -420,51 +500,105 @@ export function LobbyClient({ code }: { code: string }) {
         onPendingChange={(d) => setPendingSync((n) => Math.max(0, n + d))}
       />
 
-      <section className={cn('w-full text-center', !isHost && 'text-stone-500')}>
-        {isHost ? (
-          <>
-            <button
-              type="button"
-              onClick={onStart}
-              disabled={startPending || !enoughPlayers || !allReady || pendingSync > 0}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-5 py-4 text-base font-semibold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {pendingSync > 0 ? (
-                <span
-                  aria-hidden
-                  className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
-                />
-              ) : null}
-              <span>
-                {startPending
-                  ? 'Starting…'
-                  : pendingSync > 0
-                    ? 'Syncing…'
-                    : !enoughPlayers
-                      ? 'Waiting for at least 2 players…'
-                      : !allReady
-                        ? `Waiting on ${stragglers.length} player${stragglers.length === 1 ? '' : 's'}…`
-                        : room.mode === 'coop'
-                          ? 'Start coop'
-                          : 'Start battle'}
-              </span>
-            </button>
-            {startError ? (
-              <p className="mt-2 text-xs text-red-600">{startError}</p>
-            ) : null}
-          </>
-        ) : (
-          <p className="text-sm">
-            Waiting for the host
-            {otherHost ? ` (${otherHost.username})` : ''} to start…
-          </p>
-        )}
-      </section>
+      {/* Non-host: a quiet inline status. The host's Start CTA renders as a
+          fixed FAB below (outside this scroll column). */}
+      {!isHost ? (
+        <section className="w-full text-center text-sm text-stone-500">
+          Waiting for the host
+          {otherHost ? ` (${otherHost.username})` : ''} to start…
+        </section>
+      ) : null}
 
       <p className="text-xs text-stone-400">
         Share the room code with friends. Game begins when the host clicks Start.
       </p>
+
+      {/* Extra bottom padding so the floating FAB doesn't sit on top of the
+          last content line on short viewports. */}
+      <div className="h-24" aria-hidden />
+
+      {isHost ? (
+        <StartFab
+          mode={liveMode}
+          disabled={startPending || !enoughPlayers || !allReady || pendingSync > 0}
+          onClick={onStart}
+          stateLabel={
+            startPending
+              ? 'Starting…'
+              : pendingSync > 0
+                ? 'Syncing…'
+                : !enoughPlayers
+                  ? 'Need 2+ players'
+                  : !allReady
+                    ? `Waiting on ${stragglers.length}`
+                    : liveMode === 'coop'
+                      ? 'Start co-op'
+                      : 'Start battle'
+          }
+          loading={startPending || pendingSync > 0}
+          errorText={startError}
+        />
+      ) : null}
     </main>
+  );
+}
+
+/**
+ * Floating action button anchored to the bottom-right of the viewport.
+ * Replaces the old full-width black Start bar with a more prominent,
+ * always-visible CTA. Disabled state stays visible (dimmed) so the host
+ * always knows where to click; the dynamic label reflects why it's gated
+ * (need 2+ players, waiting on stragglers, syncing, etc.).
+ *
+ * Error text bubbles up just above the button so the host sees it in their
+ * line of sight without scrolling.
+ */
+function StartFab({
+  mode,
+  disabled,
+  loading,
+  stateLabel,
+  errorText,
+  onClick,
+}: {
+  mode: 'battle' | 'coop';
+  disabled: boolean;
+  loading: boolean;
+  stateLabel: string;
+  errorText: string | null;
+  onClick: () => void;
+}) {
+  return (
+    <div className="pointer-events-none fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
+      {errorText ? (
+        <p className="pointer-events-auto max-w-xs rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm">
+          {errorText}
+        </p>
+      ) : null}
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={`${stateLabel} (${mode})`}
+        className="pointer-events-auto flex items-center gap-2 rounded-full bg-orange-500 px-6 py-4 text-base font-semibold text-white shadow-lg shadow-orange-500/30 transition-all hover:bg-orange-600 hover:shadow-xl hover:shadow-orange-500/40 active:scale-95 disabled:cursor-not-allowed disabled:bg-stone-400 disabled:shadow-md"
+      >
+        {loading ? (
+          <span
+            aria-hidden
+            className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+          />
+        ) : (
+          <svg
+            aria-hidden
+            viewBox="0 0 24 24"
+            className="h-5 w-5 fill-current"
+          >
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        )}
+        <span>{stateLabel}</span>
+      </button>
+    </div>
   );
 }
 

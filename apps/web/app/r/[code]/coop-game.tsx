@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useCoopStore } from '@/lib/coop-store';
+import { useCoopStore, computeOwnership } from '@/lib/coop-store';
 import {
   fetchAllMoves,
   fetchPuzzleGivens,
@@ -34,14 +34,26 @@ interface Props {
 
 export function CoopGame({ room, players, settings, serverStartedAt, finished }: Props) {
   const board = useCoopStore((s) => s.board);
+  const givens = useCoopStore((s) => s.givens);
   const startedAt = useCoopStore((s) => s.startedAt);
   const finishedAt = useCoopStore((s) => s.finishedAt);
   const sharedProgressPct = useCoopStore((s) => s.sharedProgressPct);
+  const serverMoves = useCoopStore((s) => s.serverMoves);
+  const pendings = useCoopStore((s) => s.pendings);
   const startCoop = useCoopStore((s) => s.startCoop);
   const applySettings = useCoopStore((s) => s.applySettings);
   const applyRemoteMove = useCoopStore((s) => s.applyRemoteMove);
   const markFinished = useCoopStore((s) => s.markFinished);
   const resync = useCoopStore((s) => s.resync);
+  // Derive per-player credit at render time from server-confirmed moves
+  // overlaid with our own pendings. This sidesteps having to keep an
+  // ownership map in sync across every store transition and ensures the
+  // bar updates the instant a pending move is queued (no realtime echo
+  // wait — same UX guarantee as the optimistic board overlay).
+  const cellOwnership = useMemo(
+    () => computeOwnership(serverMoves, pendings, room.own_player_id),
+    [serverMoves, pendings, room.own_player_id],
+  );
   const [winDismissed, setWinDismissed] = useState(false);
 
   const gameStartsAt = useMemo(() => {
@@ -140,26 +152,19 @@ export function CoopGame({ room, players, settings, serverStartedAt, finished }:
           {formatElapsed(elapsed)}
         </span>
         <div className="flex items-center gap-2">
-          <span className="text-xs uppercase tracking-widest text-stone-500">coop</span>
+          <span className="text-xs uppercase tracking-widest text-stone-500">co-op</span>
           <KeyboardShortcutsButton />
         </div>
       </header>
 
-      {/* Shared progress bar across the top of the board. One bar for the
-          whole team rather than per-player rows. */}
-      <div className="w-full max-w-[min(92vw,560px)] text-xs text-stone-600">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="font-medium">
-            Team progress · {players.length} player{players.length === 1 ? '' : 's'}
-          </span>
-          <span className="tabular-nums">{sharedProgressPct}%</span>
-        </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-stone-200">
-          <div
-            className="h-full rounded-full bg-amber-500 transition-all"
-            style={{ width: `${Math.min(100, Math.max(0, sharedProgressPct))}%` }}
-          />
-        </div>
+      <div className="flex w-full max-w-[min(92vw,560px)] flex-col gap-2">
+        <CoopPlayerNames players={players} cellOwnership={cellOwnership} />
+        <CoopProgress
+          players={players}
+          cellOwnership={cellOwnership}
+          givens={givens}
+          sharedProgressPct={sharedProgressPct}
+        />
       </div>
 
       {board ? (
@@ -205,4 +210,97 @@ function formatElapsed(ms: number): string {
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Row of player names colored by lobby color, above the progress bar.
+ * Names flow horizontally and wrap whole-name to the next line when they
+ * don't fit (never broken mid-word). Players who haven't placed any cells
+ * yet still appear, just with no count chip.
+ */
+function CoopPlayerNames({
+  players,
+  cellOwnership,
+}: {
+  players: RoomPlayerProgress[];
+  cellOwnership: Map<string, number>;
+}) {
+  if (players.length === 0) return null;
+  return (
+    <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+      {players.map((p) => {
+        const count = cellOwnership.get(p.player_id) ?? 0;
+        return (
+          <li key={p.player_id} className="flex items-center gap-1.5 whitespace-nowrap">
+            <span
+              aria-hidden
+              className="inline-block h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: p.color }}
+            />
+            <span className="font-semibold" style={{ color: p.color }}>
+              {p.username}
+            </span>
+            {count > 0 ? (
+              <span className="tabular-nums text-stone-500">· {count}</span>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * Stacked progress bar: each player gets a colored segment proportional to
+ * cells they last placed in. Sum of segment widths == sharedProgressPct
+ * (off by ≤1pp due to rounding; the server's progressPct is the trusted
+ * "official" number shown at the right end).
+ *
+ * Ownership rule (DECISIONS pending): credit goes to the LAST player to
+ * place a value in a cell, regardless of correctness. Overwriting a peer's
+ * cell transfers credit. Clearing removes credit. See computeOwnership in
+ * coop-store.ts.
+ */
+function CoopProgress({
+  players,
+  cellOwnership,
+  givens,
+  sharedProgressPct,
+}: {
+  players: RoomPlayerProgress[];
+  cellOwnership: Map<string, number>;
+  givens: number[] | null;
+  sharedProgressPct: number;
+}) {
+  const totalEmpty = givens ? givens.filter((g) => g === 0).length : 81;
+  // Stable order = lobby player order so colors don't shuffle as counts change.
+  const segments = players
+    .map((p) => ({
+      player_id: p.player_id,
+      color: p.color,
+      count: cellOwnership.get(p.player_id) ?? 0,
+    }))
+    .filter((s) => s.count > 0);
+  return (
+    <div className="text-xs text-stone-600">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="font-medium">
+          Team progress · {players.length} player{players.length === 1 ? '' : 's'}
+        </span>
+        <span className="tabular-nums">{sharedProgressPct}%</span>
+      </div>
+      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-stone-200">
+        {segments.map((s) => (
+          <span
+            key={s.player_id}
+            className="h-full transition-all"
+            style={{
+              width: `${(s.count / Math.max(1, totalEmpty)) * 100}%`,
+              backgroundColor: s.color,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
 }

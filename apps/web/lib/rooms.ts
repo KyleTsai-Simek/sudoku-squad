@@ -492,6 +492,21 @@ export async function updateRoomSettings(args: {
   };
 }
 
+export async function changeMode(args: {
+  room_id: string;
+  mode: RoomMode;
+}): Promise<Result<{ mode: RoomMode; changed: boolean }>> {
+  const res = await invoke<{ mode: string; changed: boolean }>('change-mode', args);
+  if (!res.ok) return res;
+  return {
+    ok: true,
+    value: {
+      mode: res.value.mode as RoomMode,
+      changed: res.value.changed,
+    },
+  };
+}
+
 export async function changeDifficulty(args: {
   room_id: string;
   difficulty: Difficulty;

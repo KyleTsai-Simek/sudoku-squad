@@ -13,6 +13,11 @@ interface Props {
  * uses their locally-known progress (snappier than waiting for the server
  * echo). Opponents use the cached `progress_pct` on `room_players`, updated
  * by submit-move and broadcast via Realtime.
+ *
+ * Layout: username column flexes to fit the full name (no truncation); the
+ * progress bar takes a fixed slice on the right so even a long username has
+ * room. The current player's row is bold (username + %); others are regular,
+ * which replaces the older "(you)" label.
  */
 export function OpponentProgress({ players, ownPlayerId, ownProgressPct }: Props) {
   return (
@@ -30,21 +35,33 @@ export function OpponentProgress({ players, ownPlayerId, ownProgressPct }: Props
               className="inline-block h-2 w-2 shrink-0 rounded-full"
               style={{ backgroundColor: p.color }}
             />
-            <span className="w-24 truncate font-medium text-stone-700">
+            <span
+              className={
+                isYou
+                  ? 'min-w-0 flex-1 break-words font-bold text-stone-900'
+                  : 'min-w-0 flex-1 break-words font-medium text-stone-700'
+              }
+            >
               {p.username}
-              {isYou ? <span className="text-stone-400"> (you)</span> : null}
             </span>
-            <span className="flex-1">
-              <span
-                className="block h-1.5 overflow-hidden rounded-full bg-stone-200"
-              >
+            <span className="w-24 shrink-0 sm:w-32">
+              <span className="block h-1.5 overflow-hidden rounded-full bg-stone-200">
                 <span
                   className="block h-full rounded-full transition-all"
-                  style={{ width: `${Math.min(100, Math.max(0, pct))}%`, backgroundColor: p.color }}
+                  style={{
+                    width: `${Math.min(100, Math.max(0, pct))}%`,
+                    backgroundColor: p.color,
+                  }}
                 />
               </span>
             </span>
-            <span className="w-10 text-right tabular-nums text-stone-500">
+            <span
+              className={
+                isYou
+                  ? 'w-10 shrink-0 text-right font-bold tabular-nums text-stone-900'
+                  : 'w-10 shrink-0 text-right tabular-nums text-stone-500'
+              }
+            >
               {pct}%
             </span>
           </li>

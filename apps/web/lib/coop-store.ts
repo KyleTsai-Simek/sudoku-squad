@@ -189,6 +189,53 @@ function materializeRemote(
   return board;
 }
 
+/**
+ * Walk the seq-ordered move log and compute who currently "owns" each cell.
+ * Ownership rules:
+ *   - 'value' move sets ownership to that move's player_id (LAST writer wins).
+ *   - 'clear' removes ownership.
+ *   - 'note_toggle' does NOT change ownership (notes aren't a cell value).
+ * Returns a Map of player_id → count of cells they own.
+ *
+ * Pendings (our own unconfirmed moves) are folded in at the end and
+ * attributed to `ownPlayerId`. This gives instant credit on the placing
+ * client — without it, we'd wait on the realtime echo round-trip and the
+ * UI would lag a noticeable beat behind the cell-fill animation.
+ */
+export function computeOwnership(
+  serverMoves: Map<number, ServerMove>,
+  pendings: Array<{ move: Move }>,
+  ownPlayerId: string | null,
+): Map<string, number> {
+  const cellOwner = new Map<number, string>();
+  const sortedSeqs = [...serverMoves.keys()].sort((a, b) => a - b);
+  for (const seq of sortedSeqs) {
+    const m = serverMoves.get(seq)!;
+    if (m.kind === 'value') {
+      cellOwner.set(m.cell, m.player_id);
+    } else if (m.kind === 'clear') {
+      cellOwner.delete(m.cell);
+    }
+    // note_toggle: skip
+  }
+  // Pendings are applied AFTER server moves (they happen-after by definition;
+  // their server seq, when it lands, will be > any current serverMoves seq).
+  if (ownPlayerId) {
+    for (const p of pendings) {
+      if (p.move.kind === 'value') {
+        cellOwner.set(p.move.cell, ownPlayerId);
+      } else if (p.move.kind === 'clear') {
+        cellOwner.delete(p.move.cell);
+      }
+    }
+  }
+  const counts = new Map<string, number>();
+  for (const owner of cellOwner.values()) {
+    counts.set(owner, (counts.get(owner) ?? 0) + 1);
+  }
+  return counts;
+}
+
 /** Overlay pending moves on top of remoteBoard. */
 function overlayPendings(remoteBoard: BoardState, pendings: PendingMove[]): BoardState {
   return applyMoves(remoteBoard, pendings.map((p) => p.move));

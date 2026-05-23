@@ -17,6 +17,30 @@ Format:
 
 ---
 
+## 0038 — Coop progress: per-player credit by last-placer (regardless of correctness)
+**Date:** 2026-05-23
+**Status:** Accepted
+
+**Context.** The first coop UI shipped a single team-colored progress bar — useful for "how close are we?" but not for "who did what?". The user asked to make per-player contribution visible: stacked colored segments inside the bar, with names colored above. We needed an unambiguous rule for *which* player owns a given cell at any moment.
+
+**Decision.** Ownership rule: the credit for a cell goes to whichever player *last placed a value* in that cell, **regardless of correctness**. Concretely:
+- `value` move sets ownership to that move's `player_id` (last-writer-wins by seq).
+- `clear` removes ownership entirely.
+- `note_toggle` does not change ownership.
+- Overwriting a peer's wrong value transfers credit to the overwriter (and bumps the team % if the overwritten cell was previously empty — though overwrite of an existing value keeps the count the same and just shifts the segment from one color to another).
+- Sum of all per-player credit counts equals the team's filled-cell count, which matches the server-authoritative `progress_pct` (off by at most ±1 pp from integer rounding).
+
+Ownership is computed at *render* time from `serverMoves + pendings + ownPlayerId` (the new exported `computeOwnership` helper in `coop-store.ts`). Storing it would have required updating it on every store mutation; render-time derivation is cheap (81 cells, single pass) and means a fresh pending move shows up in the bar the instant it's placed — no waiting for the realtime echo.
+
+**Alternatives considered.**
+- *Credit only correct cells.* Simpler to compute (replay through the solution-checker) but punishes guesswork that's often part of solving — the user wanted credit for trying.
+- *Credit by first-placer (not last).* Stable for an individual cell but loses the "I cleaned up your bad guess" signal. Last-placer is what mirrors human intuition of "this is my answer right now."
+- *Store ownership in the Zustand state.* More straightforward read but every move-path mutation has to recompute and `set()` again; we already saw a delivery-lag bug where ownership trailed pendings until the realtime echo arrived. Render-time computation eliminates that class of bug entirely.
+
+**Consequences.** No schema change — the rule is fully derivable from the existing `moves` table. The displayed bar is per-cell-fill, not per-cell-correctness, which means progress can fall back to zero if a player clears cells (matches the existing `sharedProgressPct` semantics — `filled / total_empty`). Future fairness extensions (e.g. "wrong placements don't count" mode) would just need a new derivation pass over `moves`, not a schema change.
+
+---
+
 ## 0037 — Batched submit-move + resync triggers (gap detection, reconnect, visibility)
 **Date:** 2026-05-23
 **Status:** Accepted (extends [#0036](#0036))
