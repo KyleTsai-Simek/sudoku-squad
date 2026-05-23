@@ -41,21 +41,18 @@ test('battle: create + join + start + sync', async ({ browser }) => {
   const pageB = await ctxB.newPage();
 
   try {
-    // A creates a battle room. The home page exposes Create + Join buttons
-    // inline within the Battle card, so a single click on "Create game"
-    // from the Battle card creates the room. (There's also a "Create game"
-    // on the Coop card — we use `.last()` since Battle is rendered second.)
+    // A creates a battle room. The Battle card is a single button that
+    // creates a room and navigates to /r/{code} directly.
     await pageA.goto('/');
     await expect(pageA.getByRole('heading', { name: 'Sudoku Squad' })).toBeVisible();
-    await pageA.getByRole('button', { name: /Create game/i }).last().click();
+    await pageA.getByRole('button', { name: /^Battle/ }).click();
     await pageA.waitForURL(ROOM_CODE_RE, { timeout: 15000 });
     const code = pageA.url().match(ROOM_CODE_RE)![1]!;
 
-    // B joins via the Battle card's "Join game" → code input path.
-    await pageB.goto('/');
-    await pageB.getByRole('button', { name: /Join game/i }).last().click();
-    await pageB.getByPlaceholder(/code/i).fill(code);
-    await pageB.getByRole('button', { name: /^Join$/ }).click();
+    // B joins by navigating directly to the room URL (the same path shared-
+    // link recipients take). The home page no longer carries a join input;
+    // public-lobby browsing is implicit via the list below the cards.
+    await pageB.goto(`/r/${code}`);
     await pageB.waitForURL(new RegExp(`/r/${code}`), { timeout: 15000 });
 
     // Lobby sync: both see the (2/8) player count via Realtime broadcast.

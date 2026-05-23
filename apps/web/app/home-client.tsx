@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Difficulty } from '@sudoku-squad/core';
 import { getTierCounts, pickRandomUnsolved } from '@/lib/pick-puzzle';
 import { getCompletionCount } from '@/lib/completions';
-import { createRoom, joinRoom, type RoomMode } from '@/lib/rooms';
+import { createRoom, type RoomMode } from '@/lib/rooms';
 import { getUsername, readCachedUsername } from '@/lib/username';
 import { PublicLobbyList } from '@/components/public-lobby-list';
 
@@ -39,14 +39,11 @@ const TIER_BLURB: Record<Difficulty, string> = {
   killer: '—',
 };
 
-/** Default difficulty when creating a multiplayer room — the host can change
+/** Default difficulty when creating a multiplayer room — the host changes
  *  it from the lobby after creation. Centered in the visible range. */
 const MP_DEFAULT_DIFFICULTY: Difficulty = 'medium';
 
-type View =
-  | { kind: 'mode' }
-  | { kind: 'sp' }
-  | { kind: 'mp_join'; mode: 'battle' | 'coop' };
+type View = { kind: 'mode' } | { kind: 'sp' };
 
 export function HomeClient() {
   const router = useRouter();
@@ -54,9 +51,6 @@ export function HomeClient() {
   const [counts, setCounts] = useState<Record<Difficulty, TierState> | null>(null);
   const [loadingSolo, setLoadingSolo] = useState<Difficulty | null>(null);
   const [loadingMp, setLoadingMp] = useState<RoomMode | null>(null);
-  const [joinCode, setJoinCode] = useState('');
-  const [joinPending, setJoinPending] = useState(false);
-  const [joinError, setJoinError] = useState<string | null>(null);
   const [completed, setCompleted] = useState<number | null>(null);
   const [username, setUsernameState] = useState<string | null>(() =>
     typeof window !== 'undefined' ? readCachedUsername() : null,
@@ -103,22 +97,6 @@ export function HomeClient() {
     }
   }
 
-  async function onJoin(e: FormEvent) {
-    e.preventDefault();
-    const code = joinCode.trim().toLowerCase();
-    if (!code) return;
-    setJoinPending(true);
-    setJoinError(null);
-    const usernameValue = await getUsername();
-    const res = await joinRoom({ code, username: usernameValue });
-    setJoinPending(false);
-    if (res.ok) {
-      router.push(`/r/${res.value.room_code}`);
-      return;
-    }
-    setJoinError(roomErrorMessage(res.error.code, res.error.message));
-  }
-
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-6 px-6 py-10">
       <div className="text-center">
@@ -148,40 +126,33 @@ export function HomeClient() {
       </div>
 
       {view.kind === 'mode' && (
-        <div className="flex w-full flex-col gap-3">
-          {/* SP keeps its expand-to-tiers behavior — clicking the card
-              advances to the difficulty list because SP doesn't have a
-              create-vs-join split. */}
-          <button
-            type="button"
-            onClick={() => setView({ kind: 'sp' })}
-            className="group flex flex-col items-start gap-1 rounded-xl border border-stone-900 bg-stone-900 px-6 py-5 text-left text-white transition-colors hover:bg-stone-800"
-          >
-            <span className="text-lg font-semibold">Single-player</span>
-            <span className="text-xs text-stone-300 group-hover:text-stone-200">
-              One puzzle, just you.
-            </span>
-          </button>
+        <>
+          <div className="flex w-full flex-col gap-3">
+            <ModeButton
+              label="Single-player"
+              description="One puzzle, just you."
+              onClick={() => setView({ kind: 'sp' })}
+            />
+            <ModeButton
+              label="Co-op"
+              description="Same board, solve together."
+              loading={loadingMp === 'coop'}
+              onClick={() => startMultiplayer('coop')}
+            />
+            <ModeButton
+              label="Battle"
+              description="Same puzzle, race to finish."
+              loading={loadingMp === 'battle'}
+              onClick={() => startMultiplayer('battle')}
+            />
+          </div>
 
-          {/* Multiplayer cards embed the Create + Join actions inline so the
-              flow is one click instead of two. */}
-          <MultiplayerCard
-            mode="coop"
-            label="Co-op"
-            description="Same board, solve together."
-            loading={loadingMp === 'coop'}
-            onCreate={() => startMultiplayer('coop')}
-            onJoin={() => setView({ kind: 'mp_join', mode: 'coop' })}
-          />
-          <MultiplayerCard
-            mode="battle"
-            label="Battle"
-            description="Same puzzle, race to finish."
-            loading={loadingMp === 'battle'}
-            onCreate={() => startMultiplayer('battle')}
-            onJoin={() => setView({ kind: 'mp_join', mode: 'battle' })}
-          />
-        </div>
+          {/* Public lobbies render below the three mode cards when any
+              exist. The component itself returns null on an empty list,
+              so this section silently disappears when there's nothing
+              open — no header, no placeholder. */}
+          <PublicLobbyList />
+        </>
       )}
 
       {view.kind === 'sp' && (
@@ -234,122 +205,31 @@ export function HomeClient() {
           })}
         </div>
       )}
-
-      {view.kind === 'mp_join' && (
-        <div className="flex w-full flex-col gap-4">
-          <BackRow
-            onBack={() => setView({ kind: 'mode' })}
-            label={`${view.mode === 'coop' ? 'Co-op' : 'Battle'} · open lobbies`}
-          />
-
-          <PublicLobbyList
-            mode={view.mode}
-            emptyState={
-              <p className="rounded-lg border border-dashed border-stone-300 px-3 py-4 text-center text-sm text-stone-500">
-                No open {view.mode} lobbies right now.
-              </p>
-            }
-          />
-
-          <div className="rounded-lg border border-stone-200 bg-white p-4">
-            <p className="text-xs font-medium uppercase tracking-widest text-stone-500">
-              Or create your own
-            </p>
-            <button
-              type="button"
-              onClick={() => startMultiplayer(view.mode)}
-              disabled={loadingMp !== null}
-              className="mt-2 w-full rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
-            >
-              {loadingMp === view.mode ? 'Creating…' : `Start a new ${view.mode} room`}
-            </button>
-          </div>
-
-          <div className="rounded-lg border border-stone-200 bg-white p-4">
-            <p className="text-xs font-medium uppercase tracking-widest text-stone-500">
-              Or join with a code
-            </p>
-            <form onSubmit={onJoin} className="mt-2 flex gap-2">
-              <input
-                type="text"
-                inputMode="text"
-                autoCapitalize="off"
-                autoComplete="off"
-                spellCheck={false}
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value)}
-                placeholder="6-char code"
-                maxLength={6}
-                className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-mono lowercase tracking-widest text-stone-900 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none"
-              />
-              <button
-                type="submit"
-                disabled={joinPending || joinCode.trim().length === 0}
-                className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
-              >
-                {joinPending ? 'Joining…' : 'Join'}
-              </button>
-            </form>
-            {joinError ? <p className="mt-2 text-xs text-red-600">{joinError}</p> : null}
-          </div>
-        </div>
-      )}
     </main>
   );
 }
 
-/**
- * Multiplayer card with embedded Create + Join actions. The card itself is
- * NOT a button — clicks land on the two inner buttons. This collapses the
- * old two-step "click mode → click action" into a single page.
- */
-function MultiplayerCard({
-  mode,
+function ModeButton({
   label,
   description,
   loading,
-  onCreate,
-  onJoin,
+  onClick,
 }: {
-  mode: 'coop' | 'battle';
   label: string;
   description: string;
-  loading: boolean;
-  onCreate: () => void;
-  onJoin: () => void;
+  loading?: boolean;
+  onClick: () => void;
 }) {
-  // Coop ≈ green accent; Battle ≈ amber accent. Matches the in-lobby
-  // start-game button colors used in the rest of the app.
-  const accent = mode === 'coop' ? 'emerald' : 'amber';
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-stone-900 bg-stone-900 px-6 py-5 text-white">
-      <div>
-        <p className="text-lg font-semibold">{label}</p>
-        <p className="text-xs text-stone-300">{description}</p>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={onCreate}
-          disabled={loading}
-          className={
-            'rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-60 ' +
-            (accent === 'emerald'
-              ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-              : 'bg-amber-500 text-white hover:bg-amber-600')
-          }
-        >
-          {loading ? 'Creating…' : 'Create game'}
-        </button>
-        <button
-          type="button"
-          onClick={onJoin}
-          className="rounded-lg border border-stone-600 bg-stone-800 px-3 py-2 text-sm font-semibold text-white hover:bg-stone-700"
-        >
-          Join game
-        </button>
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      className="group flex flex-col items-start gap-1 rounded-xl border border-stone-900 bg-stone-900 px-6 py-5 text-left text-white transition-colors hover:bg-stone-800 disabled:opacity-60"
+    >
+      <span className="text-lg font-semibold">{loading ? 'Creating…' : label}</span>
+      <span className="text-xs text-stone-300 group-hover:text-stone-200">{description}</span>
+    </button>
   );
 }
 
@@ -367,19 +247,4 @@ function BackRow({ onBack, label }: { onBack: () => void; label: string }) {
       <h2 className="text-xs font-semibold uppercase tracking-widest text-stone-500">{label}</h2>
     </div>
   );
-}
-
-function roomErrorMessage(code: string, fallback: string): string {
-  switch (code) {
-    case 'not_found':
-      return "Couldn't find a room with that code. Double-check it.";
-    case 'room_full':
-      return 'That room is full.';
-    case 'room_over':
-      return 'That room is already finished. Ask for a fresh link.';
-    case 'mid_game_join_forbidden':
-      return "That battle has already started — can't join mid-game.";
-    default:
-      return fallback;
-  }
 }
