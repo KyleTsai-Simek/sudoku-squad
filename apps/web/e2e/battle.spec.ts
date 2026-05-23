@@ -41,19 +41,19 @@ test('battle: create + join + start + sync', async ({ browser }) => {
   const pageB = await ctxB.newPage();
 
   try {
-    // A creates a battle room via the three-step home flow:
-    //   1. click "Battle"  →  2. click "Create game"
+    // A creates a battle room. The home page exposes Create + Join buttons
+    // inline within the Battle card, so a single click on "Create game"
+    // from the Battle card creates the room. (There's also a "Create game"
+    // on the Coop card — we use `.last()` since Battle is rendered second.)
     await pageA.goto('/');
     await expect(pageA.getByRole('heading', { name: 'Sudoku Squad' })).toBeVisible();
-    await pageA.getByRole('button', { name: /^Battle/ }).click();
-    await pageA.getByRole('button', { name: /Create game/i }).click();
+    await pageA.getByRole('button', { name: /Create game/i }).last().click();
     await pageA.waitForURL(ROOM_CODE_RE, { timeout: 15000 });
     const code = pageA.url().match(ROOM_CODE_RE)![1]!;
 
-    // B joins via the Battle → Join game → code input path.
+    // B joins via the Battle card's "Join game" → code input path.
     await pageB.goto('/');
-    await pageB.getByRole('button', { name: /^Battle/ }).click();
-    await pageB.getByRole('button', { name: /Join game/i }).click();
+    await pageB.getByRole('button', { name: /Join game/i }).last().click();
     await pageB.getByPlaceholder(/code/i).fill(code);
     await pageB.getByRole('button', { name: /^Join$/ }).click();
     await pageB.waitForURL(new RegExp(`/r/${code}`), { timeout: 15000 });

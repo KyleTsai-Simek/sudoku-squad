@@ -19,7 +19,7 @@ import {
   type RoomState,
 } from '@/lib/rooms';
 import type { Difficulty } from '@sudoku-squad/core';
-import { getUsername, setLocalUsernameOverride } from '@/lib/username';
+import { getUsername } from '@/lib/username';
 import { LobbySettingsPanel } from '@/components/lobby-settings-panel';
 import { DEFAULT_ROOM_SETTINGS } from '@/lib/rooms';
 import { BattleGame } from './battle-game';
@@ -40,12 +40,18 @@ export function LobbyClient({ code }: { code: string }) {
   const [players, setPlayers] = useState<RoomPlayerProgress[]>([]);
   const [roomRow, setRoomRow] = useState<RoomRow | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
-  const [editingUsername, setEditingUsername] = useState(false);
-  const [usernameDraft, setUsernameDraft] = useState('');
   const [startError, setStartError] = useState<string | null>(null);
   const [startPending, setStartPending] = useState(false);
   const [currentDifficulty, setCurrentDifficulty] = useState<Difficulty | null>(null);
-  const [difficultyPending, setDifficultyPending] = useState(false);
+  // `optimisticDifficulty` reflects the host's click immediately. It clears
+  // once the server-driven `currentDifficulty` (resolved from the room's
+  // updated puzzle_code) catches up. The selector reads optimistic-first.
+  const [optimisticDifficulty, setOptimisticDifficulty] = useState<Difficulty | null>(null);
+  // Count of in-flight sync writes (difficulty + settings). The Start
+  // button disables (with a spinner) while > 0 so users can't race a Start
+  // against a pending change. Toggle buttons themselves stay enabled and
+  // update immediately.
+  const [pendingSync, setPendingSync] = useState(0);
 
   // 1. Join (or rejoin) the room on mount.
   useEffect(() => {
@@ -130,16 +136,28 @@ export function LobbyClient({ code }: { code: string }) {
   const onChangeDifficulty = useCallback(
     async (next: Difficulty) => {
       if (phase.kind !== 'in_lobby') return;
-      setDifficultyPending(true);
+      // Immediate UI feedback: the button updates now. The realtime room
+      // row update will eventually agree (and clear the optimistic flag).
+      setOptimisticDifficulty(next);
+      setPendingSync((n) => n + 1);
       const res = await changeDifficulty({ room_id: phase.room.room_id, difficulty: next });
-      setDifficultyPending(false);
+      setPendingSync((n) => Math.max(0, n - 1));
       if (!res.ok) {
-        // Best-effort error display via the same red-text line as start.
+        // Roll back the optimistic selection on error.
+        setOptimisticDifficulty(null);
         setStartError(res.error.message);
       }
     },
     [phase],
   );
+
+  // Clear the optimistic difficulty once the server-resolved value catches
+  // up. Runs every time `currentDifficulty` changes.
+  useEffect(() => {
+    if (optimisticDifficulty !== null && currentDifficulty === optimisticDifficulty) {
+      setOptimisticDifficulty(null);
+    }
+  }, [currentDifficulty, optimisticDifficulty]);
 
   const onCopyShare = useCallback(async () => {
     try {
@@ -301,18 +319,6 @@ export function LobbyClient({ code }: { code: string }) {
                   ) : null}
                 </span>
                 <div className="flex items-center gap-3">
-                  {isYou && !editingUsername ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUsernameDraft(p.username);
-                        setEditingUsername(true);
-                      }}
-                      className="text-xs text-stone-500 underline-offset-2 hover:underline"
-                    >
-                      rename
-                    </button>
-                  ) : null}
                   {isHost && !isYou ? (
                     <button
                       type="button"
@@ -332,35 +338,6 @@ export function LobbyClient({ code }: { code: string }) {
             );
           })}
         </ul>
-        {editingUsername ? (
-          <div className="mt-2 flex gap-2">
-            <input
-              type="text"
-              value={usernameDraft}
-              onChange={(e) => setUsernameDraft(e.target.value)}
-              maxLength={20}
-              placeholder="username"
-              className="flex-1 rounded-md border border-stone-300 px-3 py-1.5 text-sm"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                setLocalUsernameOverride(usernameDraft);
-                setEditingUsername(false);
-              }}
-              className="rounded-md bg-stone-900 px-3 py-1.5 text-sm font-medium text-white"
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditingUsername(false)}
-              className="rounded-md border border-stone-300 px-3 py-1.5 text-sm text-stone-700"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : null}
       </section>
 
       <section className="w-full">
@@ -373,18 +350,25 @@ export function LobbyClient({ code }: { code: string }) {
         ) : isHost && status === 'lobby' ? (
           <div className="grid grid-cols-5 gap-2">
             {(['warmup', 'easy', 'medium', 'hard', 'expert'] as const).map((d) => {
-              const selected = currentDifficulty === d;
+              // Show the optimistic selection if we have one — keeps the
+              // button visually in sync with the user's last click even
+              // before the server confirms.
+              const displayed = optimisticDifficulty ?? currentDifficulty;
+              const selected = displayed === d;
               return (
                 <button
                   key={d}
                   type="button"
                   onClick={() => onChangeDifficulty(d)}
-                  disabled={difficultyPending || selected}
+                  // Note: stay clickable while syncing. The user can click
+                  // again to change their mind; the in-flight requests
+                  // serialize through Supabase and the latest write wins.
+                  disabled={selected}
                   className={cn(
                     'rounded-lg border px-2 py-2 text-xs font-medium transition-colors',
                     selected
                       ? 'border-stone-900 bg-stone-900 text-white'
-                      : 'border-stone-300 bg-white text-stone-700 hover:border-stone-500 disabled:opacity-60',
+                      : 'border-stone-300 bg-white text-stone-700 hover:border-stone-500',
                   )}
                 >
                   {d === 'warmup' ? 'Warm-up' : d[0]!.toUpperCase() + d.slice(1)}
@@ -410,6 +394,7 @@ export function LobbyClient({ code }: { code: string }) {
         isPublic={roomRow?.is_public ?? false}
         isHost={isHost}
         locked={status !== 'lobby'}
+        onPendingChange={(d) => setPendingSync((n) => Math.max(0, n + d))}
       />
 
       <section className={cn('w-full text-center', !isHost && 'text-stone-500')}>
@@ -418,18 +403,28 @@ export function LobbyClient({ code }: { code: string }) {
             <button
               type="button"
               onClick={onStart}
-              disabled={startPending || !enoughPlayers || !allReady}
-              className="w-full rounded-xl bg-stone-900 px-5 py-4 text-base font-semibold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={startPending || !enoughPlayers || !allReady || pendingSync > 0}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-5 py-4 text-base font-semibold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {startPending
-                ? 'Starting…'
-                : !enoughPlayers
-                  ? 'Waiting for at least 2 players…'
-                  : !allReady
-                    ? `Waiting on ${stragglers.length} player${stragglers.length === 1 ? '' : 's'}…`
-                    : room.mode === 'coop'
-                      ? 'Start coop'
-                      : 'Start battle'}
+              {pendingSync > 0 ? (
+                <span
+                  aria-hidden
+                  className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                />
+              ) : null}
+              <span>
+                {startPending
+                  ? 'Starting…'
+                  : pendingSync > 0
+                    ? 'Syncing…'
+                    : !enoughPlayers
+                      ? 'Waiting for at least 2 players…'
+                      : !allReady
+                        ? `Waiting on ${stragglers.length} player${stragglers.length === 1 ? '' : 's'}…`
+                        : room.mode === 'coop'
+                          ? 'Start coop'
+                          : 'Start battle'}
+              </span>
             </button>
             {startError ? (
               <p className="mt-2 text-xs text-red-600">{startError}</p>

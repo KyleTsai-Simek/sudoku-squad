@@ -46,7 +46,6 @@ const MP_DEFAULT_DIFFICULTY: Difficulty = 'medium';
 type View =
   | { kind: 'mode' }
   | { kind: 'sp' }
-  | { kind: 'mp_options'; mode: 'battle' | 'coop' }
   | { kind: 'mp_join'; mode: 'battle' | 'coop' };
 
 export function HomeClient() {
@@ -150,20 +149,37 @@ export function HomeClient() {
 
       {view.kind === 'mode' && (
         <div className="flex w-full flex-col gap-3">
-          <ModeButton
-            label="Single-player"
-            description="One puzzle, just you."
+          {/* SP keeps its expand-to-tiers behavior — clicking the card
+              advances to the difficulty list because SP doesn't have a
+              create-vs-join split. */}
+          <button
+            type="button"
             onClick={() => setView({ kind: 'sp' })}
-          />
-          <ModeButton
+            className="group flex flex-col items-start gap-1 rounded-xl border border-stone-900 bg-stone-900 px-6 py-5 text-left text-white transition-colors hover:bg-stone-800"
+          >
+            <span className="text-lg font-semibold">Single-player</span>
+            <span className="text-xs text-stone-300 group-hover:text-stone-200">
+              One puzzle, just you.
+            </span>
+          </button>
+
+          {/* Multiplayer cards embed the Create + Join actions inline so the
+              flow is one click instead of two. */}
+          <MultiplayerCard
+            mode="coop"
             label="Co-op"
             description="Same board, solve together."
-            onClick={() => setView({ kind: 'mp_options', mode: 'coop' })}
+            loading={loadingMp === 'coop'}
+            onCreate={() => startMultiplayer('coop')}
+            onJoin={() => setView({ kind: 'mp_join', mode: 'coop' })}
           />
-          <ModeButton
+          <MultiplayerCard
+            mode="battle"
             label="Battle"
             description="Same puzzle, race to finish."
-            onClick={() => setView({ kind: 'mp_options', mode: 'battle' })}
+            loading={loadingMp === 'battle'}
+            onCreate={() => startMultiplayer('battle')}
+            onJoin={() => setView({ kind: 'mp_join', mode: 'battle' })}
           />
         </div>
       )}
@@ -219,40 +235,10 @@ export function HomeClient() {
         </div>
       )}
 
-      {view.kind === 'mp_options' && (
-        <div className="flex w-full flex-col gap-4">
-          <BackRow
-            onBack={() => setView({ kind: 'mode' })}
-            label={view.mode === 'coop' ? 'Co-op' : 'Battle'}
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => startMultiplayer(view.mode)}
-              disabled={loadingMp !== null}
-              className="flex flex-col items-center gap-1 rounded-xl border border-stone-900 bg-stone-900 px-4 py-5 text-white hover:bg-stone-800 disabled:opacity-60"
-            >
-              <span className="text-base font-semibold">
-                {loadingMp === view.mode ? 'Creating…' : 'Create game'}
-              </span>
-              <span className="text-xs text-stone-300">Become host</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setView({ kind: 'mp_join', mode: view.mode })}
-              className="flex flex-col items-center gap-1 rounded-xl border border-stone-300 bg-white px-4 py-5 hover:border-stone-500"
-            >
-              <span className="text-base font-semibold text-stone-900">Join game</span>
-              <span className="text-xs text-stone-500">Browse open lobbies</span>
-            </button>
-          </div>
-        </div>
-      )}
-
       {view.kind === 'mp_join' && (
         <div className="flex w-full flex-col gap-4">
           <BackRow
-            onBack={() => setView({ kind: 'mp_options', mode: view.mode })}
+            onBack={() => setView({ kind: 'mode' })}
             label={`${view.mode === 'coop' ? 'Co-op' : 'Battle'} · open lobbies`}
           />
 
@@ -312,24 +298,58 @@ export function HomeClient() {
   );
 }
 
-function ModeButton({
+/**
+ * Multiplayer card with embedded Create + Join actions. The card itself is
+ * NOT a button — clicks land on the two inner buttons. This collapses the
+ * old two-step "click mode → click action" into a single page.
+ */
+function MultiplayerCard({
+  mode,
   label,
   description,
-  onClick,
+  loading,
+  onCreate,
+  onJoin,
 }: {
+  mode: 'coop' | 'battle';
   label: string;
   description: string;
-  onClick: () => void;
+  loading: boolean;
+  onCreate: () => void;
+  onJoin: () => void;
 }) {
+  // Coop ≈ green accent; Battle ≈ amber accent. Matches the in-lobby
+  // start-game button colors used in the rest of the app.
+  const accent = mode === 'coop' ? 'emerald' : 'amber';
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex flex-col items-start gap-1 rounded-xl border border-stone-900 bg-stone-900 px-6 py-5 text-left text-white transition-colors hover:bg-stone-800"
-    >
-      <span className="text-lg font-semibold">{label}</span>
-      <span className="text-xs text-stone-300 group-hover:text-stone-200">{description}</span>
-    </button>
+    <div className="flex flex-col gap-3 rounded-xl border border-stone-900 bg-stone-900 px-6 py-5 text-white">
+      <div>
+        <p className="text-lg font-semibold">{label}</p>
+        <p className="text-xs text-stone-300">{description}</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onCreate}
+          disabled={loading}
+          className={
+            'rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-60 ' +
+            (accent === 'emerald'
+              ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+              : 'bg-amber-500 text-white hover:bg-amber-600')
+          }
+        >
+          {loading ? 'Creating…' : 'Create game'}
+        </button>
+        <button
+          type="button"
+          onClick={onJoin}
+          className="rounded-lg border border-stone-600 bg-stone-800 px-3 py-2 text-sm font-semibold text-white hover:bg-stone-700"
+        >
+          Join game
+        </button>
+      </div>
+    </div>
   );
 }
 

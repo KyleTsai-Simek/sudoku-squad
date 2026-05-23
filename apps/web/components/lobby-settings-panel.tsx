@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { updateRoomSettings, type RoomSettings } from '@/lib/rooms';
 
 interface Props {
@@ -10,6 +10,9 @@ interface Props {
   /** Toggles are editable only when the caller is the host AND room is in lobby. */
   isHost: boolean;
   locked: boolean;
+  /** Bubbles up so the parent's Start button can disable itself with a
+   *  spinner while any setting/difficulty write is still syncing. */
+  onPendingChange?: (delta: 1 | -1) => void;
 }
 
 interface Toggle {
@@ -42,30 +45,68 @@ export function LobbySettingsPanel({
   isPublic,
   isHost,
   locked,
+  onPendingChange,
 }: Props) {
-  const [pending, setPending] = useState<keyof RoomSettings | 'is_public' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Optimistic overrides keyed by setting name. Each checkbox renders from
+  // its override (if set) before the server-confirmed value. Cleared by an
+  // effect when the server-confirmed value catches up.
+  const [optimistic, setOptimistic] = useState<Partial<Record<keyof RoomSettings | 'is_public', boolean>>>({});
+
+  // Sync the optimistic map with incoming props: drop any key whose
+  // server-confirmed value now equals our pending value.
+  useEffect(() => {
+    setOptimistic((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const key of Object.keys(prev) as Array<keyof typeof prev>) {
+        const target = key === 'is_public' ? isPublic : settings[key];
+        if (target === prev[key]) {
+          delete next[key];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [settings, isPublic]);
 
   async function onToggle(key: keyof RoomSettings, next: boolean) {
-    setPending(key);
+    setOptimistic((m) => ({ ...m, [key]: next }));
     setError(null);
+    onPendingChange?.(1);
     const res = await updateRoomSettings({
       room_id: roomId,
       settings: { [key]: next } as Partial<RoomSettings>,
     });
-    setPending(null);
-    if (!res.ok) setError(res.error.message);
+    onPendingChange?.(-1);
+    if (!res.ok) {
+      // Roll back: drop the optimistic value so the checkbox snaps back to
+      // the server-confirmed value.
+      setOptimistic((m) => {
+        const { [key]: _drop, ...rest } = m;
+        return rest;
+      });
+      setError(res.error.message);
+    }
   }
 
   async function onTogglePublic(next: boolean) {
-    setPending('is_public');
+    setOptimistic((m) => ({ ...m, is_public: next }));
     setError(null);
+    onPendingChange?.(1);
     const res = await updateRoomSettings({ room_id: roomId, is_public: next });
-    setPending(null);
-    if (!res.ok) setError(res.error.message);
+    onPendingChange?.(-1);
+    if (!res.ok) {
+      setOptimistic((m) => {
+        const { is_public: _drop, ...rest } = m;
+        return rest;
+      });
+      setError(res.error.message);
+    }
   }
 
   const disabled = !isHost || locked;
+  const displayedPublic = optimistic.is_public ?? isPublic;
 
   return (
     <section className="w-full">
@@ -83,16 +124,15 @@ export function LobbySettingsPanel({
           <label className="flex shrink-0 cursor-pointer items-center">
             <input
               type="checkbox"
-              checked={isPublic}
-              disabled={disabled || pending === 'is_public'}
+              checked={displayedPublic}
+              disabled={disabled}
               onChange={(e) => onTogglePublic(e.target.checked)}
               className="h-5 w-5 cursor-pointer accent-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
             />
           </label>
         </li>
         {TOGGLES.map((t) => {
-          const value = settings[t.key];
-          const busy = pending === t.key;
+          const displayed = optimistic[t.key] ?? settings[t.key];
           return (
             <li
               key={t.key}
@@ -105,8 +145,8 @@ export function LobbySettingsPanel({
               <label className="flex shrink-0 cursor-pointer items-center">
                 <input
                   type="checkbox"
-                  checked={value}
-                  disabled={disabled || busy}
+                  checked={displayed}
+                  disabled={disabled}
                   onChange={(e) => onToggle(t.key, e.target.checked)}
                   className="h-5 w-5 cursor-pointer accent-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
                 />
