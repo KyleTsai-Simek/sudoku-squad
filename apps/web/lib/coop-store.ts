@@ -36,9 +36,14 @@ import { enqueueSubmit } from './submit-queue';
  * LWW per cell by `seq`. Differences from battle-store:
  *
  *   - `applyRemoteMove` folds in other players' moves as they arrive via
- *     the moves realtime channel.
- *   - `pendingOwnSeqs` dedupes server echos of moves we already applied
- *     locally (optimistic apply).
+ *     the moves realtime channel. Own echoes are dropped by player_id
+ *     (race-free; doesn't depend on the submit-move HTTP response landing
+ *     before the realtime broadcast).
+ *   - `appliedSeqs` catches duplicate realtime delivery (rare; happens
+ *     during reconnects).
+ *   - `pendingRemote` buffers realtime events during the
+ *     fetch-then-subscribe window so a move landing mid-replay is
+ *     applied in seq order rather than dropped on the floor.
  *   - No `incorrect` set yet (autoCheck wiring is the same as battle but
  *     simpler — we trust the server's per-move response).
  *   - No `winner_player_id` distinction: a coop win is a SHARED win
@@ -63,9 +68,15 @@ interface CoopState {
   finishedAt: number | null;
   sharedProgressPct: number;
   lastError: string | null;
-  /** Seqs we've submitted ourselves; suppresses double-apply when the server
-   *  echoes them via the realtime channel. */
-  pendingOwnSeqs: Set<number>;
+  /** Seqs already folded into the local board — from the initial replay,
+   *  from realtime, or from our own optimistic apply. Catches duplicate
+   *  realtime delivery (Supabase Realtime occasionally double-delivers
+   *  during reconnects) and the late-join drain. */
+  appliedSeqs: Set<number>;
+  /** Realtime events that arrived before `startCoop` ran. Drained in seq
+   *  order at the end of startCoop. Without this buffer, a move landing
+   *  mid-replay is silently dropped on the floor. */
+  pendingRemote: ServerMove[];
 
   // actions
   startCoop: (
@@ -86,8 +97,10 @@ interface CoopState {
   clearCell: () => Promise<void>;
   undo: () => void;
   redo: () => void;
-  /** Apply a move from another player (or our own echo). Suppressed when seq
-   *  is already in pendingOwnSeqs. */
+  /** Apply a move from the realtime `moves` channel. Skips when the move
+   *  is ours (we already applied it optimistically — dedup by player_id,
+   *  which is known instantly and doesn't race the seq round-trip) or when
+   *  we've already applied that seq. Buffers when no board yet. */
   applyRemoteMove: (m: ServerMove) => void;
   markFinished: () => void;
 }
@@ -120,17 +133,37 @@ export const useCoopStore = create<CoopState>((set, get) => ({
   finishedAt: null,
   sharedProgressPct: 0,
   lastError: null,
-  pendingOwnSeqs: new Set(),
+  appliedSeqs: new Set(),
+  pendingRemote: [],
 
   startCoop: (room, puzzleCode, givens, settings, gameStartsAt, initialMoves) => {
-    // Build base board, then fold in every move that's already been made in
-    // the room (replay path — covers both fresh-start with 0 moves and
-    // late-joiner with N moves). LWW falls out of replaying in seq order.
+    // Build base board + fold in every move already in the room. LWW falls
+    // out of replaying in seq order. Record every applied seq so a re-
+    // delivery via realtime is a no-op.
     let board = createBoard(puzzleCode, givens);
+    const applied = new Set<number>();
     for (const sm of initialMoves) {
       const core = toCoreMove(sm);
-      if (core) board = applyMove(board, core);
+      if (core) {
+        board = applyMove(board, core);
+        applied.add(sm.seq);
+      }
     }
+
+    // Drain any realtime events that arrived during the fetch window. We
+    // skip our own (already applied optimistically — though for a fresh
+    // joiner there shouldn't be any) and already-applied seqs.
+    const pending = get().pendingRemote;
+    for (const m of pending) {
+      if (m.player_id === room.own_player_id) continue;
+      if (applied.has(m.seq)) continue;
+      const core = toCoreMove(m);
+      if (core) {
+        board = applyMove(board, core);
+        applied.add(m.seq);
+      }
+    }
+
     set({
       room,
       puzzleCode,
@@ -144,7 +177,8 @@ export const useCoopStore = create<CoopState>((set, get) => ({
       finishedAt: null,
       sharedProgressPct: 0,
       lastError: null,
-      pendingOwnSeqs: new Set(),
+      appliedSeqs: applied,
+      pendingRemote: [],
     });
   },
 
@@ -208,11 +242,12 @@ export const useCoopStore = create<CoopState>((set, get) => ({
       set({ lastError: res.error.message });
       return;
     }
-    // Mark this seq as ours so the realtime echo doesn't double-apply.
+    // Record the seq so realtime double-delivery is a no-op. The PRIMARY
+    // dedup is by player_id (in applyRemoteMove) — this is belt + suspenders.
     if (res.value.seq !== undefined) {
-      const next = new Set(get().pendingOwnSeqs);
+      const next = new Set(get().appliedSeqs);
       next.add(res.value.seq);
-      set({ pendingOwnSeqs: next });
+      set({ appliedSeqs: next });
     }
     set({
       sharedProgressPct: res.value.progress_pct,
@@ -251,9 +286,9 @@ export const useCoopStore = create<CoopState>((set, get) => ({
       return;
     }
     if (res.value.seq !== undefined) {
-      const next = new Set(get().pendingOwnSeqs);
+      const next = new Set(get().appliedSeqs);
       next.add(res.value.seq);
-      set({ pendingOwnSeqs: next });
+      set({ appliedSeqs: next });
     }
     set({ sharedProgressPct: res.value.progress_pct, lastError: null });
   },
@@ -306,9 +341,9 @@ export const useCoopStore = create<CoopState>((set, get) => ({
       return;
     }
     if (res.value.seq !== undefined) {
-      const next = new Set(get().pendingOwnSeqs);
+      const next = new Set(get().appliedSeqs);
       next.add(res.value.seq);
-      set({ pendingOwnSeqs: next });
+      set({ appliedSeqs: next });
     }
     set({ sharedProgressPct: res.value.progress_pct, lastError: null });
   },
@@ -339,22 +374,49 @@ export const useCoopStore = create<CoopState>((set, get) => ({
   },
 
   applyRemoteMove: (m) => {
-    const { board, pendingOwnSeqs, settings } = get();
-    if (!board) return;
-    // Echo suppression — we already applied this seq locally on submit.
-    if (pendingOwnSeqs.has(m.seq)) {
-      const next = new Set(pendingOwnSeqs);
-      next.delete(m.seq);
-      set({ pendingOwnSeqs: next });
+    const { board, room, appliedSeqs, pendingRemote, settings } = get();
+
+    // If the local board hasn't been laid down yet (startCoop hasn't run),
+    // buffer the event so it can be drained in seq order once the replay
+    // completes. Without this, a move landing in the fetch-then-subscribe
+    // window is silently dropped.
+    if (!board || !room) {
+      // Cheap dedup vs. duplicate realtime delivery during reconnects.
+      if (pendingRemote.some((p) => p.seq === m.seq)) return;
+      set({ pendingRemote: [...pendingRemote, m] });
       return;
     }
+
+    // Primary dedup: our own optimistic apply already moved the board.
+    // Filter by player_id — known instantly, no race with the seq round-trip.
+    if (m.player_id === room.own_player_id) {
+      // Record the seq so a subsequent re-delivery (rare) is also a no-op.
+      if (!appliedSeqs.has(m.seq)) {
+        const next = new Set(appliedSeqs);
+        next.add(m.seq);
+        set({ appliedSeqs: next });
+      }
+      return;
+    }
+
+    // Belt + suspenders: drop seqs we've already folded in.
+    if (appliedSeqs.has(m.seq)) return;
+
     const core = toCoreMove(m);
     if (!core) return;
     const nextBoard = applyMove(board, core);
-    if (nextBoard === board) return;
+    const nextApplied = new Set(appliedSeqs);
+    nextApplied.add(m.seq);
+    if (nextBoard === board) {
+      // No-op (e.g., note_toggle on a cell whose mask already reflected this
+      // bit — shouldn't happen given LWW/XOR, but stays consistent).
+      set({ appliedSeqs: nextApplied });
+      return;
+    }
     set({
       board: nextBoard,
       conflicts: recomputeConflicts(nextBoard, settings.showConflicts),
+      appliedSeqs: nextApplied,
     });
   },
 
