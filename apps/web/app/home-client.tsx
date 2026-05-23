@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Difficulty } from '@sudoku-squad/core';
 import { getTierCounts, pickRandomUnsolved } from '@/lib/pick-puzzle';
 import { getCompletionCount } from '@/lib/completions';
-import { createRoom, type RoomMode } from '@/lib/rooms';
+import { createRoom, joinRoom, type RoomMode } from '@/lib/rooms';
 import { getUsername, readCachedUsername } from '@/lib/username';
 import { PublicLobbyList } from '@/components/public-lobby-list';
 
@@ -51,6 +51,9 @@ export function HomeClient() {
   const [counts, setCounts] = useState<Record<Difficulty, TierState> | null>(null);
   const [loadingSolo, setLoadingSolo] = useState<Difficulty | null>(null);
   const [loadingMp, setLoadingMp] = useState<RoomMode | null>(null);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinPending, setJoinPending] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [completed, setCompleted] = useState<number | null>(null);
   const [username, setUsernameState] = useState<string | null>(() =>
     typeof window !== 'undefined' ? readCachedUsername() : null,
@@ -95,6 +98,22 @@ export function HomeClient() {
     } else {
       alert(`Could not start ${mode}: ${res.error.message}`);
     }
+  }
+
+  async function onJoin(e: FormEvent) {
+    e.preventDefault();
+    const code = joinCode.trim().toLowerCase();
+    if (!code) return;
+    setJoinPending(true);
+    setJoinError(null);
+    const usernameValue = await getUsername();
+    const res = await joinRoom({ code, username: usernameValue });
+    setJoinPending(false);
+    if (res.ok) {
+      router.push(`/r/${res.value.room_code}`);
+      return;
+    }
+    setJoinError(roomErrorMessage(res.error.code, res.error.message));
   }
 
   return (
@@ -147,10 +166,44 @@ export function HomeClient() {
             />
           </div>
 
-          {/* Public lobbies render below the three mode cards when any
-              exist. The component itself returns null on an empty list,
-              so this section silently disappears when there's nothing
-              open — no header, no placeholder. */}
+          {/* Compact join-by-code input. Sits below the three primary
+              CTAs so shared-link recipients who only have a 6-char code
+              (no full URL) can still get into a room. */}
+          <form onSubmit={onJoin} className="flex w-full flex-col gap-2">
+            <label
+              htmlFor="join-code"
+              className="text-xs font-semibold uppercase tracking-widest text-stone-500"
+            >
+              Have a code?
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="join-code"
+                type="text"
+                inputMode="text"
+                autoCapitalize="off"
+                autoComplete="off"
+                spellCheck={false}
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+                placeholder="6-char room code"
+                maxLength={6}
+                className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-mono lowercase tracking-widest text-stone-900 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={joinPending || joinCode.trim().length === 0}
+                className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
+              >
+                {joinPending ? 'Joining…' : 'Join'}
+              </button>
+            </div>
+            {joinError ? <p className="text-xs text-red-600">{joinError}</p> : null}
+          </form>
+
+          {/* Public lobbies render below when any exist. The component
+              itself returns null on an empty list, so this section
+              silently disappears when there's nothing open. */}
           <PublicLobbyList />
         </>
       )}
@@ -247,4 +300,19 @@ function BackRow({ onBack, label }: { onBack: () => void; label: string }) {
       <h2 className="text-xs font-semibold uppercase tracking-widest text-stone-500">{label}</h2>
     </div>
   );
+}
+
+function roomErrorMessage(code: string, fallback: string): string {
+  switch (code) {
+    case 'not_found':
+      return "Couldn't find a room with that code. Double-check it.";
+    case 'room_full':
+      return 'That room is full.';
+    case 'room_over':
+      return 'That room is already finished. Ask for a fresh link.';
+    case 'mid_game_join_forbidden':
+      return "That battle has already started — can't join mid-game.";
+    default:
+      return fallback;
+  }
 }
