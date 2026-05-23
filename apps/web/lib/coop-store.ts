@@ -3,18 +3,18 @@
 import { create } from 'zustand';
 import {
   applyMove,
-  applyMoveWithHistory,
+  applyMoves,
   canRedo,
   canUndo,
   createBoard,
   createHistory,
   findConflicts,
-  peekLastMove,
   redo as redoHistory,
   undo as undoHistory,
 } from '@sudoku-squad/core';
 import type {
   BoardState,
+  Cell,
   CellIndex,
   CellValue,
   Move,
@@ -22,42 +22,60 @@ import type {
   PuzzleCode,
 } from '@sudoku-squad/core';
 import {
-  submitMove,
+  fetchAllMoves,
   DEFAULT_ROOM_SETTINGS,
   type RoomSettings,
   type RoomState,
   type ServerMove,
 } from './rooms';
-import { enqueueSubmit } from './submit-queue';
+import { enqueueMove } from './move-batcher';
 
 /**
- * Coop-mode local state. Like battle-store.ts but the board is **shared** —
- * every player writes to the same board, and the server materializes via
- * LWW per cell by `seq`. Differences from battle-store:
+ * Coop-mode local state. All players share a single board; the server
+ * orders writes via `seq` and the displayed board is materialized as:
  *
- *   - `applyRemoteMove` folds in other players' moves as they arrive via
- *     the moves realtime channel. Own echoes are dropped by player_id
- *     (race-free; doesn't depend on the submit-move HTTP response landing
- *     before the realtime broadcast).
- *   - `appliedSeqs` catches duplicate realtime delivery (rare; happens
- *     during reconnects).
- *   - `pendingRemote` buffers realtime events during the
- *     fetch-then-subscribe window so a move landing mid-replay is
- *     applied in seq order rather than dropped on the floor.
- *   - No `incorrect` set yet (autoCheck wiring is the same as battle but
- *     simpler — we trust the server's per-move response).
- *   - No `winner_player_id` distinction: a coop win is a SHARED win
- *     announced via `rooms.status='finished'`, and the UI shows
- *     "Solved together!" instead of a per-player win/lose state.
+ *     givens
+ *     + every server-confirmed move applied in seq order  (remoteBoard)
+ *     + every still-in-flight own move overlaid on top    (board)
  *
- * Per the Plan agent's spec, this is duplicated from battle-store rather
- * than extracted — the two shapes diverge meaningfully and a parameterized
- * version would be noisier. Refactor candidate post-Phase-3.
+ * This shape replaces the old "apply optimistically + dedup-by-player_id"
+ * pattern, which had a real divergence bug: when two players raced to the
+ * same cell, one client could permanently see the *earlier* (lower-seq)
+ * move because its own higher-seq move had already optimistically applied
+ * before the lower-seq remote move arrived. With the new model, every
+ * realtime move re-materializes the board from the seq-sorted log, so the
+ * outcome is always LWW-by-seq regardless of arrival order.
+ *
+ * Dedup is now by `client_move_id` (set per-submit by us, broadcast via the
+ * realtime row), which uniquely identifies a move across all clients. Our
+ * own optimistic pendings drop out of the overlay when the server's echo
+ * shows up.
+ *
+ * On submit failure: resync — refetch the full move log, rebuild
+ * remoteBoard, drop the failed pending. Surfaces as a brief flicker for the
+ * failed cell.
  */
+
+interface PendingMove {
+  cid: string;
+  move: Move;
+  submittedAt: number;
+}
 
 interface CoopState {
   room: RoomState | null;
   puzzleCode: PuzzleCode | null;
+  givens: number[] | null;
+  /** Server-confirmed moves keyed by seq. The board is rematerialized from
+   *  this Map every time it changes. */
+  serverMoves: Map<number, ServerMove>;
+  /** Our own moves that haven't been confirmed by the server yet. Overlaid
+   *  on top of remoteBoard to produce the displayed board. */
+  pendings: PendingMove[];
+  /** Board with server-confirmed moves applied in seq order. */
+  remoteBoard: BoardState | null;
+  /** Board with server-confirmed moves + our pendings overlaid. This is
+   *  what the UI renders. */
   board: BoardState | null;
   history: MoveHistory;
   selected: CellIndex | null;
@@ -68,14 +86,9 @@ interface CoopState {
   finishedAt: number | null;
   sharedProgressPct: number;
   lastError: string | null;
-  /** Seqs already folded into the local board — from the initial replay,
-   *  from realtime, or from our own optimistic apply. Catches duplicate
-   *  realtime delivery (Supabase Realtime occasionally double-delivers
-   *  during reconnects) and the late-join drain. */
-  appliedSeqs: Set<number>;
-  /** Realtime events that arrived before `startCoop` ran. Drained in seq
-   *  order at the end of startCoop. Without this buffer, a move landing
-   *  mid-replay is silently dropped on the floor. */
+  /** Realtime events that arrived before `startCoop` ran (or before the
+   *  initial fetch+subscribe handshake finished). Drained into serverMoves
+   *  at the end of startCoop in seq order. */
   pendingRemote: ServerMove[];
 
   // actions
@@ -95,13 +108,15 @@ interface CoopState {
   enterValue: (value: CellValue) => Promise<void>;
   enterNote: (value: CellValue) => Promise<void>;
   clearCell: () => Promise<void>;
-  undo: () => void;
-  redo: () => void;
-  /** Apply a move from the realtime `moves` channel. Skips when the move
-   *  is ours (we already applied it optimistically — dedup by player_id,
-   *  which is known instantly and doesn't race the seq round-trip) or when
-   *  we've already applied that seq. Buffers when no board yet. */
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
+  /** Apply a move from the realtime `moves` channel. Dedups by seq (already
+   *  applied) and by client_move_id (our own optimistic move's echo). */
   applyRemoteMove: (m: ServerMove) => void;
+  /** Refetch the entire move log and rebuild remoteBoard. Used as the
+   *  recovery path on submit failure and as a defensive resync if we
+   *  suspect divergence. */
+  resync: () => Promise<void>;
   markFinished: () => void;
 }
 
@@ -109,20 +124,83 @@ function recomputeConflicts(board: BoardState, on: boolean): Set<CellIndex> {
   return on ? findConflicts(board) : new Set<CellIndex>();
 }
 
-/** Convert a ServerMove into the local Move shape understood by the
- *  packages/core reducer. Returns null for moves that can't be applied
- *  (e.g., a value move with a null value, which the server validates against
- *  but we double-check). */
-function toCoreMove(m: ServerMove): Move | null {
+function newCid(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Gap detection: if our serverMoves contains seqs with holes (e.g., 1, 2,
+ * 4 but not 3), postgres_changes likely dropped or delayed event 3. We
+ * wait briefly to give realtime time to deliver out-of-order events, then
+ * refetch if the gap persists.
+ *
+ * Module-level state because this is per-room and the coop store has only
+ * one active room at a time per browser tab.
+ */
+let gapResyncTimer: ReturnType<typeof setTimeout> | null = null;
+const GAP_RESYNC_DEBOUNCE_MS = 500;
+
+function hasSeqGap(serverMoves: Map<number, ServerMove>): boolean {
+  const seqs = [...serverMoves.keys()];
+  if (seqs.length === 0) return false;
+  const max = Math.max(...seqs);
+  // Cheap check: if we have N moves whose max is M, no gap exists iff
+  // M === N (assuming seqs start at 1, which start-game ensures).
+  return seqs.length !== max;
+}
+
+function scheduleGapResync(resync: () => void): void {
+  if (gapResyncTimer !== null) return; // already scheduled
+  gapResyncTimer = setTimeout(() => {
+    gapResyncTimer = null;
+    resync();
+  }, GAP_RESYNC_DEBOUNCE_MS);
+}
+
+function cancelGapResync(): void {
+  if (gapResyncTimer !== null) {
+    clearTimeout(gapResyncTimer);
+    gapResyncTimer = null;
+  }
+}
+
+function toCoreMove(m: ServerMove | { kind: Move['kind']; cell: number; value: number | null }): Move | null {
   if (m.kind === 'clear') return { kind: 'clear', cell: m.cell };
   if (m.value === null) return null;
   if (m.value < 1 || m.value > 9) return null;
   return { kind: m.kind, cell: m.cell, value: m.value as CellValue };
 }
 
+/** Materialize a board from givens + server moves in seq order. Pure. */
+function materializeRemote(
+  puzzleCode: PuzzleCode,
+  givens: number[],
+  serverMoves: Map<number, ServerMove>,
+): BoardState {
+  let board = createBoard(puzzleCode, givens);
+  const sortedSeqs = [...serverMoves.keys()].sort((a, b) => a - b);
+  for (const seq of sortedSeqs) {
+    const m = serverMoves.get(seq)!;
+    const core = toCoreMove(m);
+    if (core) board = applyMove(board, core);
+  }
+  return board;
+}
+
+/** Overlay pending moves on top of remoteBoard. */
+function overlayPendings(remoteBoard: BoardState, pendings: PendingMove[]): BoardState {
+  return applyMoves(remoteBoard, pendings.map((p) => p.move));
+}
+
 export const useCoopStore = create<CoopState>((set, get) => ({
   room: null,
   puzzleCode: null,
+  givens: null,
+  serverMoves: new Map(),
+  pendings: [],
+  remoteBoard: null,
   board: null,
   history: createHistory(),
   selected: null,
@@ -133,51 +211,34 @@ export const useCoopStore = create<CoopState>((set, get) => ({
   finishedAt: null,
   sharedProgressPct: 0,
   lastError: null,
-  appliedSeqs: new Set(),
   pendingRemote: [],
 
   startCoop: (room, puzzleCode, givens, settings, gameStartsAt, initialMoves) => {
-    // Build base board + fold in every move already in the room. LWW falls
-    // out of replaying in seq order. Record every applied seq so a re-
-    // delivery via realtime is a no-op.
-    let board = createBoard(puzzleCode, givens);
-    const applied = new Set<number>();
-    for (const sm of initialMoves) {
-      const core = toCoreMove(sm);
-      if (core) {
-        board = applyMove(board, core);
-        applied.add(sm.seq);
-      }
+    const serverMoves = new Map<number, ServerMove>();
+    for (const sm of initialMoves) serverMoves.set(sm.seq, sm);
+    // Drain anything buffered during the fetch-then-subscribe window. Dedup
+    // by seq so a re-delivery is a no-op.
+    for (const m of get().pendingRemote) {
+      if (!serverMoves.has(m.seq)) serverMoves.set(m.seq, m);
     }
-
-    // Drain any realtime events that arrived during the fetch window. We
-    // skip our own (already applied optimistically — though for a fresh
-    // joiner there shouldn't be any) and already-applied seqs.
-    const pending = get().pendingRemote;
-    for (const m of pending) {
-      if (m.player_id === room.own_player_id) continue;
-      if (applied.has(m.seq)) continue;
-      const core = toCoreMove(m);
-      if (core) {
-        board = applyMove(board, core);
-        applied.add(m.seq);
-      }
-    }
-
+    const remoteBoard = materializeRemote(puzzleCode, givens, serverMoves);
     set({
       room,
       puzzleCode,
-      board,
+      givens,
+      serverMoves,
+      pendings: [],
+      remoteBoard,
+      board: remoteBoard,
       history: createHistory(),
       selected: null,
       notesMode: false,
       settings,
-      conflicts: recomputeConflicts(board, settings.showConflicts),
+      conflicts: recomputeConflicts(remoteBoard, settings.showConflicts),
       startedAt: gameStartsAt,
       finishedAt: null,
       sharedProgressPct: 0,
       lastError: null,
-      appliedSeqs: applied,
       pendingRemote: [],
     });
   },
@@ -211,44 +272,62 @@ export const useCoopStore = create<CoopState>((set, get) => ({
     const cell = board.cells[selected];
     if (!cell || cell.given !== null) return;
 
-    // Re-typing the placed value acts as a clear (same UX as SP / battle).
     if (!notesMode && cell.value === value) {
       await get().clearCell();
       return;
     }
 
-    const { history, settings } = get();
     const move: Move = notesMode
       ? { kind: 'note_toggle', cell: selected, value }
       : { kind: 'value', cell: selected, value };
 
-    const result = applyMoveWithHistory(board, history, move);
-    if (result.state === board) return;
+    // Optimistic: append to pendings + overlay on remoteBoard.
+    const cid = newCid();
+    const pendings = [...get().pendings, { cid, move, submittedAt: Date.now() }];
+    const { remoteBoard, settings, history } = get();
+    if (!remoteBoard) return;
+    const nextBoard = overlayPendings(remoteBoard, pendings);
+    if (nextBoard === board) return;
+    // Local history records every applied move (server-confirmed + pending)
+    // so the user's undo stack reflects their typing. We diff against the
+    // pre-apply board.
+    const historyEntry = {
+      undoStack: [
+        ...history.undoStack,
+        {
+          move,
+          priors: diffPriors(board, nextBoard),
+        },
+      ],
+      redoStack: [],
+    };
     set({
-      board: result.state,
-      history: result.history,
-      conflicts: recomputeConflicts(result.state, settings.showConflicts),
+      pendings,
+      board: nextBoard,
+      history: historyEntry,
+      conflicts: recomputeConflicts(nextBoard, settings.showConflicts),
     });
 
-    const res = await enqueueSubmit(() =>
-      submitMove({
-        room_id: room.room_id,
-        cell: move.cell,
-        kind: move.kind,
-        value: move.kind === 'value' || move.kind === 'note_toggle' ? value : null,
-      }),
-    );
+    const res = await enqueueMove(room.room_id, {
+      cell: move.cell,
+      kind: move.kind,
+      value: move.kind === 'value' || move.kind === 'note_toggle' ? value : null,
+      client_move_id: cid,
+    });
+
     if (!res.ok) {
       set({ lastError: res.error.message });
+      // Drop the failed pending, then resync to the server's truth.
+      const remaining = get().pendings.filter((p) => p.cid !== cid);
+      set({ pendings: remaining });
+      await get().resync();
       return;
     }
-    // Record the seq so realtime double-delivery is a no-op. The PRIMARY
-    // dedup is by player_id (in applyRemoteMove) — this is belt + suspenders.
-    if (res.value.seq !== undefined) {
-      const next = new Set(get().appliedSeqs);
-      next.add(res.value.seq);
-      set({ appliedSeqs: next });
-    }
+    // Success path: the realtime echo with our client_move_id is the
+    // canonical signal — that's when we move from pendings to serverMoves.
+    // The HTTP response gives us progress + won + autocheck. The realtime
+    // echo will arrive shortly (or, if it raced and arrived first, the
+    // pending was already removed).
     set({
       sharedProgressPct: res.value.progress_pct,
       lastError: null,
@@ -259,164 +338,253 @@ export const useCoopStore = create<CoopState>((set, get) => ({
   },
 
   enterNote: async (value) => {
-    const { board, selected, room, finishedAt, startedAt } = get();
+    const { board, selected, room, finishedAt, startedAt, remoteBoard } = get();
     if (!board || !room || selected === null || finishedAt !== null) return;
+    if (!remoteBoard) return;
     if (startedAt !== null && Date.now() < startedAt) return;
     const cell = board.cells[selected];
     if (!cell || cell.given !== null || cell.value !== null) return;
     const move: Move = { kind: 'note_toggle', cell: selected, value };
-    const { history, settings } = get();
-    const result = applyMoveWithHistory(board, history, move);
+    const cid = newCid();
+    const pendings = [...get().pendings, { cid, move, submittedAt: Date.now() }];
+    const nextBoard = overlayPendings(remoteBoard, pendings);
+    if (nextBoard === board) return;
+    const { settings, history } = get();
+    set({
+      pendings,
+      board: nextBoard,
+      history: {
+        undoStack: [
+          ...history.undoStack,
+          { move, priors: diffPriors(board, nextBoard) },
+        ],
+        redoStack: [],
+      },
+      conflicts: recomputeConflicts(nextBoard, settings.showConflicts),
+    });
+    const res = await enqueueMove(room.room_id, {
+      cell: selected,
+      kind: 'note_toggle',
+      value,
+      client_move_id: cid,
+    });
+    if (!res.ok) {
+      set({
+        lastError: res.error.message,
+        pendings: get().pendings.filter((p) => p.cid !== cid),
+      });
+      await get().resync();
+      return;
+    }
+    set({ sharedProgressPct: res.value.progress_pct, lastError: null });
+  },
+
+  clearCell: async () => {
+    const { board, selected, room, finishedAt, startedAt, remoteBoard } = get();
+    if (!board || !room || selected === null || finishedAt !== null) return;
+    if (!remoteBoard) return;
+    if (startedAt !== null && Date.now() < startedAt) return;
+    const cell = board.cells[selected];
+    if (!cell || cell.given !== null) return;
+
+    const move: Move = { kind: 'clear', cell: selected };
+    const cid = newCid();
+    const pendings = [...get().pendings, { cid, move, submittedAt: Date.now() }];
+    const nextBoard = overlayPendings(remoteBoard, pendings);
+    if (nextBoard === board) return;
+    const { settings, history } = get();
+    set({
+      pendings,
+      board: nextBoard,
+      history: {
+        undoStack: [
+          ...history.undoStack,
+          { move, priors: diffPriors(board, nextBoard) },
+        ],
+        redoStack: [],
+      },
+      conflicts: recomputeConflicts(nextBoard, settings.showConflicts),
+    });
+
+    const res = await enqueueMove(room.room_id, {
+      cell: selected,
+      kind: 'clear',
+      value: null,
+      client_move_id: cid,
+    });
+    if (!res.ok) {
+      set({
+        lastError: res.error.message,
+        pendings: get().pendings.filter((p) => p.cid !== cid),
+      });
+      await get().resync();
+      return;
+    }
+    set({ sharedProgressPct: res.value.progress_pct, lastError: null });
+  },
+
+  undo: async () => {
+    // Coop undo emits a server-side compensating move so other players see
+    // the revert. The local-only undo of the previous version diverged a
+    // player's view from the room's truth, which broke "everyone sees the
+    // same board." Implementation: pop the local history entry, figure out
+    // what cell+value to write to restore the prior visible value, and
+    // submit a fresh move with that intent.
+    const { board, room, history, settings, remoteBoard } = get();
+    if (!board || !room || !remoteBoard) return;
+    if (!canUndo(history)) return;
+    // Restore locally first for immediate feedback.
+    const undone = undoHistory(board, history);
+    set({
+      board: undone.state,
+      history: undone.history,
+      conflicts: recomputeConflicts(undone.state, settings.showConflicts),
+    });
+    // Figure out what the prior cell state was for the undone move's target.
+    const top = history.undoStack[history.undoStack.length - 1];
+    if (!top) return;
+    const targetCell = top.move.cell;
+    const priorCellState = top.priors.find((p) => p.index === targetCell);
+    if (!priorCellState) return;
+    // Emit a compensating server move: if the prior was empty, send a
+    // 'clear'; if the prior had a value, send a 'value' with that value;
+    // for a note_toggle undo, send the same note_toggle (toggles are
+    // self-inverse on the same bit).
+    let compensating: Move;
+    if (top.move.kind === 'note_toggle') {
+      compensating = { kind: 'note_toggle', cell: targetCell, value: top.move.value };
+    } else if (priorCellState.cell.value !== null) {
+      compensating = {
+        kind: 'value',
+        cell: targetCell,
+        value: priorCellState.cell.value as CellValue,
+      };
+    } else {
+      compensating = { kind: 'clear', cell: targetCell };
+    }
+    const cid = newCid();
+    set({ pendings: [...get().pendings, { cid, move: compensating, submittedAt: Date.now() }] });
+    const res = await enqueueMove(room.room_id, {
+      cell: compensating.cell,
+      kind: compensating.kind,
+      value: compensating.kind === 'clear' ? null : compensating.value,
+      client_move_id: cid,
+    });
+    if (!res.ok) {
+      set({
+        lastError: res.error.message,
+        pendings: get().pendings.filter((p) => p.cid !== cid),
+      });
+      await get().resync();
+      return;
+    }
+    set({ sharedProgressPct: res.value.progress_pct, lastError: null });
+  },
+
+  redo: async () => {
+    // Symmetric to undo: re-apply the redone move and emit it server-side
+    // so peers see it too.
+    const { board, room, history, settings, remoteBoard } = get();
+    if (!board || !room || !remoteBoard) return;
+    if (!canRedo(history)) return;
+    const result = redoHistory(board, history);
     if (result.state === board) return;
     set({
       board: result.state,
       history: result.history,
       conflicts: recomputeConflicts(result.state, settings.showConflicts),
     });
-    const res = await enqueueSubmit(() =>
-      submitMove({
-        room_id: room.room_id,
-        cell: selected,
-        kind: 'note_toggle',
-        value,
-      }),
-    );
+    const top = history.redoStack[history.redoStack.length - 1];
+    if (!top) return;
+    const cid = newCid();
+    set({ pendings: [...get().pendings, { cid, move: top.move, submittedAt: Date.now() }] });
+    const res = await enqueueMove(room.room_id, {
+      cell: top.move.cell,
+      kind: top.move.kind,
+      value: top.move.kind === 'clear' ? null : top.move.value,
+      client_move_id: cid,
+    });
     if (!res.ok) {
-      set({ lastError: res.error.message });
+      set({
+        lastError: res.error.message,
+        pendings: get().pendings.filter((p) => p.cid !== cid),
+      });
+      await get().resync();
       return;
     }
-    if (res.value.seq !== undefined) {
-      const next = new Set(get().appliedSeqs);
-      next.add(res.value.seq);
-      set({ appliedSeqs: next });
-    }
     set({ sharedProgressPct: res.value.progress_pct, lastError: null });
-  },
-
-  clearCell: async () => {
-    const { board, selected, history, room, settings, finishedAt, startedAt } = get();
-    if (!board || !room || selected === null || finishedAt !== null) return;
-    if (startedAt !== null && Date.now() < startedAt) return;
-    const cell = board.cells[selected];
-    if (!cell || cell.given !== null) return;
-
-    // Smart-clear: matches battle/SP. Note: in coop the "just-placed" move
-    // might be another player's; we only smart-undo when peekLastMove says
-    // our local history's top frame was a value move on this cell. Safe
-    // because our local history is per-player and never sees others' moves.
-    const last = peekLastMove(history);
-    const isSmartUndo =
-      !!last &&
-      last.kind === 'value' &&
-      last.cell === selected &&
-      cell.value === last.value;
-
-    if (isSmartUndo) {
-      const undone = undoHistory(board, history);
-      set({
-        board: undone.state,
-        history: undone.history,
-        conflicts: recomputeConflicts(undone.state, settings.showConflicts),
-      });
-    } else {
-      const result = applyMoveWithHistory(board, history, { kind: 'clear', cell: selected });
-      if (result.state === board) return;
-      set({
-        board: result.state,
-        history: result.history,
-        conflicts: recomputeConflicts(result.state, settings.showConflicts),
-      });
-    }
-
-    const res = await enqueueSubmit(() =>
-      submitMove({
-        room_id: room.room_id,
-        cell: selected,
-        kind: 'clear',
-        value: null,
-      }),
-    );
-    if (!res.ok) {
-      set({ lastError: res.error.message });
-      return;
-    }
-    if (res.value.seq !== undefined) {
-      const next = new Set(get().appliedSeqs);
-      next.add(res.value.seq);
-      set({ appliedSeqs: next });
-    }
-    set({ sharedProgressPct: res.value.progress_pct, lastError: null });
-  },
-
-  undo: () => {
-    const { board, history, settings } = get();
-    if (!board || !canUndo(history)) return;
-    const result = undoHistory(board, history);
-    set({
-      board: result.state,
-      history: result.history,
-      conflicts: recomputeConflicts(result.state, settings.showConflicts),
-    });
-    // V1: undo is local-only — server still has the move. Acceptable for
-    // typo-fix UX; coop late-finish-style desync is rare and resolved on
-    // the next legitimate enterValue.
-  },
-
-  redo: () => {
-    const { board, history, settings } = get();
-    if (!board || !canRedo(history)) return;
-    const result = redoHistory(board, history);
-    set({
-      board: result.state,
-      history: result.history,
-      conflicts: recomputeConflicts(result.state, settings.showConflicts),
-    });
   },
 
   applyRemoteMove: (m) => {
-    const { board, room, appliedSeqs, pendingRemote, settings } = get();
+    const { room, puzzleCode, givens, serverMoves, pendings, pendingRemote, settings } = get();
 
-    // If the local board hasn't been laid down yet (startCoop hasn't run),
-    // buffer the event so it can be drained in seq order once the replay
-    // completes. Without this, a move landing in the fetch-then-subscribe
-    // window is silently dropped.
-    if (!board || !room) {
-      // Cheap dedup vs. duplicate realtime delivery during reconnects.
+    // No board yet → buffer until startCoop runs. Dedup by seq vs. the
+    // buffer too in case realtime double-delivers during reconnect.
+    if (!puzzleCode || !givens || !room) {
       if (pendingRemote.some((p) => p.seq === m.seq)) return;
       set({ pendingRemote: [...pendingRemote, m] });
       return;
     }
 
-    // Primary dedup: our own optimistic apply already moved the board.
-    // Filter by player_id — known instantly, no race with the seq round-trip.
-    if (m.player_id === room.own_player_id) {
-      // Record the seq so a subsequent re-delivery (rare) is also a no-op.
-      if (!appliedSeqs.has(m.seq)) {
-        const next = new Set(appliedSeqs);
-        next.add(m.seq);
-        set({ appliedSeqs: next });
-      }
-      return;
-    }
+    // Already folded in (rare double-delivery).
+    if (serverMoves.has(m.seq)) return;
 
-    // Belt + suspenders: drop seqs we've already folded in.
-    if (appliedSeqs.has(m.seq)) return;
+    const nextServerMoves = new Map(serverMoves);
+    nextServerMoves.set(m.seq, m);
 
-    const core = toCoreMove(m);
-    if (!core) return;
-    const nextBoard = applyMove(board, core);
-    const nextApplied = new Set(appliedSeqs);
-    nextApplied.add(m.seq);
-    if (nextBoard === board) {
-      // No-op (e.g., note_toggle on a cell whose mask already reflected this
-      // bit — shouldn't happen given LWW/XOR, but stays consistent).
-      set({ appliedSeqs: nextApplied });
-      return;
-    }
+    // If this is the echo of one of our own pendings, drop the pending.
+    // client_move_id is the right dedup key — unique per move globally and
+    // known by both client (we generated it) and server (it broadcasts it
+    // in the moves row).
+    const nextPendings = m.client_move_id
+      ? pendings.filter((p) => p.cid !== m.client_move_id)
+      : pendings;
+
+    const nextRemoteBoard = materializeRemote(puzzleCode, givens, nextServerMoves);
+    const nextBoard = overlayPendings(nextRemoteBoard, nextPendings);
     set({
+      serverMoves: nextServerMoves,
+      pendings: nextPendings,
+      remoteBoard: nextRemoteBoard,
       board: nextBoard,
       conflicts: recomputeConflicts(nextBoard, settings.showConflicts),
-      appliedSeqs: nextApplied,
+    });
+
+    // Gap detection: if there's a hole in the seq sequence (postgres_changes
+    // dropped or delayed an event), schedule a debounced refetch. If the
+    // hole fills via subsequent realtime events before the timer fires,
+    // cancelGapResync below clears it.
+    if (hasSeqGap(nextServerMoves)) {
+      scheduleGapResync(() => void get().resync());
+    } else {
+      cancelGapResync();
+    }
+  },
+
+  resync: async () => {
+    const { room, puzzleCode, givens, pendings, settings } = get();
+    if (!room || !puzzleCode || !givens) return;
+    // Clear any pending gap-resync timer; we're about to do the canonical
+    // refetch ourselves.
+    cancelGapResync();
+    const moves = await fetchAllMoves(room.room_id);
+    const serverMoves = new Map<number, ServerMove>();
+    for (const sm of moves) serverMoves.set(sm.seq, sm);
+    // Drop pendings that have already landed (their cid is in serverMoves);
+    // keep ones still genuinely in flight.
+    const remaining = pendings.filter(
+      (p) => !moves.some((m) => m.client_move_id === p.cid),
+    );
+    const remoteBoard = materializeRemote(puzzleCode, givens, serverMoves);
+    const board = overlayPendings(remoteBoard, remaining);
+    set({
+      serverMoves,
+      pendings: remaining,
+      remoteBoard,
+      board,
+      conflicts: recomputeConflicts(board, settings.showConflicts),
+      // History is local; we leave it intact so the user's undo stack
+      // still works for their own session.
     });
   },
 
@@ -424,6 +592,26 @@ export const useCoopStore = create<CoopState>((set, get) => ({
     if (get().finishedAt === null) set({ finishedAt: Date.now() });
   },
 }));
+
+/**
+ * Local equivalent of the history module's diffPriors. The coop store builds
+ * undoStack entries by hand because it needs to record priors against the
+ * overlay board (which includes pendings), not the result of applyMove
+ * alone. Identical algorithm: any cells whose Cell ref changed are recorded
+ * with their PRE-move state so undo can restore them.
+ */
+function diffPriors(
+  prev: BoardState,
+  next: BoardState,
+): Array<{ index: number; cell: Cell }> {
+  const out: Array<{ index: number; cell: Cell }> = [];
+  for (let i = 0; i < prev.cells.length; i++) {
+    if (prev.cells[i] !== next.cells[i]) {
+      out.push({ index: i, cell: prev.cells[i]! });
+    }
+  }
+  return out;
+}
 
 export function selectCoopCanUndo(s: CoopState): boolean {
   return canUndo(s.history);

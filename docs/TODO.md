@@ -44,7 +44,9 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope.
 - [x] **Hint removed for V1.** Per the May 22 product changes, the SP Hint button was dropped (Chunk A). The `sp_get_puzzle` RPC stays for auto-check. The multiplayer `hint` Edge Function is no longer planned.
 
 ### `packages/core` — sync (new module, lands in this phase)
-- [~] **Deferred for V1.** The web client's `lib/battle-store.ts` does optimistic apply directly (no reconciler) and the server is authoritative — move rejection is rare enough that we don't roll back, just surface an error. When iOS lands or when coop's LWW forces the issue, lift this into `packages/core/src/sync/` with the reconciler design from ROADMAP.
+- [~] **Sync rewrite landed 2026-05-23** ([DECISIONS #0036](DECISIONS.md)): atomic seq counter (`rooms.next_seq` + `reserve_room_seq` RPC), idempotency key (`moves.client_move_id`), parallel reads in `submit-move`, server-overlay coop store with `client_move_id` dedup + seq-sorted re-materialization, fail-resync on the client. Closes the same-cell divergence bug and implements the "if server rejects, roll back" rule (as resync).
+- [~] **Batching + delivery-recovery follow-up 2026-05-23** ([DECISIONS #0037](DECISIONS.md)): client-side opportunistic batching via `move-batcher.ts` (per-room queue; first move flies immediately, subsequent ones flush in batches at the server's drain rate), server-side batch `submit-move` (`reserve_room_seqs` RPC, migration 0015, ONE atomic seq reservation + ONE batch insert + ONE materialize per batch up to 200 moves), seq-gap detection in coop store with debounced resync, realtime reconnect resync, tab-visibility resync. Closes the "moves trickle in slowly / some never arrive" complaint under burst typing on real two-device play.
+- [ ] Still web-only — when iOS lands, lift the resync + overlay + batching logic into `packages/core/src/sync/` so RN can share it.
 
 ### `apps/web` — battle UI
 - [x] Home page sections: Solo / Battle a friend / Have a code? Battle CTAs call `create-room`, code input calls `join-room`.

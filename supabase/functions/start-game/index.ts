@@ -156,6 +156,10 @@ Deno.serve(async (req) => {
       started_at: startedAt,
       finished_at: null,
       winner_player_id: null,
+      // Reset the per-room seq counter so the new round's moves start at 1.
+      // Old moves were just wiped above; next_seq is the only piece of seq
+      // state that survives the round flip and would otherwise grow forever.
+      next_seq: 1,
     })
     .eq('id', room.id);
   if (updErr) {

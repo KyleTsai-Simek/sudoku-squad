@@ -126,6 +126,7 @@ A multiplayer session. Created when a host clicks "Battle" or "Coop" and gets a 
 | `is_public` | boolean default false | Host toggle. Public rooms appear in the home page list ([#0029](DECISIONS.md)). |
 | `winner_player_id` | uuid nullable | Battle mode only. Cleared on next-round start. |
 | `settings` | jsonb not null default `{}` | Host-edited room settings (`showConflicts`, `autoCheck`, `highlightSameValue`); locks at Start. |
+| `next_seq` | bigint not null default 1 | Per-room atomic move-seq counter. `submit-move` reserves via `reserve_room_seq` RPC (one `UPDATE … RETURNING` round-trip). Reset to 1 on each `start-game`. Added in migration 0014, see [DECISIONS #0036](DECISIONS.md). |
 | `started_at` | timestamptz nullable | |
 | `finished_at` | timestamptz nullable | Cleared on next-round start. |
 | `created_at` | timestamptz | |
@@ -157,6 +158,7 @@ The append-only log of player actions. This is the durable record; clients recon
 | `cell` | smallint | 0–80. |
 | `kind` | text | `value` / `note_toggle` / `clear` |
 | `value` | smallint nullable | 1–9 for `value` and `note_toggle`. |
+| `client_move_id` | text nullable | Client-generated uuid for idempotent retries. Unique per (room_id, client_move_id) when non-null (partial index `moves_room_client_idem`). A dropped HTTP response can be safely retried with the same key. Added in migration 0014, see [DECISIONS #0036](DECISIONS.md). |
 | `created_at` | timestamptz | |
 
 In **battle mode**, each player has their own private board, so `moves` is partitioned by `player_id`. In **coop mode**, all moves apply to a single shared board.
@@ -181,23 +183,44 @@ For fast rejoin, we can persist the current materialized board state per room (c
 
 ## 5. Realtime sync model
 
-We use **Supabase Realtime channels**, one per room. Channel name: `room:{room_id}`.
+We use **Supabase Realtime `postgres_changes` subscriptions**. In the V1 web client there are three subscriptions per room — `room_players:{id}`, `moves:{id}`, `rooms:{id}` — each filtered to that room. The original "one channel named `room:{room_id}` carrying three payload kinds" plan was dropped in favor of per-table subscriptions because that's what `postgres_changes` naturally produces and the quota cost (≤ 3 × concurrent rooms) is fine at our scale. Presence is not used in V1; the planned cursor visualization in coop will likely add it later.
 
-Three kinds of payloads on the channel:
+### Optimistic UI + server-overlay store (May 2026, [DECISIONS #0036](DECISIONS.md))
 
-1. **`move`** — a player made a move. Subscribers apply it to local state.
-2. **`presence`** — cursor position, selected cell, online status. Uses Supabase Presence (ephemeral, not persisted).
-3. **`game_event`** — room-level transitions: `game_started`, `game_finished`, `player_joined`, `player_left`.
+Every multiplayer move flows through this loop:
 
-### Optimistic UI
+1. Client generates a `client_move_id` (uuid) and applies the move to local state immediately.
+   - **Battle** keeps a flat optimistic board (each player has a private board so there's nothing to converge with).
+   - **Coop** keeps two boards: `remoteBoard` (materialized from server-confirmed moves in seq order) and `board` (`remoteBoard` with our own still-pending optimistic moves overlaid). The UI renders `board`.
+2. Client `POST`s `submit-move` with `{room_id, cell, kind, value, client_move_id}`.
+3. Server reserves the next seq atomically (`rooms.next_seq` via the `reserve_room_seq` RPC — one round-trip, no retry loop), inserts the move with the `client_move_id`, materializes the player's board (battle) or every move (coop) in seq order, and returns `{seq, progress_pct, won, ...}`.
+4. The realtime channel delivers the moves row to every subscriber (the move's author included). The author's client recognizes the echo by `client_move_id` and removes the pending; non-authors fold the new move into `serverMoves` and rematerialize. Re-materializing from a seq-sorted Map is what makes LWW-by-seq actually hold regardless of the order realtime events arrive in.
 
-The client applies its own moves immediately, then sends them to the server. When the server echoes the move back through the channel (with the assigned `seq`), the client reconciles. If the server rejects (e.g., game already finished), client rolls back.
+### Idempotency, failure, and conflict handling
+
+- **Retried HTTP requests** are safe — `submit-move` looks up `(room_id, client_move_id)` and returns the prior seq + state instead of inserting twice.
+- **Submit failures** (rare; network or 5xx) trigger a **resync** on the client: fetch the room's authoritative move log (battle: own player only; coop: all moves), rebuild `remoteBoard`, drop the failed pending. The user sees the offending cell snap back to the server's truth with a brief toast.
+- **Same-cell race in coop**: each client re-materializes from the seq-sorted log on every fold, so both clients converge to the higher-seq write. This was the failure mode of the original `dedup-by-player_id` design; the new `dedup-by-client_move_id` + seq-sorted re-materialization fixes it.
+- **Coop undo** emits a server-side compensating move (clear / re-place / re-toggle) so peers see the revert. **Battle undo** stays local-only because the board is private; only the local progress bar briefly drifts, healed on the next legitimate move.
+
+### Batching + delivery-recovery (see [DECISIONS #0037](DECISIONS.md))
+
+Per-move HTTP+DB+realtime overhead made bursts of typing land slowly on peer devices. Two compounding changes:
+
+- **Opportunistic client batching.** `apps/web/lib/move-batcher.ts` keeps a per-room queue: the first move fires immediately, and subsequent moves typed while a request is in flight accumulate and flush together as one batched `submit-move` call. No artificial delay for solo moves; bursts collapse into a single round-trip. Both `battle-store` and `coop-store` route through `enqueueMove(roomId, move)`.
+- **Server batches in one transaction.** `submit-move` with `{moves: [...]}` reserves N seqs in one round-trip (`reserve_room_seqs` RPC, migration 0015), batch-inserts, materializes once, and returns per-move results. Cap = 200 moves/batch.
+
+Because `postgres_changes` is not a perfectly reliable delivery channel under load, the coop client also has three resync triggers:
+
+- **Seq-gap detection** — after every `applyRemoteMove`, the store checks if `serverMoves` has a hole (e.g., 1, 2, 4 but not 3). A debounced 500 ms timer fires a `resync()` if the hole persists; cancelled if a subsequent event fills it.
+- **Realtime reconnect** — `subscribeToMoves` exposes a reconnect callback; `resync()` runs whenever the channel returns to `SUBSCRIBED` after a transient drop.
+- **Tab visibility** — `coop-game.tsx` listens for `visibilitychange` and resyncs on return-to-visible (browsers throttle WebSockets in background tabs).
 
 ### Persistence vs. broadcast
 
-- Persistent state (who's in the room, the move log) is stored in Postgres and read on join.
-- Live updates use Realtime channels.
-- On join, a client: (a) fetches `room`, `room_players`, `puzzle.givens`, and replays `moves` to reconstruct state; (b) subscribes to the channel.
+- Persistent state (who's in the room, the move log, `next_seq`) is stored in Postgres and read on join.
+- Live updates use the per-table `postgres_changes` subscriptions.
+- On join, a client: (a) **subscribes first** (incoming events buffer into the store's `pendingRemote` until the board is built); (b) fetches `room`, `room_players`, `puzzle.givens`, and replays `moves` to reconstruct state; (c) hands the snapshot to `startCoop`/`startBattle` which drain the buffer in seq order. This subscribe-before-fetch ordering closes a small lost-event window in the original implementation.
 
 ---
 
@@ -307,7 +330,7 @@ Per [DECISIONS.md #0023](DECISIONS.md), multiplayer mutations go through TypeScr
 | `create-room` | `{mode, difficulty, username, is_public?}` | `{room_id, room_code, player_id, color, mode, puzzle_code}` | ✅ deployed |
 | `join-room` | `{code, username}` | `{room_id, room_code, mode, status, puzzle_code, player_id, color, is_host, rejoined}` | ✅ deployed |
 | `start-game` | `{room_id}` | `{status: 'playing', started_at, puzzle_code}` | ✅ deployed — extended to handle next-round reset per [#0030](DECISIONS.md) |
-| `submit-move` | `{room_id, cell, kind, value}` | `{seq, accepted, progress_pct, won, is_winner, cell_correct?}` | ✅ deployed — `cell_correct` returned only when `settings.autoCheck` is on; non-winners may submit late on `status='finished'` rooms per [#0030](DECISIONS.md) |
+| `submit-move` | Single: `{room_id, cell, kind, value, client_move_id?}`. Batch (preferred): `{room_id, moves: [...]}`. | Single: `{seq, accepted, progress_pct, won, is_winner, idempotent?, cell_correct?}`. Batch: `{results: [{seq, idempotent?, cell_correct?}], progress_pct, won, is_winner, shared_win?}`. | ✅ rewritten 2026-05-23 per [#0036](DECISIONS.md) + extended for batches per [#0037](DECISIONS.md). Atomic `reserve_room_seq` / `reserve_room_seqs` RPCs, parallel reads, client_move_id idempotency, batch cap 200. `cell_correct` returned only when `settings.autoCheck` is on. |
 | `claim-username` | `{}` | `{username}` | ✅ deployed — idempotent per `auth.uid()`; backed by `issued_usernames` (migration 0008) |
 | `update-room-settings` | `{room_id, settings}` | `{settings}` | ✅ deployed — host-only, lobby-only |
 | `change-difficulty` | `{room_id, difficulty}` | `{puzzle_code, difficulty}` | ✅ deployed — host-only, lobby-only. Re-picks a random puzzle of the new tier; `killer` is intentionally rejected by the input validator. See [#0035](DECISIONS.md). |

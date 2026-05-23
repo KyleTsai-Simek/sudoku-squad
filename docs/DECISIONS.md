@@ -17,6 +17,99 @@ Format:
 
 ---
 
+## 0037 — Batched submit-move + resync triggers (gap detection, reconnect, visibility)
+**Date:** 2026-05-23
+**Status:** Accepted (extends [#0036](#0036))
+
+**Context.** Shortly after #0036 landed, real two-device coop play surfaced a throughput problem the previous rewrite hadn't solved: when one player types fast, the second device sees moves trickle in slowly and a small fraction never arrive at all. The sync model is correct, but the *delivery pipeline* per move is heavy:
+
+- Every keystroke is a separate `submit-move` HTTP call (~250 ms warm).
+- The server's `reserve_room_seq` UPDATE serializes concurrent submits from the same caller on the same room row.
+- Each insert fires its own `postgres_changes` event, and Supabase's logical-replication delivery has documented backpressure under bursts — events *can* be dropped under buffer pressure.
+- There's no recovery mechanism for dropped events; today's only resync trigger is a submit failure.
+
+A 20-move burst from one player took ~5 s wall-clock to land on the server and arrived at the second device with a noticeable trickle. Sometimes one or two moves never showed up at all until the next legitimate move from someone landed (and the realtime broadcast happened to deliver after a buffer flush).
+
+**Decision.** Two related changes:
+
+1. **Batched `submit-move`.** The Edge Function accepts either the legacy single-move shape or a new `{room_id, moves: [...]}` array shape. For an array:
+   - Reserve N consecutive seqs in one round-trip via a new `reserve_room_seqs(room_id, count)` RPC (migration 0015).
+   - Insert all N moves in one batch insert.
+   - Materialize the board once at the end.
+   - Return `{ results: [{seq, cell_correct?, idempotent?}, ...], progress_pct, won, is_winner }`.
+
+   Idempotency is per-move (each move can carry its own `client_move_id`); on a (room_id, client_move_id) conflict the function falls through with the prior seq for that one move and re-reserves seqs for the truly fresh ones. Batch capped at 200 moves both client and server-side.
+
+2. **Client opportunistic batching queue.** A new module `apps/web/lib/move-batcher.ts` holds a per-room queue. First move fires immediately as a one-element batch (no artificial delay for solo moves); while that request is in flight, subsequent moves accumulate; on response, queued moves flush together as one batched call. Under sustained fast typing, batches grow until they match the server's drain rate. Both battle-store and coop-store route through `enqueueMove(roomId, move)` instead of calling `submitMove` directly.
+
+Plus three small resync triggers on the coop client, since postgres_changes is not a perfectly reliable delivery channel:
+
+3. **Seq-gap detection.** After every `applyRemoteMove`, the store checks whether `serverMoves` has holes in its seq sequence (e.g., we have 1, 2, 4 but not 3). If so, schedule a debounced refetch 500 ms later; cancel the schedule if a subsequent event fills the hole first. Catches the "dropped event" case described above.
+4. **Realtime reconnect.** `subscribeToMoves` now takes an optional `onReconnect` callback fired when the channel transitions to `SUBSCRIBED` after a prior subscription (i.e., on recovery from a transient WebSocket drop). Coop wires this to `resync()`. Without this, a network blip leaves the client missing every event that happened during the offline window.
+5. **Tab visibility.** `coop-game.tsx` listens for `visibilitychange` and calls `resync()` when the tab returns to visible. Browsers throttle WebSockets in background tabs; without this, switching tabs causes silent state divergence.
+
+**Alternatives considered.**
+- **Time-based batch flush (e.g., 30 ms debounce on every move).** Simpler, but adds latency to every solo move including the first. Rejected — opportunistic is strictly better: solo moves stay instant, only bursts batch.
+- **Switch from `postgres_changes` to a `broadcast` channel.** Supabase Realtime broadcast channels skip the DB replication path (lower latency). Considered, but: (a) it would require the Edge Function to also `channel.send()` each move (another network call + auth hop), (b) broadcast isn't durable so we'd still need `postgres_changes` for replay-on-reconnect, (c) the batching change already collapses 20 events into 1 batch's worth of inserts, which is the bigger lever. Revisit if measured latency is still bad after #0037 lands.
+- **Periodic heartbeat resync (every 30 s).** Catches drops by brute force. Rejected — burns bandwidth on every client even when idle, papers over bugs we'd rather find, and would have masked the very divergence bug #0036 fixed. The targeted gap/reconnect/visibility triggers cover the same failure modes without the noise.
+- **Larger client-side queue with explicit "flush" UI.** Too much complexity for V1; opportunistic batching is already imperceptible.
+
+**Consequences.**
+- A 20-move burst from one client now lands as ONE HTTP request and ONE atomic seq-batch reservation (vs. 20 of each). Other clients still receive 20 realtime events (postgres_changes fires per-row insert), but they all fire within the same ~200-300 ms window rather than over ~5 s.
+- The seq column can have small gaps (already true after #0036 from idempotency races; the batch path now also produces gaps on the 23505 re-insert path, where the original reserved range gets partially abandoned). This is fine — seq is used only for ordering, not contiguity.
+- `submit-move` no longer accepts unbounded input; the 200-move hard cap is enforced both client- and server-side. Clients sending more than 200 moves in a single API call (which today no UI does) would be rejected.
+- The legacy single-move shape is still supported. We didn't break any deployed client; existing browser sessions still work mid-rollout.
+- `coop-store.applyRemoteMove` is now a bit heavier (it computes a gap check on every event). At 100 moves the gap-check is ~5 μs — negligible.
+- New utility script: `pnpm --filter @sudoku-squad/ingest verify:sync` (renamed from `verify:0014`) covers both 0014 and 0015 schema state.
+
+---
+
+## 0036 — Multiplayer sync rewrite: atomic seq, client_move_id, server-overlay coop store
+**Date:** 2026-05-23
+**Status:** Accepted (supersedes the optimistic-without-reconciler stance in [#TODO Phase 2 sync](TODO.md) and the LWW-by-application-order behavior of the original `coop-store.ts`)
+
+**Context.** An end-to-end audit of the Phase 2 sync code found four concrete problems with the original optimistic-apply implementation:
+
+1. **Coop divergence on same-cell race.** Dedup-by-`player_id` skipped a player's own realtime echo, but an earlier-seq remote move arriving at the same cell could clobber the player's higher-seq optimistic write. Result: A and B could permanently see different values for the same cell.
+2. **Submit failures were never rolled back.** The architecture doc's "if server rejects, roll back" rule was unimplemented; the store comment acknowledged it. Net: any submit-move error left the local board permanently out of sync with the server.
+3. **Global serial submit queue.** A single module-level Promise chain throttled all submits to one round-trip at a time. With `submit-move` warm at ~1.5 s, a fast typist's keystrokes piled up; opponents saw progress lag many seconds behind reality.
+4. **`submit-move` seq assignment.** A read-max-then-insert-with-retry loop (up to 16 attempts) under concurrent submits, plus four sequential SQL round-trips before the insert. Both removable.
+
+Plus two smaller things: a small race in coop init (subscribe and fetch were concurrent, so moves landing between the two could be lost), and lost-response duplicate-move risk on flaky mobile networks (no idempotency key).
+
+**Decision.** Five changes, landed together so the client and server stay consistent:
+
+1. **Atomic seq counter.** New column `rooms.next_seq bigint` (migration 0014). New RPC `reserve_room_seq(room_id) → bigint` does `update rooms set next_seq = next_seq + 1 returning next_seq - 1` — one round-trip, no retry loop, no contention on the moves unique index. `submit-move` reads `rooms` first (need mode + puzzle_code) then parallel-fetches player check, puzzle, and the idempotency-dup lookup.
+2. **Client idempotency.** New column `moves.client_move_id text` with partial unique index on (room_id, client_move_id) when non-null. Every submit from the client now carries a uuid; a retried HTTP request with the same key dedupes server-side and returns the original seq + state.
+3. **Submit queue removed.** `apps/web/lib/submit-queue.ts` is gone. Submits fire in parallel — the atomic seq counter made the serialization unnecessary.
+4. **Coop store: server-overlay model.** Replace the old "apply optimistically + dedup-by-player_id" with a derived board:
+   - `serverMoves: Map<seq, ServerMove>` — confirmed moves from the realtime channel.
+   - `pendings: Array<{cid, move}>` — our own optimistic moves not yet echoed.
+   - `remoteBoard = applyMoves(givens, serverMoves sorted by seq)` — recomputed on any change.
+   - `board = applyMoves(remoteBoard, pendings)` — what the UI shows.
+
+   Dedup is now by `client_move_id` (broadcast in the moves row), which is globally unique per move. When the realtime echo lands, the pending drops out of the overlay and the move moves into `serverMoves`. Same-cell races now converge correctly: both clients re-materialize the cell from the seq-sorted log, so LWW-by-seq holds regardless of arrival order.
+5. **Coop init order.** Subscribe to moves BEFORE fetching the initial snapshot. Events landing during the fetch window go into the store's `pendingRemote` buffer and are drained (dedup'd by seq) when startCoop runs.
+
+Companion changes:
+- Submit failures now resync the board from the server: refetch all moves and rebuild remoteBoard, dropping the failed pending. Battle has a per-player equivalent (`fetchOwnMoves`). This realizes the "rollback" rule properly.
+- Coop undo emits a server-side compensating move (`clear`, a re-place to the prior value, or a re-toggle for notes) so peers see the revert. Battle keeps undo local-only because the board is private; only the local player's progress_pct briefly drifts, healed on the next legitimate move.
+
+**Alternatives considered.**
+- **CRDTs (Yjs / Automerge).** Strong correctness guarantee but harder to make server-authoritative, and overkill for an 81-cell grid. Server-authoritative LWW with seqs is simpler and matches our anti-cheat needs.
+- **First-write-wins per cell.** Considered after the user expressed a preference for "first to add stays." Rejected for V1 — true first-write-wins requires server-side rejection of writes to non-empty cells, which conflicts with the natural "re-type to overwrite" UX and complicates the undo flow. LWW + visible cursors (existing plan) covers the collaborative case; the divergence bug being fixed here was the real complaint.
+- **`board_snapshots` table for incremental materialization.** Skipped this PR. At V1 scale (moves per room < ~200), replaying the log on every submit-move is < 50 ms. Add when latency profiling justifies it.
+- **Add a per-room broadcast channel** instead of `postgres_changes`. Considered. Realtime via `postgres_changes` is one extra DB write + one fanout latency hop, ~200 ms total. A `broadcast` channel would be lower-latency but requires the Edge Function to also call `channel.send`, which means a second auth hop. Defer until measured.
+
+**Consequences.**
+- `submit-move` is meaningfully faster (one round-trip for seq vs. the retry loop; parallel reads for the rest). Realistic warm latency target ~250 ms vs. ~1.5 s previously.
+- The seq column can have small gaps when a client_move_id race causes a 23505 retry — the function falls through with the prior seq and the just-reserved one becomes a gap. Seqs are still monotonic and unique, which is all the ordering relies on.
+- `next_seq` is reset to 1 by `start-game` on each new round. `return-to-lobby` doesn't touch it because the same `start-game` will reset it before the next round's first move.
+- Coop's local undo redo stack is preserved across resyncs (it's per-player local state). On a hard resync, history stays intact — but cells in the undoStack may now refer to states that have been overwritten by other players' moves, in which case `redoHistory` falls back to dropping the orphaned entry (already handled in `packages/core/src/game/history.ts`).
+- The `solution` exposure rules from [#0022](DECISIONS.md) are unchanged. Multiplayer still never receives `solution`.
+
+---
+
 ## 0035 — Mode-first home flow + in-lobby difficulty toggle
 **Date:** 2026-05-22
 **Status:** Accepted

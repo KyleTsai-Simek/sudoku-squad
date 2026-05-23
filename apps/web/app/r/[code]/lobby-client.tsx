@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -178,6 +178,21 @@ export function LobbyClient({ code }: { code: string }) {
     if (!res.ok) setStartError(res.error.message);
   }, [phase]);
 
+  // Build the live room reference for the gameplay handoff. Done here, BEFORE
+  // any conditional early-return, so the useMemo hook order is stable across
+  // renders regardless of phase. See the comment at the use site below for
+  // why this is necessary.
+  const phaseRoom = phase.kind === 'in_lobby' ? phase.room : null;
+  const livePuzzleCode = roomRow?.puzzle_code ?? phaseRoom?.puzzle_code ?? '';
+  const liveStatusRaw = roomRow?.status ?? phaseRoom?.status ?? 'lobby';
+  const liveRoom = useMemo<RoomState | null>(
+    () =>
+      phaseRoom
+        ? { ...phaseRoom, puzzle_code: livePuzzleCode, status: liveStatusRaw }
+        : null,
+    [phaseRoom, livePuzzleCode, liveStatusRaw],
+  );
+
   if (phase.kind === 'joining') {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 py-12 text-stone-500">
@@ -207,16 +222,24 @@ export function LobbyClient({ code }: { code: string }) {
   const { room } = phase;
 
   // Status routing: lobby → render lobby; playing → render game; finished → game w/ winner overlay.
-  const status = roomRow?.status ?? room.status;
+  // The `as RoomStatus` cast is safe: when phase is in_lobby, liveStatusRaw
+  // resolves to a real status, never the fallback.
+  const status = liveStatusRaw;
   const winnerPlayerId = roomRow?.winner_player_id ?? null;
 
   const settings = roomRow?.settings ?? DEFAULT_ROOM_SETTINGS;
 
-  if (status === 'playing' || status === 'finished') {
+  if ((status === 'playing' || status === 'finished') && liveRoom) {
+    // CRITICAL: pass `liveRoom`, not `room`. The phase.room snapshot from
+    // joinRoom is never refreshed, but start-game always rolls a new random
+    // puzzle, so phase.room.puzzle_code is stale by the time we get here.
+    // Without the merge, two players who joined at different moments would
+    // fetch DIFFERENT puzzles' givens. See the useMemo where liveRoom is
+    // built (above the early returns) for the stability rationale.
     if (room.mode === 'coop') {
       return (
         <CoopGame
-          room={room}
+          room={liveRoom}
           players={players}
           settings={settings}
           serverStartedAt={roomRow?.started_at ?? null}
@@ -226,7 +249,7 @@ export function LobbyClient({ code }: { code: string }) {
     }
     return (
       <BattleGame
-        room={room}
+        room={liveRoom}
         players={players}
         settings={settings}
         serverStartedAt={roomRow?.started_at ?? null}

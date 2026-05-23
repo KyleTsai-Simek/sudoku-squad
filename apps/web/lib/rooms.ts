@@ -213,14 +213,23 @@ export interface ServerMove {
   cell: number;
   kind: 'value' | 'clear' | 'note_toggle';
   value: number | null;
+  /** Client-generated idempotency key — present on moves submitted by clients
+   *  that opt in (battle-store / coop-store do). Used by the local store to
+   *  dedupe its own optimistic apply against the realtime echo. */
+  client_move_id: string | null;
 }
 
 export async function subscribeToMoves(
   roomId: string,
   onInsert: (move: ServerMove) => void,
+  /** Fires when the channel re-subscribes after a disconnect (e.g. a
+   *  transient network drop). Callers should resync the move log because
+   *  postgres_changes may have dropped events while the channel was down. */
+  onReconnect?: () => void,
 ): Promise<() => void> {
   const client = await ensureAuthClient();
   if (!client) return () => {};
+  let hasEverSubscribed = false;
   const channel = client
     .channel(`moves:${roomId}`)
     .on(
@@ -239,10 +248,23 @@ export async function subscribeToMoves(
           cell: Number(row.cell),
           kind: row.kind as ServerMove['kind'],
           value: row.value === null ? null : Number(row.value),
+          client_move_id:
+            typeof row.client_move_id === 'string' ? row.client_move_id : null,
         });
       },
     )
-    .subscribe();
+    .subscribe((status) => {
+      // Supabase Realtime statuses: 'SUBSCRIBED' | 'CHANNEL_ERROR' |
+      // 'TIMED_OUT' | 'CLOSED'. We can't recover from the lost-window
+      // between drop and reconnect via the channel itself — the only fix is
+      // to refetch the moves table. Fire the callback only on the SECOND+
+      // time we hit 'SUBSCRIBED' (the first time is the initial join,
+      // which the caller handles separately via fetch).
+      if (status === 'SUBSCRIBED') {
+        if (hasEverSubscribed && onReconnect) onReconnect();
+        hasEverSubscribed = true;
+      }
+    });
   return () => {
     client.removeChannel(channel);
   };
@@ -255,11 +277,33 @@ export async function fetchAllMoves(roomId: string): Promise<ServerMove[]> {
   if (!client) return [];
   const { data, error } = await client
     .from('moves')
-    .select('seq, player_id, cell, kind, value')
+    .select('seq, player_id, cell, kind, value, client_move_id')
     .eq('room_id', roomId)
     .order('seq', { ascending: true });
   if (error) {
     console.error('fetchAllMoves error', error);
+    return [];
+  }
+  return (data ?? []) as ServerMove[];
+}
+
+/** Fetch only the caller's moves for a room. Used by battle-store's resync
+ *  path — each battle player has a private board, so we only need their own
+ *  log to rematerialize. */
+export async function fetchOwnMoves(
+  roomId: string,
+  playerId: string,
+): Promise<ServerMove[]> {
+  const client = await ensureAuthClient();
+  if (!client) return [];
+  const { data, error } = await client
+    .from('moves')
+    .select('seq, player_id, cell, kind, value, client_move_id')
+    .eq('room_id', roomId)
+    .eq('player_id', playerId)
+    .order('seq', { ascending: true });
+  if (error) {
+    console.error('fetchOwnMoves error', error);
     return [];
   }
   return (data ?? []) as ServerMove[];
@@ -481,6 +525,9 @@ export interface SubmitMoveResponse {
   progress_pct: number;
   won: boolean;
   is_winner: boolean;
+  /** True when this call was an idempotent retry of a client_move_id the
+   *  server had already accepted. Treat as success either way. */
+  idempotent?: boolean;
   /** Present only when `room.settings.autoCheck` is true and the move was a `value`. */
   cell_correct?: boolean;
 }
@@ -490,6 +537,47 @@ export async function submitMove(args: {
   cell: number;
   kind: 'value' | 'clear' | 'note_toggle';
   value?: number | null;
+  /** Optional client idempotency key. When set, retries with the same key
+   *  return the original seq + state instead of inserting twice. */
+  client_move_id?: string | null;
 }): Promise<Result<SubmitMoveResponse>> {
   return invoke<SubmitMoveResponse>('submit-move', args);
+}
+
+export interface BatchMoveInput {
+  cell: number;
+  kind: 'value' | 'clear' | 'note_toggle';
+  value?: number | null;
+  client_move_id?: string | null;
+}
+
+export interface BatchMoveResult {
+  seq: number;
+  accepted: true;
+  idempotent?: true;
+  cell_correct?: boolean;
+}
+
+export interface SubmitMovesResponse {
+  results: BatchMoveResult[];
+  progress_pct: number;
+  won: boolean;
+  is_winner: boolean;
+  shared_win?: boolean;
+}
+
+/**
+ * Batched submit. Accepts an array of moves; the server reserves N
+ * consecutive seqs in one round-trip, inserts them in one transaction,
+ * materializes the board once at the end, and returns per-move results
+ * plus the aggregate progress / win state.
+ *
+ * Used by the store-level batching queue to collapse bursts of typing
+ * into a single HTTP request. See DECISIONS #0037.
+ */
+export async function submitMoves(args: {
+  room_id: string;
+  moves: BatchMoveInput[];
+}): Promise<Result<SubmitMovesResponse>> {
+  return invoke<SubmitMovesResponse>('submit-move', args);
 }

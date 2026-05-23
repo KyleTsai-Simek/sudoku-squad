@@ -41,6 +41,7 @@ export function CoopGame({ room, players, settings, serverStartedAt, finished }:
   const applySettings = useCoopStore((s) => s.applySettings);
   const applyRemoteMove = useCoopStore((s) => s.applyRemoteMove);
   const markFinished = useCoopStore((s) => s.markFinished);
+  const resync = useCoopStore((s) => s.resync);
   const [winDismissed, setWinDismissed] = useState(false);
 
   const gameStartsAt = useMemo(() => {
@@ -48,7 +49,46 @@ export function CoopGame({ room, players, settings, serverStartedAt, finished }:
     return new Date(serverStartedAt).getTime() + COUNTDOWN_MS;
   }, [serverStartedAt]);
 
-  // Initialize: fetch givens + full move log, fold into board, subscribe.
+  // Subscribe to the moves channel once per room — held across re-renders
+  // so any parent re-render (player joins, settings update) doesn't tear
+  // it down. Events arriving before startCoop runs go into the store's
+  // pendingRemote buffer and get drained in seq order then. On reconnect
+  // (transient network drops), refetch the move log — postgres_changes
+  // doesn't replay missed events from the offline window.
+  useEffect(() => {
+    let cleanup: (() => void) | null = null;
+    let cancelled = false;
+    (async () => {
+      const off = await subscribeToMoves(room.room_id, applyRemoteMove, () => {
+        void resync();
+      });
+      if (cancelled) {
+        off();
+        return;
+      }
+      cleanup = off;
+    })();
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
+  }, [room.room_id, applyRemoteMove, resync]);
+
+  // Visibility-change resync: a backgrounded tab can miss realtime events
+  // (browsers throttle WebSockets in background tabs, and postgres_changes
+  // doesn't replay). Refetch on return-to-visible.
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void resync();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [resync]);
+
+  // One-shot init: fetch givens + the existing move log, then hand off to
+  // startCoop. Guarded by `board.puzzleCode === room.puzzle_code` so a
+  // re-render with the same puzzle is a no-op; a puzzle_code change
+  // (round-replay) re-initializes.
   useEffect(() => {
     if (board && board.puzzleCode === room.puzzle_code) return;
     if (gameStartsAt === null) return;
@@ -65,25 +105,6 @@ export function CoopGame({ room, players, settings, serverStartedAt, finished }:
       cancelled = true;
     };
   }, [room, board, startCoop, settings, gameStartsAt]);
-
-  // Realtime: fold in every new move from the room into the local board.
-  // The store's pendingOwnSeqs dedupes our own echoes.
-  useEffect(() => {
-    let cleanup: (() => void) | null = null;
-    let cancelled = false;
-    (async () => {
-      const off = await subscribeToMoves(room.room_id, applyRemoteMove);
-      if (cancelled) {
-        off();
-        return;
-      }
-      cleanup = off;
-    })();
-    return () => {
-      cancelled = true;
-      cleanup?.();
-    };
-  }, [room.room_id, applyRemoteMove]);
 
   // Mirror server-side settings changes (shouldn't happen mid-game; defensive).
   useEffect(() => {

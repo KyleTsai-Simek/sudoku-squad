@@ -1,7 +1,7 @@
 # Status
 
-**Last updated:** 2026-05-22 (afternoon — post UX polish)
-**Current phase:** Phase 2 — battle mode is fully playable end-to-end with the May 22 UX expansion landed (chunks A–H) plus a UX-polish pass (board pixel-snap, auto-clean peer notes, spacebar notes toggle + `?` shortcuts overlay, Notes button visual rework). Remaining items are polish + the two-tab Playwright smoke; coop / iOS are the next phases.
+**Last updated:** 2026-05-23 (batched submit-move + resync triggers landed; see [DECISIONS #0037](DECISIONS.md))
+**Current phase:** Phase 2 — battle mode is fully playable end-to-end with the May 22 UX expansion landed (chunks A–H) plus a UX-polish pass (board pixel-snap, auto-clean peer notes, spacebar notes toggle + `?` shortcuts overlay, Notes button visual rework). The May 23 sync rewrite ([#0036](DECISIONS.md): atomic seq counter, idempotency, parallel submits, coop server-overlay store, fail-resync) plus the same-day batching-and-resync followup ([#0037](DECISIONS.md): per-room opportunistic batching, batch RPC, gap/reconnect/visibility resync) are the latest landings. Remaining items are polish + the two-tab Playwright smoke; coop / iOS are the next phases.
 **Branch:** `main`
 **Live:** https://sudoku-squad-web.vercel.app/
 
@@ -31,7 +31,7 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
   - `index.ts` — bucketed sampler + Supabase insert.
   - `check-connectivity.ts` — 4 RLS sanity checks against the live project.
   - `verify-samples.ts` — verifies the bundled sample pack against the solver and the code algorithm.
-- **`supabase/migrations/`** — `0001_initial.sql` → `0011_room_players_has_returned.sql` (eleven migrations), all applied to the live project via `supabase db push --linked`. Highlights: 0006 RLS recursion fix via `is_room_member`, 0007 Realtime publications, 0008 `issued_usernames`, 0009 `player_completions` + completion RPCs, 0010 `rooms.is_public`, 0011 `room_players.has_returned`. Schema documented in [ARCHITECTURE.md §4](ARCHITECTURE.md).
+- **`supabase/migrations/`** — `0001_initial.sql` → `0015_reserve_room_seqs_batch.sql` (fifteen migrations); 0001–0014 are applied to the live project via `supabase db push --linked`. **0015 is pending deploy** (batch seq reservation — see [DECISIONS #0037](DECISIONS.md)). Highlights: 0006 RLS recursion fix via `is_room_member`, 0007 Realtime publications, 0008 `issued_usernames`, 0009 `player_completions` + completion RPCs, 0010 `rooms.is_public`, 0011 `room_players.has_returned`, **0014 `rooms.next_seq` atomic counter + `moves.client_move_id` idempotency key + `reserve_room_seq` RPC**, **0015 `reserve_room_seqs(uuid, int)` batch RPC**. Schema documented in [ARCHITECTURE.md §4](ARCHITECTURE.md).
 - **Live puzzle data:** **15,000 rows** in the `puzzles` table across **six tiers** (after the #0034 shift-rename, five visible + one hidden):
   - **warmup** (visible) — 2,500 from QQWing, rating `[-10, -5)`, clues 35–40.
   - **easy** (visible) — 2,500 from QQWing, rating `[-5, 0)`, clues 29–34. (Was labeled "beginner" pre-rename.)
@@ -127,6 +127,7 @@ The Edge Function `hint` is intentionally not shipping — Chunk A removed Hint 
 
 ## Gotchas worth knowing before you start
 
+0. **Migrations 0014 + 0015 must ship before the new submit-move path.** `submit-move/index.ts` calls `reserve_room_seq` (migration 0014) and `reserve_room_seqs` (migration 0015), and reads/writes `moves.client_move_id` (also 0014). Recommended deploy order: `supabase db push --linked` then `supabase functions deploy submit-move start-game`. Sanity-check schema state with `pnpm --filter @sudoku-squad/ingest verify:sync` — all 4 checks should be green.
 1. **Internal imports are extensionless.** `import './foo'` not `'./foo.js'`. See [CLAUDE.md](../CLAUDE.md) §2 and [DECISIONS.md #0015](DECISIONS.md).
 2. **pnpm 11 default-deny on build scripts.** `esbuild`, `sharp`, `unrs-resolver` are allow-listed in `pnpm-workspace.yaml`. See [DECISIONS.md #0016](DECISIONS.md).
 3. **Tailwind class precedence in the sudoku board.** Conditional `bg-*` and `text-*` classes can be shadowed by unconditional defaults. The board picks exactly one of each via a small lookup. Extend the lookup rather than appending conditional classes.
