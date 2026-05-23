@@ -131,7 +131,7 @@ export function HomeClient() {
           <p className="mt-4 inline-flex items-center gap-3 rounded-full border border-stone-200 bg-white px-4 py-1.5 text-xs text-stone-600">
             {username ? (
               <span>
-                <span className="text-stone-400">you're</span>{' '}
+                <span className="text-stone-400">you&apos;re</span>{' '}
                 <span className="font-medium text-stone-900">{username}</span>
               </span>
             ) : null}
