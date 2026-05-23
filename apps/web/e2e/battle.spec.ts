@@ -7,9 +7,22 @@ import { expect, test } from '@playwright/test';
  * convergence, and opponent-progress broadcast.
  *
  * **Requires live Supabase env** (NEXT_PUBLIC_SUPABASE_URL + ANON_KEY in
- * .env.local). The dev server picks these up via the symlink. CI integration
- * is deferred; for local runs see docs/STATUS.md.
+ * .env.local). The dev server picks these up via the symlink.
  *
+ * Skipped in CI for now — Supabase env isn't available to the GitHub
+ * Actions job, so `createRoom` can't reach the Edge Function. The SP
+ * smoke (which short-circuits to a bundled sample) continues to gate CI.
+ * Future work: either add Supabase secrets to CI or stand up a separate
+ * CI-only project. Tracked as task #56.
+ */
+
+// In CI the dev server can't reach Supabase (no env), so this whole spec
+// hangs on `createRoom`. Skip when `process.env.CI` is set — local runs
+// with `.env.local` symlinked into apps/web continue to execute it.
+// The SP smoke gates CI; this one is local-only until we wire CI env.
+test.skip(!!process.env.CI, 'battle smoke requires live Supabase — skipping in CI');
+
+/*
  * Scope intentionally stops short of full race-to-completion + late-finish.
  * Those flows can be added once the underlying submit-move latency is
  * better understood (each call is ~1.5s warm; 50 sequential moves takes
