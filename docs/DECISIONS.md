@@ -19,7 +19,9 @@ Format:
 
 ## 0040 — Durable local move log + delta catch-up, and the coop offline-merge rule
 **Date:** 2026-05-29
-**Status:** Open — proposal pending user decision on the merge rule (the rest is decided in direction). Do not implement coop persistence until the merge rule below is chosen.
+**Status:** Accepted. **Merge rule = (A)** — pure LWW-by-arrival-seq, with client persistence scoped to *reconnect/refresh resume*, not long concurrent-offline editing (chosen by the user 2026-05-29). **Landed:** retry-with-backoff (`move-batcher.ts`), delta catch-up resync (coop), and the pure seq-log helpers lifted into `packages/core/src/sync/` with property tests. **Still pending:** durable local-log *persistence* (b1) and finishing the core extraction (materialize / overlay / ownership / resync orchestration). The coop "freeze timer when empty" and "resume-an-in-progress-room UX" ideas raised in this discussion are backlogged to [ROADMAP.md](ROADMAP.md) Stretch/V2 #8–#9.
+
+**Clarification (offline-resume vs concurrent-offline-merge).** A room already persists fully in Postgres (`rooms` + `moves`); there is no in-memory server room to "spin up" and Realtime channels are ephemeral, so rejoining a room URL later and replaying the log already works. (A) therefore *does* support leave-and-resume — it only declines to *merge concurrent overlapping edits made while one player was offline*, which is a niche case for a live co-op puzzle. If true offline coop ever matters, escalate to rule (C) (fork-aware), a client-only, reversible change.
 
 **Context.** The 2026-05-29 architecture audit (see [STATUS.md](STATUS.md) gotcha #9, [TODO.md](TODO.md) "Sync resilience hardening") confirmed the system is *already event-sourced* — the `moves` table is the durable append-only log and every client/server re-materializes board state by replaying it. The remaining resilience wins are therefore not "adopt a log" but two upgrades on top of the log we have:
 1. **Durable *local* log.** Client pendings live in memory only, so a refresh or crash loses unsynced moves, and single-player has *no* persistence at all (a reload loses the whole game). Persisting the local move log (IndexedDB on web, AsyncStorage on iOS) unlocks offline play and crash/refresh resume.
@@ -994,7 +996,6 @@ Resolved items get moved into the log above. These are still TBD. Items grouped 
 3. **Host migration in coop** — automatic transfer to the longest-tenured remaining player, or require acknowledgement?
 4. **Mobile cursor visualization in coop** — phones have no persistent cursor. Working assumption: ring persists on last-tapped cell, fades after ~3 s of inactivity. Validate during coop UI work.
 5. **`board_snapshots` table** — add now for fast rejoin or wait until measurable problem? Leaning wait.
-9. **Coop offline-merge rule** — see [#0040](DECISIONS.md). Before persisting coop offline edits, pick: (A) pure LWW + scope persistence to reconnect-resume (recommended default), (B) timestamp-aware merge, or (C) fork-aware "don't clobber what changed since you forked". SP/battle are conflict-free and not blocked.
 
 ## Open longer-term
 
@@ -1011,5 +1012,6 @@ Resolved items get moved into the log above. These are still TBD. Items grouped 
 - **Room code format** — resolved in #0021 (6-char lowercase base36, random, retried on collision).
 - **Cross-mode puzzle reference** — resolved in #0020 (`rooms.puzzle_code` FK to `puzzles.code`).
 - **`rooms.mode` includes `single`** — resolved (dropped via migration 0004; single-player doesn't use rooms).
+- **Coop offline-merge rule** — resolved in #0040 (rule A: pure LWW, persistence scoped to reconnect/refresh resume; escalate to fork-aware C only if true offline coop is needed).
 - **Solution exposure for SP vs. multiplayer** — resolved in #0022 (SP uses the `sp_get_puzzle` RPC; multiplayer uses Edge Functions that never expose `solution`).
 - **Puzzle dataset variant** — resolved in #0018 (Kaggle 3M with the rating column; supersedes #0011).

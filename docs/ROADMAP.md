@@ -21,7 +21,7 @@ Four phases, each with an explicit **exit criterion** — we don't move on until
 **What landed:**
 - Monorepo (pnpm 11 workspaces, Next.js 15 app, `packages/core` with engine, `scripts/ingest`).
 - **15,000 puzzles** in Supabase across **six tiers, 2,500 each**: `warmup`/`easy` generated locally via QQWing (negative ratings), and `medium`/`hard`/`expert`/`killer` from the Kaggle `radcliffe/3-million-sudoku-puzzles-with-ratings` dataset (rating-banded). `killer` is hidden from the UI. Short 6-char codes assigned per puzzle. See [DECISIONS #0031](DECISIONS.md), [#0033](DECISIONS.md), [#0034](DECISIONS.md).
-- `packages/core`: types, validator, conflict checker, completion checker, pure move reducer (with auto-clean peer notes), undo/redo history (multi-cell undo + `peekLastMove`). **47/47 tests passing** including `fast-check` property tests.
+- `packages/core`: types, validator, conflict checker, completion checker, pure move reducer (with auto-clean peer notes), undo/redo history (multi-cell undo + `peekLastMove`). **65/65 tests passing** including `fast-check` property tests.
 - Web app: home page with per-tier "New game" CTAs that pick a random unsolved puzzle and navigate to `/play/[code]`. Full sudoku UI (grid + number pad + notes + undo/redo + timer + settings + completion overlay + keyboard shortcuts overlay). Hint was removed in Chunk A. Conflict highlighting, same-value highlighting, optional auto-check. Completions tracked server-side in `player_completions` (Chunk F).
 - Tooling: ESLint flat config enforces `packages/core` purity. Playwright happy-path smoke. GitHub Actions CI runs everything on PR + push.
 - Deployed to https://sudoku-squad-web.vercel.app/, auto-deploys from `main`.
@@ -119,6 +119,8 @@ After Phase 4 lands, the natural next moves are:
 5. **Friends list & private invites.**
 6. **Android** (only if the iOS app gets traction).
 7. **Real puzzle generator** so we're not dependent on a third-party dataset.
+8. **Coop "freeze the timer when nobody's present."** Today elapsed is wall-clock since `started_at`; freezing it requires presence tracking + accumulating *active* time instead, and changes the meaning of "elapsed" (matters for any future competitive/leaderboard time). Small feature, rides on the coop presence channel. Backlogged 2026-05-29 (see [DECISIONS #0040](DECISIONS.md) discussion).
+9. **Coop "resume an in-progress room" UX.** The data layer already supports rejoining a persisted room and replaying its move log; this is the UI to surface "resume" instead of a cold join (and to handle a room that was `finished`/returned-to-lobby). Backlogged 2026-05-29.
 
 We don't commit to ordering yet — it depends on what users actually want after Phase 4.
 

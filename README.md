@@ -81,7 +81,7 @@ cp .env.example .env.local
 ln -s ../../.env.local apps/web/.env.local
 
 # 3. Sanity-check the engine, solver, RLS
-pnpm --filter @sudoku-squad/core test          # expect 47/47
+pnpm --filter @sudoku-squad/core test          # expect 65/65
 pnpm --filter @sudoku-squad/ingest test        # expect 9/9
 pnpm --filter @sudoku-squad/ingest check       # 4/4 if puzzles are ingested
 

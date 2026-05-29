@@ -307,6 +307,31 @@ export async function fetchAllMoves(roomId: string): Promise<ServerMove[]> {
   return (data ?? []) as ServerMove[];
 }
 
+/** Delta fetch: every move in the room with `seq >= sinceSeq`, ordered by
+ *  seq. The DB is authoritative for the `[sinceSeq, ∞)` range, so callers can
+ *  merge the result over their existing log and skip re-reading the
+ *  already-known prefix. Backs coop's delta catch-up resync (DECISIONS #0040):
+ *  a player who missed a few moves fetches only the tail/holes, not the whole
+ *  log. */
+export async function fetchMovesSince(
+  roomId: string,
+  sinceSeq: number,
+): Promise<ServerMove[]> {
+  const client = await ensureAuthClient();
+  if (!client) return [];
+  const { data, error } = await client
+    .from('moves')
+    .select('seq, player_id, cell, kind, value, client_move_id')
+    .eq('room_id', roomId)
+    .gte('seq', sinceSeq)
+    .order('seq', { ascending: true });
+  if (error) {
+    console.error('fetchMovesSince error', error);
+    return [];
+  }
+  return (data ?? []) as ServerMove[];
+}
+
 /** Fetch only the caller's moves for a room. Used by battle-store's resync
  *  path — each battle player has a private board, so we only need their own
  *  log to rematerialize. */

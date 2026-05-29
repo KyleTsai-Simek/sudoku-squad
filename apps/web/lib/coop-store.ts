@@ -6,9 +6,12 @@ import {
   applyMoves,
   canRedo,
   canUndo,
+  computeAbandonedHoles,
   createBoard,
   createHistory,
   findConflicts,
+  firstMissingSeq,
+  hasSeqGap,
   redo as redoHistory,
   undo as undoHistory,
 } from '@sudoku-squad/core';
@@ -22,7 +25,7 @@ import type {
   PuzzleCode,
 } from '@sudoku-squad/core';
 import {
-  fetchAllMoves,
+  fetchMovesSince,
   DEFAULT_ROOM_SETTINGS,
   type RoomSettings,
   type RoomState,
@@ -160,30 +163,6 @@ const GAP_RESYNC_DEBOUNCE_MS = 500;
  */
 let knownMissingSeqs = new Set<number>();
 
-/** Holes in [1, max] absent from an authoritative server snapshot. */
-function computeAbandonedHoles(serverMoves: Map<number, ServerMove>): Set<number> {
-  const holes = new Set<number>();
-  const seqs = [...serverMoves.keys()];
-  if (seqs.length === 0) return holes;
-  const max = Math.max(...seqs);
-  for (let s = 1; s <= max; s++) {
-    if (!serverMoves.has(s)) holes.add(s);
-  }
-  return holes;
-}
-
-function hasSeqGap(serverMoves: Map<number, ServerMove>): boolean {
-  const seqs = [...serverMoves.keys()];
-  if (seqs.length === 0) return false;
-  const max = Math.max(...seqs);
-  // A gap is any seq in [1, max] (start-game resets the counter to 1) that we
-  // neither hold nor know to be a permanently-abandoned reservation.
-  for (let s = 1; s <= max; s++) {
-    if (!serverMoves.has(s) && !knownMissingSeqs.has(s)) return true;
-  }
-  return false;
-}
-
 function scheduleGapResync(resync: () => void): void {
   if (gapResyncTimer !== null) return; // already scheduled
   gapResyncTimer = setTimeout(() => {
@@ -305,7 +284,7 @@ export const useCoopStore = create<CoopState>((set, get) => ({
     // hole in it is an abandoned reservation, not a dropped event. Seed the
     // known-missing set from it; a new round restarts seqs at 1 so this also
     // clears stale entries from the prior round.
-    knownMissingSeqs = computeAbandonedHoles(serverMoves);
+    knownMissingSeqs = computeAbandonedHoles(serverMoves.keys());
     const remoteBoard = materializeRemote(puzzleCode, givens, serverMoves);
     set({
       room,
@@ -639,7 +618,7 @@ export const useCoopStore = create<CoopState>((set, get) => ({
     // dropped or delayed an event), schedule a debounced refetch. If the
     // hole fills via subsequent realtime events before the timer fires,
     // cancelGapResync below clears it.
-    if (hasSeqGap(nextServerMoves)) {
+    if (hasSeqGap(nextServerMoves.keys(), knownMissingSeqs)) {
       scheduleGapResync(() => void get().resync());
     } else {
       cancelGapResync();
@@ -647,22 +626,29 @@ export const useCoopStore = create<CoopState>((set, get) => ({
   },
 
   resync: async () => {
-    const { room, puzzleCode, givens, pendings, settings } = get();
+    const { room, puzzleCode, givens, pendings, settings, serverMoves: existing } = get();
     if (!room || !puzzleCode || !givens) return;
     // Clear any pending gap-resync timer; we're about to do the canonical
     // refetch ourselves.
     cancelGapResync();
-    const moves = await fetchAllMoves(room.room_id);
-    const serverMoves = new Map<number, ServerMove>();
-    for (const sm of moves) serverMoves.set(sm.seq, sm);
-    // This is the authoritative snapshot; recompute which seqs are genuinely
-    // abandoned so post-resync gap checks don't re-trigger on the same holes.
-    knownMissingSeqs = computeAbandonedHoles(serverMoves);
-    // Drop pendings that have already landed (their cid is in serverMoves);
-    // keep ones still genuinely in flight.
-    const remaining = pendings.filter(
-      (p) => !moves.some((m) => m.client_move_id === p.cid),
-    );
+    // Delta catch-up (DECISIONS #0040): fetch only from our first hole (or
+    // max+1 if contiguous) instead of re-reading the entire log. The DB is
+    // authoritative for [since, ∞), so we merge the delta over what we hold.
+    const since = firstMissingSeq(existing.keys(), knownMissingSeqs);
+    const delta = await fetchMovesSince(room.room_id, since);
+    const serverMoves = new Map(existing);
+    for (const sm of delta) serverMoves.set(sm.seq, sm);
+    // The delta is authoritative for [since, ∞), and everything below `since`
+    // was already present or known-abandoned, so the merged map is a faithful
+    // snapshot — recompute abandoned holes from it.
+    knownMissingSeqs = computeAbandonedHoles(serverMoves.keys());
+    // Drop pendings that have already landed (their cid is now in the merged
+    // log); keep ones still genuinely in flight.
+    const landedCids = new Set<string>();
+    for (const m of serverMoves.values()) {
+      if (m.client_move_id) landedCids.add(m.client_move_id);
+    }
+    const remaining = pendings.filter((p) => !landedCids.has(p.cid));
     const remoteBoard = materializeRemote(puzzleCode, givens, serverMoves);
     const board = overlayPendings(remoteBoard, remaining);
     set({

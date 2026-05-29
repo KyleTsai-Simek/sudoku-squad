@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-05-29 (battle undo/redo now emit server-side compensating moves so `progress_pct` no longer drifts — [#0039](DECISIONS.md); battle smoke extended to assert fill→undo→redo. Prior same-day: doc-sync pass reconciling all docs against the codebase. Coop MVP is in the tree.)
+**Last updated:** 2026-05-29 (**sync-resilience hardening from the architecture audit** — see [TODO.md](TODO.md) "Sync resilience hardening" + [DECISIONS #0040](DECISIONS.md): room-level realtime recovery (reconnect/visibility/8s-poll on the `rooms`/`room_players` channels), coop `hasSeqGap` abandoned-seq fix, retry-with-backoff on transient submits, and **delta catch-up** coop resync. The pure seq-log helpers now live in `packages/core/src/sync/` with property tests — **core is 65/65**. Earlier same-day: battle undo/redo compensating moves [#0039](DECISIONS.md); doc-sync pass. Coop MVP is in the tree.)
 **Current phase:** Phase 2 (battle) is fully playable end-to-end, and **Phase 3 (coop) has an MVP landed** — a shared board with last-write-wins per cell by seq, optimistic apply + server-overlay reconciliation, and a per-player colored progress bar. The May 22 UX expansion (chunks A–H) plus a UX-polish pass (board pixel-snap, auto-clean peer notes, spacebar notes toggle + `?` shortcuts overlay, Notes button visual rework) all shipped. The May 23 sync rewrite ([#0036](DECISIONS.md): atomic seq counter, idempotency, parallel submits, coop server-overlay store, fail-resync), the batching-and-resync followup ([#0037](DECISIONS.md): per-room opportunistic batching, batch RPC, gap/reconnect/visibility resync), and the coop per-player credit rule ([#0038](DECISIONS.md)) are the latest landings. Remaining: the two-tab Playwright smoke extension to race-to-completion, and coop polish (Presence cursors, private notes). iOS is the next phase.
 **Branch:** `main`
 **Live:** https://sudoku-squad-web.vercel.app/
@@ -17,7 +17,7 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
 
 ### Phase 1 — Single-player web ✅
 
-- **`packages/core`** — platform-agnostic TypeScript engine. **47 / 47 tests passing** (unit + property-based with `fast-check`).
+- **`packages/core`** — platform-agnostic TypeScript engine. **65 / 65 tests passing** (unit + property-based with `fast-check`). Now includes `src/sync/seq-log.ts` (move-log gap/delta helpers, 18 tests).
   - `types/index.ts` — domain types including `Puzzle`, `BoardState`, `Move`, `PuzzleCode` (cross-mode identifier).
   - `puzzle/board.ts` — `createBoard(puzzleCode, givens)`, `isFilled`, `cellValue`.
   - `puzzle/validator.ts` — `findConflicts` (no solution leak), `isCompleteWithSolution` (server-side use), `unitsFor`.
@@ -59,7 +59,7 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
 
 | Check | Command | Status |
 |---|---|---|
-| Core engine tests | `pnpm --filter @sudoku-squad/core test` | 47 / 47 |
+| Core engine tests | `pnpm --filter @sudoku-squad/core test` | 65 / 65 |
 | Ingest tests (solver + code) | `pnpm --filter @sudoku-squad/ingest test` | 9 / 9 |
 | Sample-pack verification | `pnpm --filter @sudoku-squad/ingest verify:samples` | 5 / 5 |
 | Ingest dry-run on synthetic fixture | `pnpm --filter @sudoku-squad/ingest ingest:dry-fixture` | sampled 5, rejected 2 (as designed) |
@@ -155,7 +155,7 @@ What does NOT yet exist (Phase 3 remainder): Presence-based colored cursors, the
 ```bash
 cd /Users/kylets/sudoku-squad
 pnpm install                                              # idempotent
-pnpm --filter @sudoku-squad/core test                     # expect 47/47
+pnpm --filter @sudoku-squad/core test                     # expect 65/65
 pnpm --filter @sudoku-squad/ingest test                   # expect 9/9
 pnpm --filter @sudoku-squad/ingest verify:samples         # expect 5 OK
 pnpm --filter @sudoku-squad/ingest check                  # expect 4/4

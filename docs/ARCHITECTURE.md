@@ -61,8 +61,11 @@ sudoku-squad/
         game/             # reducer (with auto-clean peer notes),
                           # notes bitmask helpers, history (multi-cell undo)
         types/            # shared TS types
-                          # (sync/ deferred — battle-store does optimistic
-                          #  apply directly; revisit when coop's LWW forces it)
+        sync/             # seq-log helpers (computeAbandonedHoles,
+                          # firstMissingSeq, hasSeqGap) — pure, property-tested;
+                          # consumed by coop-store. More of the coop sync path
+                          # (materialize / overlay / ownership) lifts here as
+                          # iOS nears. See DECISIONS #0040.
   scripts/
     ingest/               # one-off: dataset import, Norvig solver, code hashing
       data/               # gitignored: source CSVs from Kaggle
@@ -202,7 +205,7 @@ Every multiplayer move flows through this loop:
 ### Idempotency, failure, and conflict handling
 
 - **Retried HTTP requests** are safe — `submit-move` looks up `(room_id, client_move_id)` and returns the prior seq + state instead of inserting twice.
-- **Submit failures** (rare; network or 5xx) trigger a **resync** on the client: fetch the room's authoritative move log (battle: own player only; coop: all moves), rebuild `remoteBoard`, drop the failed pending. The user sees the offending cell snap back to the server's truth with a brief toast.
+- **Transient submit failures** (network or 5xx) are first **retried** with backoff (`move-batcher.ts`, up to 3 attempts; idempotent via `client_move_id`). Only after retries are exhausted does the client fall back to a **resync**. Coop resync is a **delta catch-up** (DECISIONS #0040): it fetches only `seq >= firstMissingSeq` (the first real hole, or max+1 for a pure catch-up) via `fetchMovesSince` and merges over the held log, rather than re-reading everything; it then drops landed pendings. Battle resync still rebuilds from the player's own (small, private) log. The user sees a failed cell snap back to server truth only when a genuine, persistent failure occurs.
 - **Same-cell race in coop**: each client re-materializes from the seq-sorted log on every fold, so both clients converge to the higher-seq write. This was the failure mode of the original `dedup-by-player_id` design; the new `dedup-by-client_move_id` + seq-sorted re-materialization fixes it.
 - **Coop undo** emits a server-side compensating move (clear / re-place / re-toggle) so peers see the revert. **Battle undo/redo** do the same (see [DECISIONS #0039](DECISIONS.md)) — the board is private, but the move must reach the server or the authoritative `progress_pct` drifts. The compensating result reconciles `ownProgressPct`/autocheck/win just like a typed entry.
 
