@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useBattleStore } from '@/lib/battle-store';
 import {
+  fetchOwnMoves,
   fetchPuzzleGivens,
   type RoomPlayerProgress,
   type RoomSettings,
@@ -52,15 +53,21 @@ export function BattleGame({
     return new Date(serverStartedAt).getTime() + COUNTDOWN_MS;
   }, [serverStartedAt]);
 
-  // Initialize the battle store when we first land here.
+  // Initialize the battle store when we first land here. Fetch the player's
+  // own move log alongside the givens so a mid-battle reload re-materializes
+  // their board (and progress) instead of showing an empty grid until the
+  // next submit triggers a resync. Mirrors coop's fetchAllMoves on mount.
   useEffect(() => {
     if (board && board.puzzleCode === room.puzzle_code) return;
     if (gameStartsAt === null) return; // wait until lobby gives us started_at
     let cancelled = false;
     (async () => {
-      const p = await fetchPuzzleGivens(room.puzzle_code);
+      const [p, moves] = await Promise.all([
+        fetchPuzzleGivens(room.puzzle_code),
+        fetchOwnMoves(room.room_id, room.own_player_id),
+      ]);
       if (cancelled || !p) return;
-      startBattle(room, room.puzzle_code, p.givens, settings, gameStartsAt);
+      startBattle(room, room.puzzle_code, p.givens, settings, gameStartsAt, moves);
     })();
     return () => {
       cancelled = true;

@@ -2,15 +2,16 @@
 //
 //   1. Authenticate caller via JWT → player_id.
 //   2. Look up the room by code.
-//   3. Enforce mid-game-join policy (per DECISIONS.md #0024):
+//   3. If the caller already has a seat (rejoin), return it as-is —
+//      regardless of room status. A mid-battle refresh must land the player
+//      back in their game, not bounce off the in-progress gate. This is what
+//      makes refreshes idempotent and keeps the disconnect-grace flow simple.
+//   4. Otherwise apply the NEW-joiner mid-game policy (per DECISIONS.md #0024):
 //        - status=finished → 'room_finished'.
 //        - status=playing AND mode=battle → 'room_in_progress'.
 //        - status=playing AND mode=coop → OK (coop is open anytime).
 //        - status=lobby → OK.
-//   4. Enforce room cap (4 players) when adding a new joiner.
-//   5. If the caller is already in the room (rejoin), return their existing
-//      seat without re-inserting. This makes refreshes idempotent and
-//      keeps the disconnect-grace flow simple.
+//   5. Enforce room cap (8 players) when adding a new joiner.
 //   6. Otherwise pick a color from the unused palette slots and insert.
 
 import '@supabase/functions-js/edge-runtime.d.ts';
@@ -74,14 +75,6 @@ Deno.serve(async (req) => {
     return errorResponse('not_found', `no room with code "${code}"`, 404);
   }
 
-  // Mid-game join policy.
-  if (room.status === 'finished') {
-    return errorResponse('room_finished', 'this room is already over', 409);
-  }
-  if (room.status === 'playing' && room.mode === 'battle') {
-    return errorResponse('room_in_progress', 'this battle has already started', 409);
-  }
-
   // Load current players.
   const { data: players, error: playersErr } = await admin
     .from('room_players')
@@ -91,7 +84,11 @@ Deno.serve(async (req) => {
     return errorResponse('internal', `room_players read failed: ${playersErr.message}`, 500);
   }
 
-  // Rejoin? Caller already has a seat — return it as-is.
+  // Rejoin? Caller already has a seat — return it as-is, regardless of room
+  // status. This MUST run before the mid-game-join gate below: a player who
+  // refreshes mid-battle (or revisits a finished room) owns their seat and has
+  // to be let back in, otherwise the in-progress gate would bounce them to an
+  // error page and their game would appear lost. See DECISIONS.md #0024.
   const existing = (players ?? []).find((p) => p.player_id === userId);
   if (existing) {
     return jsonResponse({
@@ -105,6 +102,14 @@ Deno.serve(async (req) => {
       is_host: existing.is_host,
       rejoined: true,
     });
+  }
+
+  // New-joiner mid-game policy.
+  if (room.status === 'finished') {
+    return errorResponse('room_finished', 'this room is already over', 409);
+  }
+  if (room.status === 'playing' && room.mode === 'battle') {
+    return errorResponse('room_in_progress', 'this battle has already started', 409);
   }
 
   // New joiner: enforce cap.

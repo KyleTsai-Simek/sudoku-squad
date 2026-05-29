@@ -9,6 +9,7 @@ import {
   createBoard,
   createHistory,
   findConflicts,
+  movesToReach,
   peekLastMove,
   redo as redoHistory,
   undo as undoHistory,
@@ -85,6 +86,7 @@ interface BattleState {
     givens: number[],
     settings: RoomSettings,
     gameStartsAt: number,
+    initialMoves: ServerMove[],
   ) => void;
   applySettings: (settings: RoomSettings) => void;
   selectCell: (cell: CellIndex | null) => void;
@@ -121,57 +123,112 @@ function toCoreMove(m: ServerMove): Move | null {
   return { kind: m.kind, cell: m.cell, value: m.value as CellValue };
 }
 
+/** Materialize the player's private board from givens + their own server
+ *  moves, applied in seq order. Pure. */
+function materializeOwnBoard(
+  puzzleCode: PuzzleCode,
+  givens: number[],
+  moves: ServerMove[],
+): BoardState {
+  let board = createBoard(puzzleCode, givens);
+  for (const sm of moves) {
+    const core = toCoreMove(sm);
+    if (core) board = applyMove(board, core);
+  }
+  return board;
+}
+
+/** Progress = filled non-given cells / total non-given cells, as a 0–100
+ *  integer. Mirrors the server's `materialize` (submit-move/index.ts) so a
+ *  board reconstructed from the log shows the same number the server cached —
+ *  no solution needed, since progress is fill-based not correctness-based. */
+function computeProgressPct(board: BoardState): number {
+  let filled = 0;
+  let total = 0;
+  for (const cell of board.cells) {
+    if (cell.given !== null) continue;
+    total++;
+    if (cell.value !== null) filled++;
+  }
+  return total === 0 ? 100 : Math.round((filled / total) * 100);
+}
+
 /** Re-materialize the player's board from the server's authoritative move
  *  log. Used on submit failure to recover. Resets local history. */
 async function resyncFromServer(get: () => BattleState, set: (s: Partial<BattleState>) => void): Promise<void> {
   const { room, puzzleCode, givens, settings } = get();
   if (!room || !puzzleCode || !givens) return;
   const moves = await fetchOwnMoves(room.room_id, room.own_player_id);
-  let board = createBoard(puzzleCode, givens);
-  for (const sm of moves) {
-    const core = toCoreMove(sm);
-    if (core) board = applyMove(board, core);
-  }
+  const board = materializeOwnBoard(puzzleCode, givens, moves);
   set({
     board,
     history: createHistory(),
     conflicts: recomputeConflicts(board, settings.showConflicts),
     incorrect: new Set(),
+    ownProgressPct: computeProgressPct(board),
     pending: [],
   });
 }
 
-/** Submit a server move on behalf of an undo/redo and reconcile the result
- *  exactly like a typed entry: update progress, autocheck flags, and win.
- *  Keeps the server's authoritative progress_pct (and the local bar) honest
- *  after an undo/redo instead of letting it drift. See DECISIONS #0039. */
-async function submitCompensating(
+/** Submit the compensating moves for an undo/redo/smart-clear and reconcile
+ *  the result exactly like typed entries: update progress, autocheck flags, and
+ *  win. An undo can't be expressed as a single inverse move — restoring a
+ *  value's auto-cleared peer notes (and the target's own prior notes) takes a
+ *  faithful batch from `movesToReach`. Emitting them as real moves keeps the
+ *  server's authoritative log (and every replay of it) in sync with what the
+ *  player sees locally — closing the notes-divergence hole. See DECISIONS #0041
+ *  (supersedes the single-move approach from #0039).
+ *
+ *  Order within the batch is preserved by the per-room batcher, so the server
+ *  assigns monotonic seqs in the clear→value→note order `movesToReach` emits. */
+async function submitCompensatingMoves(
   get: () => BattleState,
   set: (s: Partial<BattleState>) => void,
-  move: Move,
+  moves: Move[],
 ): Promise<void> {
   const { room } = get();
-  if (!room) return;
-  const cid = newCid();
-  set({ pending: [...get().pending, { cid, cell: move.cell }] });
-  const res = await enqueueMove(room.room_id, {
-    cell: move.cell,
-    kind: move.kind,
-    value: move.kind === 'clear' ? null : move.value,
-    client_move_id: cid,
-  });
-  set({ pending: get().pending.filter((p) => p.cid !== cid) });
-  if (!res.ok) {
-    set({ lastError: res.error.message });
+  if (!room || moves.length === 0) return;
+  const entries = moves.map((move) => ({ move, cid: newCid() }));
+  set({ pending: [...get().pending, ...entries.map((e) => ({ cid: e.cid, cell: e.move.cell }))] });
+  const results = await Promise.all(
+    entries.map((e) =>
+      enqueueMove(room.room_id, {
+        cell: e.move.cell,
+        kind: e.move.kind,
+        value: e.move.kind === 'clear' ? null : e.move.value,
+        client_move_id: e.cid,
+      }).then((res) => ({ entry: e, res })),
+    ),
+  );
+  const cids = new Set(entries.map((e) => e.cid));
+  set({ pending: get().pending.filter((p) => !cids.has(p.cid)) });
+
+  const failure = results.find((r) => !r.res.ok);
+  if (failure && !failure.res.ok) {
+    set({ lastError: failure.res.error.message });
     await resyncFromServer(get, set);
     return;
   }
+
+  // Reconcile autocheck per move; take progress/win from the last (highest-seq)
+  // result, which reflects the board after the whole batch landed.
   const inc = new Set(get().incorrect);
-  if (move.kind === 'clear') inc.delete(move.cell);
-  else if (res.value.cell_correct === true) inc.delete(move.cell);
-  else if (res.value.cell_correct === false) inc.add(move.cell);
-  set({ ownProgressPct: res.value.progress_pct, incorrect: inc, lastError: null });
-  if (res.value.won) set({ finishedAt: Date.now() });
+  for (const { entry, res } of results) {
+    if (!res.ok) continue;
+    const { move } = entry;
+    if (move.kind === 'clear') inc.delete(move.cell);
+    else if (move.kind === 'value') {
+      if (res.value.cell_correct === true) inc.delete(move.cell);
+      else if (res.value.cell_correct === false) inc.add(move.cell);
+    }
+  }
+  const last = results[results.length - 1];
+  if (last && last.res.ok) {
+    set({ ownProgressPct: last.res.value.progress_pct, incorrect: inc, lastError: null });
+    if (last.res.value.won) set({ finishedAt: Date.now() });
+  } else {
+    set({ incorrect: inc, lastError: null });
+  }
 }
 
 export const useBattleStore = create<BattleState>((set, get) => ({
@@ -191,8 +248,12 @@ export const useBattleStore = create<BattleState>((set, get) => ({
   lastError: null,
   pending: [],
 
-  startBattle: (room, puzzleCode, givens, settings, gameStartsAt) => {
-    const board = createBoard(puzzleCode, givens);
+  startBattle: (room, puzzleCode, givens, settings, gameStartsAt, initialMoves) => {
+    // Materialize from the player's own server-confirmed log so a mid-battle
+    // reload shows their progress immediately, rather than an empty board that
+    // only refills on the next submit's resync. The log is private per player
+    // (battle boards aren't shared), so `fetchOwnMoves` is the right source.
+    const board = materializeOwnBoard(puzzleCode, givens, initialMoves);
     set({
       room,
       puzzleCode,
@@ -206,7 +267,7 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       incorrect: new Set(),
       startedAt: gameStartsAt,
       finishedAt: null,
-      ownProgressPct: 0,
+      ownProgressPct: computeProgressPct(board),
       lastError: null,
       pending: [],
     });
@@ -328,6 +389,10 @@ export const useBattleStore = create<BattleState>((set, get) => ({
     const cell = board.cells[selected];
     if (!cell || cell.given !== null) return;
 
+    // Smart-clear: re-clearing the value you just placed undoes the placement
+    // (restoring auto-cleaned peer notes) rather than doing a destructive
+    // clear. Either way we drive the board to the target state and emit the
+    // faithful move batch so the server log matches. See DECISIONS #0041.
     const last = peekLastMove(history);
     const isSmartUndo =
       !!last &&
@@ -335,90 +400,56 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       last.cell === selected &&
       cell.value === last.value;
 
-    if (isSmartUndo) {
-      const undone = undoHistory(board, history);
-      set({
-        board: undone.state,
-        history: undone.history,
-        conflicts: recomputeConflicts(undone.state, settings.showConflicts),
-      });
-    } else {
-      const result = applyMoveWithHistory(board, history, { kind: 'clear', cell: selected });
-      if (result.state === board) return;
-      set({
-        board: result.state,
-        history: result.history,
-        conflicts: recomputeConflicts(result.state, settings.showConflicts),
-      });
-    }
-
-    const cid = newCid();
-    set({ pending: [...get().pending, { cid, cell: selected }] });
-
-    const res = await enqueueMove(room.room_id, {
-      cell: selected,
-      kind: 'clear',
-      value: null,
-      client_move_id: cid,
+    const result = isSmartUndo
+      ? undoHistory(board, history)
+      : applyMoveWithHistory(board, history, { kind: 'clear', cell: selected });
+    if (result.state === board) return;
+    const compensating = movesToReach(board, result.state);
+    set({
+      board: result.state,
+      history: result.history,
+      conflicts: recomputeConflicts(result.state, settings.showConflicts),
     });
-    set({ pending: get().pending.filter((p) => p.cid !== cid) });
-    if (!res.ok) {
-      set({ lastError: res.error.message });
-      await resyncFromServer(get, set);
-      return;
-    }
-    const inc = new Set(get().incorrect);
-    inc.delete(selected);
-    set({ ownProgressPct: res.value.progress_pct, incorrect: inc, lastError: null });
+    await submitCompensatingMoves(get, set, compensating);
   },
 
   undo: async () => {
-    // Battle undo emits a server-side compensating move so the server's
-    // authoritative progress_pct (and the local bar) stay accurate — see
-    // DECISIONS #0039. The board is private so peers never see it, but the
-    // move log must still reflect the revert or progress drifts. Mirrors
-    // coop undo.
+    // Battle undo emits a faithful batch of server moves (via movesToReach) so
+    // the server's authoritative log — and every replay of it — reflects the
+    // exact reverted board, notes included. The board is private so peers never
+    // see it, but progress_pct and the on-resync materialization both depend on
+    // the log being right. See DECISIONS #0041 (supersedes #0039).
     const { board, room, history, settings } = get();
     if (!board || !room || !canUndo(history)) return;
     const result = undoHistory(board, history);
+    const compensating = movesToReach(board, result.state);
     set({
       board: result.state,
       history: result.history,
       conflicts: recomputeConflicts(result.state, settings.showConflicts),
     });
-    const top = history.undoStack[history.undoStack.length - 1];
-    if (!top) return;
-    const targetCell = top.move.cell;
-    const priorCellState = top.priors.find((p) => p.index === targetCell);
-    if (!priorCellState) return;
-    // Restore the prior visible state: a note_toggle is self-inverse, a prior
-    // value re-places it, an empty prior is a clear.
-    let compensating: Move;
-    if (top.move.kind === 'note_toggle') {
-      compensating = { kind: 'note_toggle', cell: targetCell, value: top.move.value };
-    } else if (priorCellState.cell.value !== null) {
-      compensating = { kind: 'value', cell: targetCell, value: priorCellState.cell.value as CellValue };
-    } else {
-      compensating = { kind: 'clear', cell: targetCell };
-    }
-    await submitCompensating(get, set, compensating);
+    await submitCompensatingMoves(get, set, compensating);
   },
 
   redo: async () => {
-    // Symmetric to undo: re-apply the redone move and submit it so the
-    // server's progress_pct tracks it.
+    // Symmetric to undo: re-apply the redone move locally, then emit the moves
+    // that reproduce the resulting board on the server.
     const { board, room, history, settings } = get();
     if (!board || !room || !canRedo(history)) return;
     const result = redoHistory(board, history);
-    if (result.state === board) return;
+    if (result.state === board) {
+      // Orphaned redo entry (the cell diverged) — redoHistory drops it; keep
+      // our history in sync and bail.
+      set({ history: result.history });
+      return;
+    }
+    const compensating = movesToReach(board, result.state);
     set({
       board: result.state,
       history: result.history,
       conflicts: recomputeConflicts(result.state, settings.showConflicts),
     });
-    const top = history.redoStack[history.redoStack.length - 1];
-    if (!top) return;
-    await submitCompensating(get, set, top.move);
+    await submitCompensatingMoves(get, set, compensating);
   },
 
   markFinished: () => {

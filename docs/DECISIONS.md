@@ -539,6 +539,8 @@ Their move log is preserved either way — rejoining within the same room code r
 - The lobby route renders three branches off this state. Lobby copy is mode-aware.
 - "Play again" creates a *new* room — preserves the move log of the old one for any future stats feature.
 
+**Refinement (2026-05-29) — the policy gates NEW joiners only; rejoin is always allowed.** The original `join-room` ran the status gate *before* the rejoin check, so a player who refreshed mid-battle was rejected with `room_in_progress` and bounced to the error screen — their game appeared lost even though their move log was intact server-side. That contradicted the function's own stated goal of making refreshes idempotent. Fixed by moving the "caller already has a seat → return it" check **ahead of** the status gate: an existing member reclaims their seat regardless of `status` (playing *or* finished), and only genuinely new joiners hit the `room_in_progress` / `room_finished` rejections. This is what makes battle refresh-resume work (paired with the client-side board materialization in `battle-game.tsx` / `startBattle`); coop already resumed because its gate never rejected. Guarded by the reload regression in `e2e/battle.spec.ts`.
+
 ---
 
 ## 0023 — Edge Functions (not SQL RPCs) for multiplayer endpoints
