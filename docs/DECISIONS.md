@@ -17,6 +17,23 @@ Format:
 
 ---
 
+## 0041 — Undo/redo/smart-clear emit a faithful move batch (notes stay in sync)
+**Date:** 2026-05-29
+**Status:** Accepted. Supersedes the single-compensating-move mechanism of [#0039](DECISIONS.md).
+
+**Context.** Our move primitives are *effectful*, not absolute cell-setters: `value` sets a cell **and** auto-clears that digit from every peer cell's notes (the smart-notes rule, [reducer.ts]), and `clear` wipes a cell's value *and* notes. [#0039](DECISIONS.md) (battle) and the original coop undo expressed an undo as a single inverse move — for a value placement, a lone `clear`. That move reconciles *progress* correctly (notes don't count toward progress), but it does **not** restore the target cell's prior pencil-marks, nor the peer notes the placement auto-cleared. The local `undo` restores all of them (history records every touched cell), so the player sees the right board — but the server move log, which every client (and our own next resync) replays, only ever saw the `clear`. Result: a **local↔server notes divergence**. In coop this is live — teammates replay the log and see notes the undoing player still sees; in battle it surfaces on a resync. The same bug lived in the "smart-clear" path (re-clearing the value you just placed = an undo). It was flagged in the 10-commit review (2026-05-29).
+
+**Decision.** Undo, redo, and smart-clear now drive the board to the exact target state by emitting a **faithful batch of real moves** computed by a new pure core helper, `movesToReach(current, desired)` (`packages/core/src/game/board-diff.ts`). It diffs the two boards and emits, in three side-effect-safe passes, `clear`→`value`→`note_toggle` moves that replay to `desired` exactly — peer notes restored as real `note_toggle`s in the log. Battle (`submitCompensatingMoves`) and coop (`submitCoopCompensation`) share this core helper and the same structure: optimistic local apply, batch submit (the per-room batcher preserves order → monotonic seqs), reconcile progress/autocheck/win from the echo, resync on failure. Coop's smart-clear is brought to parity with battle (re-typing a placed value now restores its auto-cleared peer notes there too). So the server log now "follows notes like real moves," and every client's replay is byte-identical.
+
+**Alternatives considered.**
+- *Add an absolute `set_cell` move kind carrying `{value, notes}` with no peer side effects.* The most "bulletproof" primitive and a single move per touched cell — but it needs a DB migration (relax the `moves.kind` CHECK + add a notes column) and an Edge Function redeploy that can't be verified without live-deploy access. `movesToReach` achieves the same correctness within the existing schema, so the schema change wasn't justified.
+- *Keep the single-move undo and just stop restoring peer notes locally.* Makes local match the log by making both wrong — the smart-notes affordance ("undo brings my notes back") is the desired behavior. Rejected.
+- *(from #0039) emit a per-cell diff.* This is exactly what we now do, generalized into a tested core helper.
+
+**Consequences.** Notes are now first-class in the synced log across all modes; an undo of a value placement is a small batch (`clear` + a few `note_toggle`s) rather than one move. `movesToReach` is property-tested in core (`applyMoves(current, movesToReach(current, desired)) === desired` for arbitrary reducer-reachable boards; core 65→72). A new local-only coop two-tab Playwright smoke (`e2e/coop.spec.ts`) is the regression guard: it places a note, places a peer value (auto-clear), undoes, and asserts the second client — re-materializing the full log on reload — sees the note restored. Closes the "no coop two-tab smoke" gap. Battle's existing undo/redo progress assertion still holds.
+
+---
+
 ## 0040 — Durable local move log + delta catch-up, and the coop offline-merge rule
 **Date:** 2026-05-29
 **Status:** Accepted. **Merge rule = (A)** — pure LWW-by-arrival-seq, with client persistence scoped to *reconnect/refresh resume*, not long concurrent-offline editing (chosen by the user 2026-05-29). **Landed:** retry-with-backoff (`move-batcher.ts`), delta catch-up resync (coop), and the pure seq-log helpers lifted into `packages/core/src/sync/` with property tests. **Still pending:** durable local-log *persistence* (b1) and finishing the core extraction (materialize / overlay / ownership / resync orchestration). The coop "freeze timer when empty" and "resume-an-in-progress-room UX" ideas raised in this discussion are backlogged to [ROADMAP.md](ROADMAP.md) Stretch/V2 #8–#9.
@@ -46,7 +63,7 @@ Candidate merge rules:
 
 ## 0039 — Battle undo/redo emit server-side compensating moves
 **Date:** 2026-05-29
-**Status:** Accepted
+**Status:** Accepted; the single-move compensating mechanism is superseded by [#0041](DECISIONS.md) (which restores notes faithfully via a move batch). The core idea — undo/redo go over the wire and reconcile from the echo — stands.
 
 **Context.** Battle progress (`progress_pct`) is the server-authoritative count of filled non-given cells over total empties — no correctness check, so the solution never leaks ([#0022](DECISIONS.md)). The typed-entry and Clear paths (`enterValue`, `clearCell`) submit a move and reconcile `ownProgressPct` from the echo, so they track clear-then-refill correctly. But undo/redo were deliberately local-only ([#0036](DECISIONS.md)): they mutated the local board without submitting anything. That left two defects — the player's own bar showed a stale % until the next typed move, and the server's move log never learned of the revert, so opponents (and the win check) kept counting cells the player had emptied via undo.
 

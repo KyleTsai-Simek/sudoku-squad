@@ -13,6 +13,12 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
+  // Locally the live multiplayer smokes (battle + coop) each spin up two
+  // browser contexts and lean hard on Supabase Realtime; running them
+  // concurrently overloads the dev server / Realtime and they flake on lobby
+  // sync. Run serially off-CI. In CI those specs self-skip (no Supabase env),
+  // so only the fast single-player specs run — leave them parallel there.
+  workers: process.env.CI ? undefined : 1,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {

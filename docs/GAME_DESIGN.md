@@ -53,7 +53,7 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
   - `Cmd/Ctrl+Z` undo, `Cmd/Ctrl+Shift+Z` or `Cmd/Ctrl+Y` redo.
   - `Esc` closes any open overlay.
 - **Notes mode**: when on, tapping numbers (or pressing 1–9) toggles them as small marks in the cell rather than setting the value.
-- **Auto-clean (smart notes)**: when you place a value in a cell, that digit is automatically removed from the pencil-marks of every peer cell (same row, column, or 3×3 box). Always on; not a setting. Undo restores both the placement and the wiped notes in one step. This matches the universal pattern in NYT Sudoku, Sudoku.com, and Good Sudoku — players expect it. See [research notes in chat transcript].
+- **Auto-clean (smart notes)**: when you place a value in a cell, that digit is automatically removed from the pencil-marks of every peer cell (same row, column, or 3×3 box). Always on; not a setting. Undo (and the "smart-clear" of re-typing/erasing the value you just placed) restores both the placement and the wiped notes in one step — identically across single-player, battle, and coop. In multiplayer this restoration is synced to every player: undo emits the restoring `note_toggle`s as real moves in the server log ([DECISIONS #0041](DECISIONS.md)), so a teammate's board never diverges from yours. This matches the universal pattern in NYT Sudoku, Sudoku.com, and Good Sudoku — players expect it.
 
 ---
 
