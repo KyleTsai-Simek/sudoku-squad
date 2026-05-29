@@ -2,14 +2,14 @@
 
 Four phases, each with an explicit **exit criterion** — we don't move on until it's met. Single player first, then battle, then coop, then iOS. This sequencing exists for a reason: each phase de-risks the next.
 
-**Current position:** Phase 2 battle mode is substantially complete and live; remaining gaps are the two-context Playwright smoke and lifting the local board-lock on the loser path. See [STATUS.md](STATUS.md) for the live snapshot.
+**Current position:** Phase 2 battle mode is substantially complete and live; remaining gaps are the two-context Playwright smoke and lifting the local board-lock on the loser path. Phase 3 coop has an MVP landed (shared board, server-overlay sync, shared win). See [STATUS.md](STATUS.md) for the live snapshot.
 
 | Phase | Status |
 |---|---|
 | Phase 0 — Setup, scaffold, doc set | ✅ Complete |
 | Phase 1 — Single-player web | ✅ Complete (deployed at https://sudoku-squad-web.vercel.app/) |
 | Phase 2 — Battle mode | 🔄 Substantially landed (chunks A–H + UX polish pass) |
-| Phase 3 — Coop mode | Pending |
+| Phase 3 — Coop mode | 🔄 MVP landed (shared board, server-overlay sync, shared win) |
 | Phase 4 — iOS (React Native) | Pending |
 
 ---
@@ -20,8 +20,8 @@ Four phases, each with an explicit **exit criterion** — we don't move on until
 
 **What landed:**
 - Monorepo (pnpm 11 workspaces, Next.js 15 app, `packages/core` with engine, `scripts/ingest`).
-- **10,000 puzzles** in Supabase (`radcliffe/3-million-sudoku-puzzles-with-ratings`), **2,500 each across easy/medium/hard/expert** with per-(tier, clue-count) targets ([DECISIONS #0031](DECISIONS.md)). Short 6-char codes assigned per puzzle.
-- `packages/core`: types, validator, conflict checker, completion checker, pure move reducer (with auto-clean peer notes), undo/redo history (multi-cell undo + `peekLastMove`). **43/43 tests passing** including `fast-check` property tests.
+- **15,000 puzzles** in Supabase across **six tiers, 2,500 each**: `warmup`/`easy` generated locally via QQWing (negative ratings), and `medium`/`hard`/`expert`/`killer` from the Kaggle `radcliffe/3-million-sudoku-puzzles-with-ratings` dataset (rating-banded). `killer` is hidden from the UI. Short 6-char codes assigned per puzzle. See [DECISIONS #0031](DECISIONS.md), [#0033](DECISIONS.md), [#0034](DECISIONS.md).
+- `packages/core`: types, validator, conflict checker, completion checker, pure move reducer (with auto-clean peer notes), undo/redo history (multi-cell undo + `peekLastMove`). **47/47 tests passing** including `fast-check` property tests.
 - Web app: home page with per-tier "New game" CTAs that pick a random unsolved puzzle and navigate to `/play/[code]`. Full sudoku UI (grid + number pad + notes + undo/redo + timer + settings + completion overlay + keyboard shortcuts overlay). Hint was removed in Chunk A. Conflict highlighting, same-value highlighting, optional auto-check. Completions tracked server-side in `player_completions` (Chunk F).
 - Tooling: ESLint flat config enforces `packages/core` purity. Playwright happy-path smoke. GitHub Actions CI runs everything on PR + push.
 - Deployed to https://sudoku-squad-web.vercel.app/, auto-deploys from `main`.
@@ -64,19 +64,21 @@ These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 wor
 
 ---
 
-## Phase 3 — Coop mode
+## Phase 3 — Coop mode 🔄 (MVP landed)
 
-**Goal:** Two players can collaboratively solve the same board.
+**Goal:** Players can collaboratively solve the same board.
 
 **Scope**
-- Coop room mode added to room creation flow.
-- Shared board model: all moves apply to a single board.
-- `moves` insertion via Edge Function that assigns `seq`, broadcasts on channel.
-- Optimistic local apply + server reconciliation.
-- Visible colored cursors via Supabase Presence (throttled).
-- LWW conflict resolution per cell; merge logic for notes.
-- Game completion celebrated together; play-again works.
-- Disconnect/rejoin handling (60s grace).
+- ✅ Coop room mode added to the room creation / lobby flow (mode toggle backed by `change-mode`).
+- ✅ Shared board model: all moves apply to a single board.
+- ✅ `moves` insertion via Edge Function that assigns atomic `seq`, broadcasts on channel.
+- ✅ Optimistic local apply + server-overlay reconciliation (`coop-store.ts`, LWW by seq + local pendings); opportunistic batching; resync on seq-gap / reconnect / visibility.
+- ✅ LWW conflict resolution per cell; coop undo emits a compensating move ([#0036](DECISIONS.md)).
+- ✅ Game completion celebrated together (shared-win broadcast); play-again works.
+- 🔲 Visible colored cursors via Supabase Presence (throttled).
+- 🔲 Private/per-player notes merge logic.
+- 🔲 Disconnect/rejoin grace handling.
+- 🔲 Two-context coop Playwright smoke.
 
 **Exit criterion**
 - Two browsers in the same coop room can fluidly co-solve a puzzle. Simultaneous typing into the same cell produces a deterministic result (LWW), and both clients converge. No state desync over 10+ minute sessions.
@@ -110,7 +112,7 @@ These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 wor
 
 After Phase 4 lands, the natural next moves are:
 
-1. **A real "evil" / 7+ tier** once we have a richer high-difficulty source (the 3M dataset has only ~100 rows above rating 7.0 — not enough to seed a 2,500-row sample). Easy/medium/hard/expert already shipped in V1.
+1. **A real "evil" / 7+ tier** once we have a richer high-difficulty source (the 3M dataset has only ~100 rows above rating 7.0 — not enough to seed a 2,500-row sample). Six tiers (warmup/easy/medium/hard/expert + hidden killer) already shipped in V1.
 2. **Daily puzzle** — same puzzle for everyone, leaderboard for the day.
 3. **Persistent accounts** (Sign in with Apple + magic link) → profiles, history, stats.
 4. **Match history & replays.**

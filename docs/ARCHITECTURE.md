@@ -47,10 +47,12 @@ sudoku-squad/
       app/                # routes: /, /play/[code], /r/[code]
       components/         # SP + battle boards, number pads, overlays,
                           # keyboard controllers, settings panels, icons
-      lib/                # game-store + battle-store (zustand), puzzle-source,
-                          # pick-puzzle, completions (server-backed), rooms,
-                          # username, supabase, sample-puzzles, confetti
-      e2e/                # Playwright smoke (single-player keyboard solve)
+      lib/                # game-store + battle-store + coop-store (zustand),
+                          # move-batcher, puzzle-source, pick-puzzle,
+                          # completions (server-backed), rooms, username,
+                          # supabase, sample-puzzles, confetti
+      e2e/                # Playwright smokes: single-player (CI) +
+                          # battle two-context (local-only, needs Supabase)
     ios/                  # Expo / React Native (added in Phase 4)
   packages/
     core/                 # SHARED — must stay platform-agnostic
@@ -69,10 +71,11 @@ sudoku-squad/
                           # preflight-3m (source scan), audit-difficulty
                           # (live DB audit), check-connectivity
   supabase/
-    migrations/           # 0001..0011 applied to live project
+    migrations/           # 0001..0015 applied to live project
     functions/            # Edge Functions: create-room, join-room, start-game,
-                          # submit-move, claim-username, kick-player,
-                          # update-room-settings, return-to-lobby
+                          # submit-move, change-difficulty, change-mode,
+                          # claim-username, kick-player, update-room-settings,
+                          # return-to-lobby
   docs/                   # STATUS, GOALS_AND_SCOPE, ARCHITECTURE, ROADMAP,
                           # TODO, DECISIONS, GAME_DESIGN
   .github/workflows/      # CI: lint + typecheck + tests + Playwright
@@ -90,7 +93,7 @@ sudoku-squad/
 
 ## 4. Data model (Supabase / Postgres)
 
-Live SQL is in `supabase/migrations/`. Tables below reflect what's actually applied to the project (migrations 0001 → 0011).
+Live SQL is in `supabase/migrations/`. Tables below reflect what's actually applied to the project (migrations 0001 → 0015).
 
 ### `puzzles`
 Pre-generated puzzles. Immutable once ingested. **15,000 rows** live as of 2026-05-22 across **six tiers** (five visible, one hidden after the #0034 rename): 2,500 each in warmup / easy / medium / hard / expert / killer. Warmup + easy come from local QQWing generation (naked-singles-only, augmented to high clue counts); medium / hard / expert / killer come from the Kaggle 3M `radcliffe/3-million-sudoku-puzzles-with-ratings` dataset. See [DECISIONS #0032](DECISIONS.md) (radcliffe bands), [#0033](DECISIONS.md) (QQWing tiers), and [#0034](DECISIONS.md) (shift-rename).
@@ -236,7 +239,7 @@ All players write to the same board. Decisions:
 - **Notes are merged.** If player A toggles "3" in a cell's notes and player B toggles "5" at the same time, both notes end up set. Notes are per-cell sets; toggles are commutative on different values.
 - **No edit locks.** Locking cells while a player "is thinking" creates UX friction (forgotten locks, unclear who's holding what). LWW + visible cursors is enough for V1.
 - **Visible cursors.** Each player sees a colored highlight on every other player's currently-selected cell, broadcast via Presence. This is the primary "social awareness" mechanism that lets players naturally avoid stepping on each other.
-- **Undo is local-only in V1.** Coop undo is hard (whose move are you undoing?). We sidestep by saying undo only reverts your own most recent move, and if someone else has touched that cell since, your undo has no effect on that cell.
+- **Undo reverts your own most recent move via a compensating move.** As of the [#0036](DECISIONS.md) sync rewrite, coop undo emits a server-side compensating move (`clear`, a re-place to the prior value, or a re-toggle for notes) so peers see the revert. It only undoes your own last move; if someone else has since overwritten that cell, the compensating move is just another LWW write ordered by `seq`. (Battle undo stays local-only — the board is private.)
 
 ### Game-over detection
 Run on the server (Edge Function or trigger) by comparing the current materialized board against `puzzle.solution`. Server announces the winner on the channel; clients trust the server. Never put `solution` in client code.
@@ -245,14 +248,21 @@ Run on the server (Edge Function or trigger) by comparing the current materializ
 
 ## 7. Puzzle source
 
-V1 uses the Kaggle [3 million Sudoku puzzles with ratings](https://www.kaggle.com/datasets/radcliffe/3-million-sudoku-puzzles-with-ratings) dataset (`radcliffe/3-million-sudoku-puzzles-with-ratings`). One row per puzzle: `id,puzzle,solution,clues,difficulty`. The rating column lets us bucket by the dataset's own difficulty without inferring from clue count. Per [DECISIONS.md #0018](DECISIONS.md), which supersedes #0011.
+The live bank is **15,000 puzzles across six tiers** from two pipelines (see [DECISIONS #0032](DECISIONS.md)/[#0033](DECISIONS.md)/[#0034](DECISIONS.md)):
 
-Ingest flow (`scripts/ingest/`, one-off):
+- **`medium` / `hard` / `expert` / `killer`** (10,000, 2,500 each) come from the Kaggle [3 million Sudoku puzzles with ratings](https://www.kaggle.com/datasets/radcliffe/3-million-sudoku-puzzles-with-ratings) dataset (`radcliffe/3-million-sudoku-puzzles-with-ratings`). One row per puzzle: `id,puzzle,solution,clues,difficulty`. The rating column buckets by the dataset's own difficulty without inferring from clue count.
+- **`warmup` / `easy`** (5,000, 2,500 each) are generated locally via QQWing (naked-singles-only, augmented to high clue counts), rated on a synthetic `[-10, 0)` scale.
+
+`killer` is solver-verified and playable by direct URL but hidden from the picker — reserved for a future "evil mode."
+
+Radcliffe ingest flow (`scripts/ingest/src/index.ts`, one-off):
 1. Stream the CSV.
 2. For each row, run our Norvig-ported solver to confirm a unique solution and that the dataset's claimed solution matches.
-3. Bucket by the dataset's `difficulty` rating into easy / medium / hard / expert using the half-open bands in [#0032](DECISIONS.md). Rows whose rating sits above 7.0 are skipped entirely (no clue-count fallback). Per-(tier, clue-count) targets in `TARGET_PER_CELL` mean easy admits more high-clue puzzles, expert admits more low-clue ones. Stop sampling once every cell hits its target — currently 2,500 per tier (10,000 total).
+3. Bucket by the dataset's `difficulty` rating into `medium` / `hard` / `expert` / `killer` using the half-open bands `[0, 0.75)` / `[0.75, 2.5)` / `[2.5, 5)` / `[5, 7)` ([#0032](DECISIONS.md), shifted/renamed in [#0034](DECISIONS.md)). Rows whose rating sits at or above 7.0 are skipped entirely (no clue-count fallback). Per-(tier, clue-count) targets in `TARGET_PER_CELL` mean lower tiers admit more high-clue puzzles, higher tiers more low-clue ones. Stop sampling once every cell hits its target — 2,500 per tier.
 4. Compute `puzzles.code = puzzleCodeFor(givens)` for every kept row (the TS port of the in-DB function — see [#0019](DECISIONS.md)).
-5. Bulk insert into `puzzles` via the service-role client. The `unique(code)` constraint catches the impossible collision case.
+5. Bulk insert into `puzzles` via the service-role client (batches of 500). The `unique(code)` constraint catches the impossible collision case.
+
+The QQWing ingest (`scripts/ingest/src/ingest-qqwing.ts`, `pnpm --filter @sudoku-squad/ingest ingest:qqwing`) generates the two easiest tiers — see [DECISIONS #0033](DECISIONS.md).
 
 Two read-only utility scripts complement the ingest:
 - `pnpm --filter @sudoku-squad/ingest preflight:3m` — scan the source CSV and report rating + clue-count distributions, used to design `TARGET_PER_CELL`.
@@ -299,7 +309,7 @@ Web passes a `localStorage`-backed impl; RN passes an `AsyncStorage`-backed impl
 - `moves` insertable only by a current member of the room.
 - Edge Function `submit_move` (Phase 2) validates the move against game rules before persisting + broadcasting.
 
-`scripts/ingest/check-connectivity.ts` asserts the contract: anon can read `puzzles_public`, anon's direct read of `puzzles` returns 0 rows despite the ~10,000 real rows (RLS deny), and anon cannot request `solution` from the view at all (column doesn't exist there). Run it on every schema change.
+`scripts/ingest/check-connectivity.ts` asserts the contract: anon can read `puzzles_public`, anon's direct read of `puzzles` returns 0 rows despite the ~15,000 real rows (RLS deny), and anon cannot request `solution` from the view at all (column doesn't exist there). Run it on every schema change.
 
 This isn't paranoia — without server-authoritative move validation, anyone can DevTools their way to "I won battle mode."
 
@@ -334,6 +344,7 @@ Per [DECISIONS.md #0023](DECISIONS.md), multiplayer mutations go through TypeScr
 | `claim-username` | `{}` | `{username}` | ✅ deployed — idempotent per `auth.uid()`; backed by `issued_usernames` (migration 0008) |
 | `update-room-settings` | `{room_id, settings}` | `{settings}` | ✅ deployed — host-only, lobby-only |
 | `change-difficulty` | `{room_id, difficulty}` | `{puzzle_code, difficulty}` | ✅ deployed — host-only, lobby-only. Re-picks a random puzzle of the new tier; `killer` is intentionally rejected by the input validator. See [#0035](DECISIONS.md). |
+| `change-mode` | `{room_id, mode}` | `{mode}` | ✅ deployed — host-only, lobby-only. Flips the room between `battle` and `coop`; backs the lobby mode toggle. |
 | `kick-player` | `{room_id, player_id}` | `{kicked: true}` | ✅ deployed — host-only |
 | `return-to-lobby` | `{room_id}` | `{status, has_returned: true}` | ✅ deployed — flips caller's `has_returned`; transitions room to `lobby` if not already |
 | `record_completion` (RPC) | `(p_code, p_mode)` → bool | inserts `player_completions` with `on conflict do nothing`. SECURITY DEFINER. | ✅ deployed (migration 0009) |

@@ -2,7 +2,7 @@
 
 Everything UX-facing: modes, settings, what shows up on the board, what shouldn't, and the open questions we still need to answer. Where a decision is open, it's flagged with **OPEN**.
 
-> **What's live vs. spec.** Single-player is the only mode that exists today (live at https://sudoku-squad-web.vercel.app/). Battle and coop sections below are the design spec — they describe what we'll build in Phases 2 and 3. Treat them as the source of truth for what those modes should *feel like* when they ship.
+> **What's live vs. spec.** Single-player and battle are live (https://sudoku-squad-web.vercel.app/); coop has an MVP landed (shared board, server-overlay sync, shared win) with cursors / private notes / disconnect-grace still to come. The sections below double as the design spec — treat them as the source of truth for how each mode should *feel*, and the 🔲 markers for what hasn't shipped yet.
 
 ---
 
@@ -14,20 +14,21 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 - Local state only — does not require a Supabase room.
 - Purpose: most casual entry point, also our testbed for the core engine.
 
-### Battle 📝 spec (Phase 2)
-- 2–4 players, each with their own private copy of the same puzzle.
+### Battle ✅ live (Phase 2)
+- 2–8 players, each with their own private copy of the same puzzle.
 - Each player sees their own board only. We do show a **progress bar per opponent** (% cells correctly filled) — enough social pressure without giving away their answers.
 - First player to legally complete the puzzle wins. Server validates.
 - When a winner is declared, every player sees a "{username} won!" overlay. Losers can dismiss the overlay and **keep solving** their own board (the result is already final and recorded). See [DECISIONS.md #0008](DECISIONS.md).
 - If a player gets stuck, they can give up at any time (counts as a loss for them; game continues for others).
 - Optional: time-based fallback — if no one finishes in X minutes, highest progress % wins. **OPEN**.
 
-### Coop 📝 spec (Phase 3)
-- 2–4 players, all writing to the same board.
-- Visible colored cursors show where other players are looking.
-- Last-write-wins per cell (server-ordered).
-- **Notes are shared by default** (toggling adds/removes the mark for everyone). Each player can flip on a **"Private notes"** toggle to keep their own pencil marks invisible to teammates. See [DECISIONS.md #0007](DECISIONS.md). If V1 build is tight, private-notes mode descopes to V2.
-- Game ends when the board is correctly completed. Win celebrated together.
+### Coop 🔄 MVP landed (Phase 3)
+- 2–8 players, all writing to the same board.
+- ✅ Last-write-wins per cell, server-ordered by `seq` (server-overlay reconciliation in `coop-store.ts`).
+- ✅ Game ends when the board is correctly completed. Win celebrated together (shared-win broadcast). Coop-colored shared progress.
+- 🔲 Visible colored cursors show where other players are looking (Supabase Presence).
+- 🔲 **Notes shared by default** with an opt-in **"Private notes"** toggle to keep your own pencil marks invisible to teammates. See [DECISIONS.md #0007](DECISIONS.md). Descopes to V2 if the build is tight.
+- 🔲 Disconnect/rejoin grace handling.
 
 ---
 

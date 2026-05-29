@@ -1,7 +1,7 @@
 # Status
 
-**Last updated:** 2026-05-23 (lobby UX pass: host-swappable mode toggle, FAB start button, opponent-progress flex layout + self-bold, coop per-player colored progress with "last placer wins credit" rule [DECISIONS #0038](DECISIONS.md); earlier the same day: container-query board font sizing; batched submit-move + resync triggers [DECISIONS #0037](DECISIONS.md))
-**Current phase:** Phase 2 — battle mode is fully playable end-to-end with the May 22 UX expansion landed (chunks A–H) plus a UX-polish pass (board pixel-snap, auto-clean peer notes, spacebar notes toggle + `?` shortcuts overlay, Notes button visual rework). The May 23 sync rewrite ([#0036](DECISIONS.md): atomic seq counter, idempotency, parallel submits, coop server-overlay store, fail-resync) plus the same-day batching-and-resync followup ([#0037](DECISIONS.md): per-room opportunistic batching, batch RPC, gap/reconnect/visibility resync) are the latest landings. Remaining items are polish + the two-tab Playwright smoke; coop / iOS are the next phases.
+**Last updated:** 2026-05-29 (doc-sync pass: reconciled all docs against the codebase — test counts, migration count, Edge Function inventory, and coop status. Coop MVP is in the tree.)
+**Current phase:** Phase 2 (battle) is fully playable end-to-end, and **Phase 3 (coop) has an MVP landed** — a shared board with last-write-wins per cell by seq, optimistic apply + server-overlay reconciliation, and a per-player colored progress bar. The May 22 UX expansion (chunks A–H) plus a UX-polish pass (board pixel-snap, auto-clean peer notes, spacebar notes toggle + `?` shortcuts overlay, Notes button visual rework) all shipped. The May 23 sync rewrite ([#0036](DECISIONS.md): atomic seq counter, idempotency, parallel submits, coop server-overlay store, fail-resync), the batching-and-resync followup ([#0037](DECISIONS.md): per-room opportunistic batching, batch RPC, gap/reconnect/visibility resync), and the coop per-player credit rule ([#0038](DECISIONS.md)) are the latest landings. Remaining: the two-tab Playwright smoke extension to race-to-completion, and coop polish (Presence cursors, private notes). iOS is the next phase.
 **Branch:** `main`
 **Live:** https://sudoku-squad-web.vercel.app/
 
@@ -17,7 +17,7 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
 
 ### Phase 1 — Single-player web ✅
 
-- **`packages/core`** — platform-agnostic TypeScript engine. **43 / 43 tests passing** (unit + property-based with `fast-check`).
+- **`packages/core`** — platform-agnostic TypeScript engine. **47 / 47 tests passing** (unit + property-based with `fast-check`).
   - `types/index.ts` — domain types including `Puzzle`, `BoardState`, `Move`, `PuzzleCode` (cross-mode identifier).
   - `puzzle/board.ts` — `createBoard(puzzleCode, givens)`, `isFilled`, `cellValue`.
   - `puzzle/validator.ts` — `findConflicts` (no solution leak), `isCompleteWithSolution` (server-side use), `unitsFor`.
@@ -31,7 +31,7 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
   - `index.ts` — bucketed sampler + Supabase insert.
   - `check-connectivity.ts` — 4 RLS sanity checks against the live project.
   - `verify-samples.ts` — verifies the bundled sample pack against the solver and the code algorithm.
-- **`supabase/migrations/`** — `0001_initial.sql` → `0015_reserve_room_seqs_batch.sql` (fifteen migrations); 0001–0014 are applied to the live project via `supabase db push --linked`. **0015 is pending deploy** (batch seq reservation — see [DECISIONS #0037](DECISIONS.md)). Highlights: 0006 RLS recursion fix via `is_room_member`, 0007 Realtime publications, 0008 `issued_usernames`, 0009 `player_completions` + completion RPCs, 0010 `rooms.is_public`, 0011 `room_players.has_returned`, **0014 `rooms.next_seq` atomic counter + `moves.client_move_id` idempotency key + `reserve_room_seq` RPC**, **0015 `reserve_room_seqs(uuid, int)` batch RPC**. Schema documented in [ARCHITECTURE.md §4](ARCHITECTURE.md).
+- **`supabase/migrations/`** — `0001_initial.sql` → `0015_reserve_room_seqs_batch.sql` (fifteen migrations) applied to the live project via `supabase db push --linked`. The live battle + coop submit-move path depends on 0014 + 0015, so they must stay deployed (see gotcha #0). Highlights: 0006 RLS recursion fix via `is_room_member`, 0007 Realtime publications, 0008 `issued_usernames`, 0009 `player_completions` + completion RPCs, 0010 `rooms.is_public`, 0011 `room_players.has_returned`, 0012 + 0013 the six-tier difficulty rename ([#0033](DECISIONS.md)/[#0034](DECISIONS.md)), **0014 `rooms.next_seq` atomic counter + `moves.client_move_id` idempotency key + `reserve_room_seq` RPC**, **0015 `reserve_room_seqs(uuid, int)` batch RPC**. Schema documented in [ARCHITECTURE.md §4](ARCHITECTURE.md).
 - **Live puzzle data:** **15,000 rows** in the `puzzles` table across **six tiers** (after the #0034 shift-rename, five visible + one hidden):
   - **warmup** (visible) — 2,500 from QQWing, rating `[-10, -5)`, clues 35–40.
   - **easy** (visible) — 2,500 from QQWing, rating `[-5, 0)`, clues 29–34. (Was labeled "beginner" pre-rename.)
@@ -39,18 +39,18 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
   - **killer** (hidden — not in the picker) — 2,500 from radcliffe, rating `[5, 7)`. Reserved for a future "evil mode" surface. (Was labeled "expert" pre-rename.)
   - Rating medians: warmup -7.5, easy -2.5, medium 0.0, hard 1.7, expert 3.1, killer 5.3.
 - **`apps/web`** — Next.js 15 + React 19 + Tailwind 3.
-  - Routes: `/` (home with per-tier "New game" CTAs + public-lobby list), `/play/[code]` (SP game screen), `/r/[code]` (multiplayer lobby + battle game).
+  - Routes: `/` (home with mode-first picker + public-lobby list), `/play/[code]` (SP game screen), `/r/[code]` (multiplayer lobby that switches into the battle *or* coop game on start).
   - Home flow: mode-first state machine in `home-client.tsx` — picks Single-player / Co-op / Battle first, then either the difficulty list (SP) or the Create + Join browser (multiplayer). See [DECISIONS #0035](DECISIONS.md).
   - SP components: `SudokuBoard`, `NumberPad`, `KeyboardController`, `KeyboardShortcutsOverlay`, `Timer`, `SettingsSheet`, `CompletionOverlay`, `PencilIcon`, `ActionIcons` (Eraser/Undo/Redo).
   - Battle components: `BattleBoard`, `BattleNumberPad`, `BattleKeyboardController`, `BattleWinnerOverlay`, `OpponentProgress`, `LobbySettingsPanel`, `PublicLobbyList` (mode-filterable).
   - Coop components: `CoopBoard`, `CoopNumberPad`, `CoopKeyboardController`, `CoopWinOverlay`.
-  - State: Zustand stores `lib/game-store.ts` (SP) and `lib/battle-store.ts` (battle). Completions persisted server-side in `player_completions` (chunk F) — `lib/completions.ts` wraps the `record_completion` / `get_completion_count` RPCs. (The old `lib/solved-tracker.ts` localStorage-based store was removed when completions went server-side.)
+  - State: Zustand stores `lib/game-store.ts` (SP), `lib/battle-store.ts` (battle), and `lib/coop-store.ts` (coop server-overlay model). Move delivery routes through `lib/move-batcher.ts` for both multiplayer modes. Completions persisted server-side in `player_completions` (chunk F) — `lib/completions.ts` wraps the `record_completion` / `get_completion_count` RPCs. (The old `lib/solved-tracker.ts` localStorage-based store was removed when completions went server-side.)
   - Puzzle loading: `lib/puzzle-source.ts` → `loadPuzzle(code)` first checks the bundled pack (`lib/sample-puzzles.ts`, used by the smoke test) then calls the Supabase RPC `sp_get_puzzle`. `listPuzzles()` pages through `puzzles_public`.
   - Picker: `lib/pick-puzzle.ts` → `pickRandomUnsolved(tier)` and `getTierCounts()`.
 - **Tooling:**
   - ESLint flat config in `packages/core` blocks Next/RN/DOM/ingest imports and DOM globals.
-  - Playwright smoke (`apps/web/e2e/single-player.spec.ts`) — navigates to `/play/3santv` (bundled sample, no Supabase needed), clicks each empty cell and types its solution digit via the keyboard, asserts the "You won!" completion overlay.
-  - GitHub Actions CI runs lint + typecheck + tests + sample/dry-run + web build + Playwright smoke on every PR and push to `main`. Latest run on `main` green.
+  - Playwright smokes in `apps/web/e2e/`: `single-player.spec.ts` navigates to `/play/3santv` (bundled sample, no Supabase needed), solves it via the keyboard, and asserts the "You won!" overlay; `battle.spec.ts` is a two-context smoke (create + join + start + lobby→game routing + opponent-progress Realtime broadcast) that **only runs locally** — it needs live Supabase env and is skipped in CI.
+  - GitHub Actions CI runs lint + typecheck + tests + sample/dry-run + web build + the single-player Playwright smoke on every PR and push to `main`. Latest run on `main` green.
 - **Deploy:**
   - Vercel live at https://sudoku-squad-web.vercel.app/, auto-deploys from `main`. Env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) configured for Production / Preview / Development. Root directory `apps/web`.
   - Supabase CLI linked locally; future migrations push via `supabase db push --linked`.
@@ -59,7 +59,7 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
 
 | Check | Command | Status |
 |---|---|---|
-| Core engine tests | `pnpm --filter @sudoku-squad/core test` | 43 / 43 |
+| Core engine tests | `pnpm --filter @sudoku-squad/core test` | 47 / 47 |
 | Ingest tests (solver + code) | `pnpm --filter @sudoku-squad/ingest test` | 9 / 9 |
 | Sample-pack verification | `pnpm --filter @sudoku-squad/ingest verify:samples` | 5 / 5 |
 | Ingest dry-run on synthetic fixture | `pnpm --filter @sudoku-squad/ingest ingest:dry-fixture` | sampled 5, rejected 2 (as designed) |
@@ -68,7 +68,7 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
 | Web lint | `pnpm --filter @sudoku-squad/web lint` | clean |
 | Web typecheck | `pnpm --filter @sudoku-squad/web typecheck` | clean |
 | Web production build | `pnpm --filter @sudoku-squad/web build` | clean |
-| Playwright smoke | `pnpm --filter @sudoku-squad/web test:e2e` | 1 / 1, ~5 s |
+| Playwright SP smoke | `pnpm --filter @sudoku-squad/web test:e2e single-player` | 1 / 1, ~5 s |
 | Vercel prod | `curl https://sudoku-squad-web.vercel.app/` | 200, Supabase URL inlined |
 | GitHub Actions on `main` | https://github.com/KyleTsai-Simek/sudoku-squad/actions | green |
 
@@ -82,7 +82,10 @@ What's landed:
   - `create-room({mode, difficulty, username})` — picks a random puzzle via `pick_random_puzzle_code` RPC, generates a unique room code (retry on conflict), inserts room + host room_player.
   - `join-room({code, username})` — looks up by code, enforces mid-game-join ([#0024](DECISIONS.md)), assigns next-free color, idempotent rejoin.
   - **`start-game({room_id})`** — host-only. Validates ≥ 2 players in battle. Transitions `lobby → playing`, sets `started_at`. Realtime broadcasts the row update.
-  - **`submit-move({room_id, cell, kind, value})`** — server-authoritative. Validates input + game state, assigns next per-room `seq` (retries on unique-violation), inserts into `moves`, replays the caller's moves to compute progress %, caches it on `room_players.progress_pct`. If progress = 100 and mode = battle: atomically promotes caller to `room.winner_player_id` and transitions `status → finished` (the `where status = 'playing'` guard makes a near-simultaneous "winning move" from another player a clean loss).
+  - **`submit-move`** — server-authoritative; accepts a single move or a batch (cap 200). Reserves seqs atomically (`reserve_room_seq` / `reserve_room_seqs`), inserts into `moves`, materializes the board (per-player in battle, shared in coop), caches `progress_pct`. Battle: progress = 100 atomically promotes the caller to `room.winner_player_id` and transitions `status → finished` (the `where status = 'playing'` guard makes a near-simultaneous winning move a clean loss). Coop: completion is a shared win.
+  - `change-difficulty({room_id, difficulty})` — host-only, lobby-only; re-picks a random puzzle of the new tier ([#0035](DECISIONS.md)). Rejects `killer`.
+  - `change-mode({room_id, mode})` — host-only, lobby-only; flips the room between `battle` and `coop` (backs the lobby mode toggle).
+  - `claim-username`, `update-room-settings`, `kick-player`, `return-to-lobby` — the May 22 UX expansion (chunks B / D / G / H).
 - **SQL helpers:**
   - `pick_random_puzzle_code(difficulty)` (SECURITY DEFINER) — never leaks solution.
   - `is_room_member(room_id)` (SECURITY DEFINER) — used by `room_players` + `moves` RLS to avoid self-referential recursion.
@@ -92,20 +95,27 @@ What's landed:
   - `lib/supabase.ts` — `ensureAuthClient()` signs visitors in anonymously, persists the session so refreshes preserve `auth.uid()`.
   - `lib/rooms.ts` — `createRoom`, `joinRoom`, `startGame`, `submitMove`, `fetchRoom`, `fetchRoomPlayers`, `fetchPuzzleGivens`, `subscribeToRoom`, `subscribeToRoomPlayers`. Result-type errors.
   - `lib/username.ts` — localStorage handle with `adj-noun-NN` default.
-  - `lib/battle-store.ts` — Zustand store for battle mode. Optimistic local apply on each move; submit-move fires in the background. No solution client-side (battle ≠ SP).
-  - `/r/[code]` route — single page that switches between lobby and game based on `room.status`:
-    - **Lobby**: room code, copy-share-link, live player list, host's Start button (disabled until ≥ 2 players), rename, error states (not found / full / over / in progress).
-    - **Game** (battle): opponent progress bars, own board (`BattleBoard`), number pad (`BattleNumberPad`, hint omitted), keyboard controller, winner overlay (dismissible per [#0008](DECISIONS.md)).
+  - `lib/battle-store.ts` / `lib/coop-store.ts` — Zustand stores for battle and coop. Battle keeps a flat optimistic board; coop uses the server-overlay model (`remoteBoard` from seq-sorted server moves + local pendings). No solution client-side (multiplayer ≠ SP).
+  - `/r/[code]` route — single page that switches between lobby and game based on `room.status` and `room.mode`:
+    - **Lobby** (`lobby-client.tsx`): room code, copy-share-link, live player list, host controls (mode toggle, difficulty selector, FAB + inline Start), settings panel, kick, rename, error states (not found / full / over / in progress).
+    - **Battle game** (`battle-game.tsx`): opponent progress bars, own board (`CoopBoard`/`BattleBoard`), number pad (hint omitted), keyboard controller, winner overlay (dismissible per [#0008](DECISIONS.md); losers keep solving).
+    - **Coop game** (`coop-game.tsx`): shared board, per-player colored progress ([#0038](DECISIONS.md)), shared-win overlay, gap/reconnect/visibility resync.
 
-What does NOT yet exist (Phase 2 remainder):
+What does NOT yet exist (Phase 2 / early Phase 3 remainder):
 - **Battle smoke extension to race-to-completion + late-finish.** The minimal two-context smoke (`apps/web/e2e/battle.spec.ts`) covers create + join + start + lobby→game routing + opponent-progress Realtime broadcast. Race-to-completion is currently blocked by `submit-move` latency (~1.5s warm with the new serialization queue; 50 cells × 1.5s ≈ 75s of server drain). Options for the follow-up: optimize `submit-move`'s DB roundtrips, batch moves, or bump the test's win-detection timeout.
 - **Battle UI polish** — opponent progress bars are minimal; the same-page lobby→game transition could be smoother.
 
 The Edge Function `hint` is intentionally not shipping — Chunk A removed Hint as a feature. Lobby settings panel, return-to-lobby/play-again, kick, public lobbies, persistent completions, and "losers keep solving" all shipped in chunks D / F / G / H + the May 22 UX polish pass.
 
-### Beyond Phase 2
+### Phase 3 — Coop mode 🔄 (MVP landed)
 
-- **Coop mode / iOS** — Phases 3–4.
+What's landed: shared-board coop with last-write-wins per cell by `seq`, optimistic apply + server-overlay reconciliation, idempotent batched submits, the three resync triggers ([#0037](DECISIONS.md)), and a per-player colored progress bar with the last-placer credit rule ([#0038](DECISIONS.md)). The lobby's mode toggle (`change-mode`) lets a host flip a room between battle and coop before Start.
+
+What does NOT yet exist (Phase 3 remainder): Presence-based colored cursors, the per-player "private notes" mode ([#0007](DECISIONS.md) — may descope to V2), explicit disconnect/reconnect grace UI, and a two-tab coop Playwright smoke. The shared LWW logic currently lives in `lib/coop-store.ts` (web); lifting it into `packages/core/src/sync/` is deferred until iOS needs it.
+
+### Beyond the current phases
+
+- **iOS (React Native)** — Phase 4.
 - **Favicon / Open Graph metadata** — placeholder Next.js favicon; no OG image yet.
 - **Lighthouse / PWA-installable manifest.**
 - **Mobile audit** — board fonts switched from viewport-clamp to container-query sizing (2026-05-23): cell values are `min(55cqw, 1.75rem)` and notes are `min(24cqw, 0.7rem)`, with each cell `[container-type:inline-size] overflow-hidden min-w-0 min-h-0` so glyph overflow can't perturb the grid. Verified at 320/375/1280 px; in-device confirmation still wanted.
@@ -144,7 +154,7 @@ The Edge Function `hint` is intentionally not shipping — Chunk A removed Hint 
 ```bash
 cd /Users/kylets/sudoku-squad
 pnpm install                                              # idempotent
-pnpm --filter @sudoku-squad/core test                     # expect 43/43
+pnpm --filter @sudoku-squad/core test                     # expect 47/47
 pnpm --filter @sudoku-squad/ingest test                   # expect 9/9
 pnpm --filter @sudoku-squad/ingest verify:samples         # expect 5 OK
 pnpm --filter @sudoku-squad/ingest check                  # expect 4/4

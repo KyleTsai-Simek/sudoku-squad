@@ -31,9 +31,9 @@ Live at https://sudoku-squad-web.vercel.app/. Engine + UI + ingest + tests + CI 
 
 ---
 
-## Phase 2 — Battle mode 🔄 In progress
+## Phase 2 — Battle mode 🔄 Substantially landed (live)
 
-See [ROADMAP.md Phase 2](ROADMAP.md) for scope.
+See [ROADMAP.md Phase 2](ROADMAP.md) for scope. Remaining: two-context race-to-completion smoke and lifting the loser-path board lock.
 
 ### Backend
 - [x] Migrations 0005 (`pick_random_puzzle_code`), 0006 (RLS recursion fix via `is_room_member`), 0007 (Realtime publications).
@@ -88,25 +88,30 @@ ADRs [#0026](DECISIONS.md)–[#0030](DECISIONS.md). Migrations 0008–0011. Edge
 
 ---
 
-## Phase 3 — Coop mode
+## Phase 3 — Coop mode 🔄 (MVP landed)
+
+The coop MVP is live: shared board, server-overlay sync (LWW by `seq` + local pendings), atomic seq, opportunistic batching, resync triggers, and shared-win celebration. Sync logic lives in `apps/web/lib/coop-store.ts` + `move-batcher.ts` (server-overlay model), not the originally-planned `packages/core/src/sync/` module. Remaining: presence cursors, private notes, disconnect grace, and a coop Playwright smoke. See [DECISIONS #0036](DECISIONS.md)–[#0038](DECISIONS.md).
 
 ### Backend
-- [ ] Extend `submit_move` for coop: shared board, LWW per cell by `seq`.
-- [ ] Coop completion event triggers shared-win broadcast.
+- [x] Extend `submit_move` for coop: shared board, LWW per cell by `seq`. Atomic `reserve_room_seq` / `reserve_room_seqs` RPCs + `client_move_id` idempotency (migrations 0014/0015).
+- [x] Coop completion event triggers shared-win broadcast (`shared_win`).
+- [x] `change-mode` Edge Function backs the lobby battle↔coop toggle.
 - [ ] Presence channel for cursors (throttled to ~10/s).
 
-### `packages/core`
-- [ ] LWW reducer for `value` moves (compare `seq`).
+### Sync (`apps/web/lib/coop-store.ts`)
+- [x] LWW for `value` moves by `seq` (server-overlay: `remoteBoard` from seq-sorted moves + local pendings).
+- [x] Opportunistic move batching (`move-batcher.ts`, cap 200) + resync on seq-gap / reconnect / visibility.
 - [ ] Shared notes reducer: set-union via toggles, ordered by seq.
 - [ ] Private notes state: per-cell, per-player, client-local (never sent to server).
 - [ ] Presence helper (broadcast own cursor, listen for others).
 
 ### `apps/web` — coop UI
+- [x] Shared completion celebration.
+- [x] Coop-colored shared progress in the lobby/game.
 - [ ] Other players' cursor highlights with colored rings + username chip.
 - [ ] Brief visual flash when someone else overwrites your cell.
 - [ ] Private notes toggle near number pad.
 - [ ] Visual distinction between shared and private notes when both exist in a cell.
-- [ ] Shared completion celebration.
 - [ ] Disconnect/reconnect grace UI (greyed cursor, "reconnecting…" badge).
 - [ ] V1 descope plan: if private-notes mode is taking too long, ship coop with shared-only and move private notes to V2 ([DECISIONS #0007](DECISIONS.md)).
 

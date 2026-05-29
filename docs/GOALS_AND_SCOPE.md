@@ -19,7 +19,7 @@ The bar for V1 is **a playable demo we can send to a friend over a link and have
 
 ### In scope for V1
 
-- **Single-player web** with one difficulty tier and a small set of puzzles.
+- **Single-player web** across six difficulty tiers (warmup / easy / medium / hard / expert visible, plus a hidden killer), 15,000 puzzles total. *(Originally scoped to a single tier; expanded during Phase 1.)*
 - **Battle mode** on web: create room → share link → both players join, pick a username, click Start. First to legally complete the puzzle wins.
 - **Coop mode** on web: create room → share link → both players join, pick a username. Both can input numbers simultaneously, with last-write-wins per cell (see [GAME_DESIGN.md](GAME_DESIGN.md) for conflict handling).
 - **Anonymous usernames** only. No accounts. No friends list. No history.
@@ -33,9 +33,9 @@ These are good ideas, deliberately deferred:
 
 - **iOS / Android native apps.** Planned for Phase 4, after web is solid.
 - **Persistent accounts, profiles, friend lists, leaderboards.** Anonymous-only for V1.
-- **Multiple difficulty tiers.** Pick one (likely "medium") for V1; expand later.
+- ~~**Multiple difficulty tiers.**~~ *Shipped early* — six tiers landed in Phase 1 (see In scope).
 - **Custom puzzle creation / submission.** Use pre-generated or open-source puzzle packs.
-- **More than 4 players per room.** V1 caps at 4.
+- ~~**More than 4 players per room.**~~ *Raised to 8* — rooms cap at 8 players (`MAX_PLAYERS` in `join-room`).
 - **Chat / voice.** Players coordinate through whatever channel they're already using (text, FaceTime, in person).
 - **Spectator mode.**
 - **Daily puzzle / shared world puzzle.** Could be a great future feature but not V1.

@@ -27,7 +27,7 @@ If you've just landed in this repo:
 ```bash
 # 1. Verify environment
 pnpm install                                         # idempotent
-pnpm --filter @sudoku-squad/core test                # expect 36/36
+pnpm --filter @sudoku-squad/core test                # expect 47/47
 pnpm --filter @sudoku-squad/ingest test              # expect 9/9
 
 # 2. Verify Supabase connection (requires .env.local at repo root +
