@@ -45,6 +45,18 @@ interface GameState {
 
   // actions
   startGame: (puzzle: FetchedPuzzle) => void;
+  /** Restore a previously-persisted in-progress game (see lib/sp-persistence).
+   *  `startedAt` is expected to be already rebased by the caller so elapsed
+   *  time excludes the away period. Derived state is recomputed locally. */
+  hydrate: (snapshot: {
+    puzzle: FetchedPuzzle;
+    board: BoardState;
+    history: MoveHistory;
+    startedAt: number;
+    finishedAt: number | null;
+    hintsUsed: number;
+    notesMode: boolean;
+  }) => void;
   resetGame: () => void;
   selectCell: (cell: CellIndex | null) => void;
   moveSelection: (dx: number, dy: number) => void;
@@ -112,6 +124,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       startedAt: Date.now(),
       finishedAt: null,
       hintsUsed: 0,
+      conflicts: derived.conflicts,
+      incorrect: derived.incorrect,
+    });
+  },
+
+  hydrate: (snapshot) => {
+    const { settings } = get();
+    const derived = recomputeDerived(snapshot.board, settings, snapshot.puzzle.solution);
+    set({
+      puzzle: snapshot.puzzle,
+      board: snapshot.board,
+      history: snapshot.history,
+      selected: null,
+      notesMode: snapshot.notesMode,
+      startedAt: snapshot.startedAt,
+      finishedAt: snapshot.finishedAt,
+      hintsUsed: snapshot.hintsUsed,
       conflicts: derived.conflicts,
       incorrect: derived.incorrect,
     });

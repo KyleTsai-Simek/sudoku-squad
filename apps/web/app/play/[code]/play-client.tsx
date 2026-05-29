@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useGameStore } from '@/lib/game-store';
 import { loadPuzzle } from '@/lib/puzzle-source';
+import { installSpAutosave, resumeSavedGame } from '@/lib/sp-persistence';
 import { SudokuBoard } from '@/components/sudoku-board';
 import { NumberPad } from '@/components/number-pad';
 import { KeyboardController } from '@/components/keyboard-controller';
@@ -23,9 +24,18 @@ export function PlayClient({ code }: { code: string }) {
   const startGame = useGameStore((s) => s.startGame);
   const [status, setStatus] = useState<Status>('loading');
 
+  // Install autosave once so an in-progress game survives a refresh/crash.
+  useEffect(() => installSpAutosave(), []);
+
   useEffect(() => {
     let cancelled = false;
     if (puzzle?.code === code && board) {
+      setStatus('ready');
+      return;
+    }
+    // Auto-resume a persisted in-progress game for this code before fetching.
+    // It's self-contained (givens + solution), so this also works offline.
+    if (resumeSavedGame(code)) {
       setStatus('ready');
       return;
     }
