@@ -55,13 +55,13 @@ export function BattleKeyboardController() {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && (key === 'z' || key === 'Z')) {
         e.preventDefault();
-        if (e.shiftKey) store.redo();
-        else store.undo();
+        if (e.shiftKey) void store.redo();
+        else void store.undo();
         return;
       }
       if (mod && (key === 'y' || key === 'Y')) {
         e.preventDefault();
-        store.redo();
+        void store.redo();
         return;
       }
     }

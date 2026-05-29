@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-05-29 (doc-sync pass: reconciled all docs against the codebase — test counts, migration count, Edge Function inventory, and coop status. Coop MVP is in the tree.)
+**Last updated:** 2026-05-29 (battle undo/redo now emit server-side compensating moves so `progress_pct` no longer drifts — [#0039](DECISIONS.md); battle smoke extended to assert fill→undo→redo. Prior same-day: doc-sync pass reconciling all docs against the codebase. Coop MVP is in the tree.)
 **Current phase:** Phase 2 (battle) is fully playable end-to-end, and **Phase 3 (coop) has an MVP landed** — a shared board with last-write-wins per cell by seq, optimistic apply + server-overlay reconciliation, and a per-player colored progress bar. The May 22 UX expansion (chunks A–H) plus a UX-polish pass (board pixel-snap, auto-clean peer notes, spacebar notes toggle + `?` shortcuts overlay, Notes button visual rework) all shipped. The May 23 sync rewrite ([#0036](DECISIONS.md): atomic seq counter, idempotency, parallel submits, coop server-overlay store, fail-resync), the batching-and-resync followup ([#0037](DECISIONS.md): per-room opportunistic batching, batch RPC, gap/reconnect/visibility resync), and the coop per-player credit rule ([#0038](DECISIONS.md)) are the latest landings. Remaining: the two-tab Playwright smoke extension to race-to-completion, and coop polish (Presence cursors, private notes). iOS is the next phase.
 **Branch:** `main`
 **Live:** https://sudoku-squad-web.vercel.app/
@@ -49,7 +49,7 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
   - Picker: `lib/pick-puzzle.ts` → `pickRandomUnsolved(tier)` and `getTierCounts()`.
 - **Tooling:**
   - ESLint flat config in `packages/core` blocks Next/RN/DOM/ingest imports and DOM globals.
-  - Playwright smokes in `apps/web/e2e/`: `single-player.spec.ts` navigates to `/play/3santv` (bundled sample, no Supabase needed), solves it via the keyboard, and asserts the "You won!" overlay; `battle.spec.ts` is a two-context smoke (create + join + start + lobby→game routing + opponent-progress Realtime broadcast) that **only runs locally** — it needs live Supabase env and is skipped in CI.
+  - Playwright smokes in `apps/web/e2e/`: `single-player.spec.ts` navigates to `/play/3santv` (bundled sample, no Supabase needed), solves it via the keyboard, and asserts the "You won!" overlay; `battle.spec.ts` is a two-context smoke (create + join + start + lobby→game routing + opponent-progress Realtime broadcast + a fill→undo→redo progress-sync check per [#0039](DECISIONS.md)) that **only runs locally** — it needs live Supabase env and is skipped in CI.
   - GitHub Actions CI runs lint + typecheck + tests + sample/dry-run + web build + the single-player Playwright smoke on every PR and push to `main`. Latest run on `main` green.
 - **Deploy:**
   - Vercel live at https://sudoku-squad-web.vercel.app/, auto-deploys from `main`. Env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) configured for Production / Preview / Development. Root directory `apps/web`.

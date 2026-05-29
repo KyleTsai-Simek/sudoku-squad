@@ -95,8 +95,8 @@ interface BattleState {
   /** One-shot pencil-mark toggle, regardless of notesMode. Wired to Shift+digit. */
   enterNote: (value: CellValue) => Promise<void>;
   clearCell: () => Promise<void>;
-  undo: () => void;
-  redo: () => void;
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
   markFinished: () => void;
 }
 
@@ -139,6 +139,39 @@ async function resyncFromServer(get: () => BattleState, set: (s: Partial<BattleS
     incorrect: new Set(),
     pending: [],
   });
+}
+
+/** Submit a server move on behalf of an undo/redo and reconcile the result
+ *  exactly like a typed entry: update progress, autocheck flags, and win.
+ *  Keeps the server's authoritative progress_pct (and the local bar) honest
+ *  after an undo/redo instead of letting it drift. See DECISIONS #0039. */
+async function submitCompensating(
+  get: () => BattleState,
+  set: (s: Partial<BattleState>) => void,
+  move: Move,
+): Promise<void> {
+  const { room } = get();
+  if (!room) return;
+  const cid = newCid();
+  set({ pending: [...get().pending, { cid, cell: move.cell }] });
+  const res = await enqueueMove(room.room_id, {
+    cell: move.cell,
+    kind: move.kind,
+    value: move.kind === 'clear' ? null : move.value,
+    client_move_id: cid,
+  });
+  set({ pending: get().pending.filter((p) => p.cid !== cid) });
+  if (!res.ok) {
+    set({ lastError: res.error.message });
+    await resyncFromServer(get, set);
+    return;
+  }
+  const inc = new Set(get().incorrect);
+  if (move.kind === 'clear') inc.delete(move.cell);
+  else if (res.value.cell_correct === true) inc.delete(move.cell);
+  else if (res.value.cell_correct === false) inc.add(move.cell);
+  set({ ownProgressPct: res.value.progress_pct, incorrect: inc, lastError: null });
+  if (res.value.won) set({ finishedAt: Date.now() });
 }
 
 export const useBattleStore = create<BattleState>((set, get) => ({
@@ -339,30 +372,53 @@ export const useBattleStore = create<BattleState>((set, get) => ({
     set({ ownProgressPct: res.value.progress_pct, incorrect: inc, lastError: null });
   },
 
-  undo: () => {
-    const { board, history, settings } = get();
-    if (!board || !canUndo(history)) return;
+  undo: async () => {
+    // Battle undo emits a server-side compensating move so the server's
+    // authoritative progress_pct (and the local bar) stay accurate — see
+    // DECISIONS #0039. The board is private so peers never see it, but the
+    // move log must still reflect the revert or progress drifts. Mirrors
+    // coop undo.
+    const { board, room, history, settings } = get();
+    if (!board || !room || !canUndo(history)) return;
     const result = undoHistory(board, history);
     set({
       board: result.state,
       history: result.history,
       conflicts: recomputeConflicts(result.state, settings.showConflicts),
     });
-    // Battle keeps undo local-only on purpose: the server still has the
-    // original move in the log, and progress_pct will drift until the next
-    // legitimate enterValue resyncs it. Acceptable for battle because the
-    // board is private — no other player sees the un-undone value.
+    const top = history.undoStack[history.undoStack.length - 1];
+    if (!top) return;
+    const targetCell = top.move.cell;
+    const priorCellState = top.priors.find((p) => p.index === targetCell);
+    if (!priorCellState) return;
+    // Restore the prior visible state: a note_toggle is self-inverse, a prior
+    // value re-places it, an empty prior is a clear.
+    let compensating: Move;
+    if (top.move.kind === 'note_toggle') {
+      compensating = { kind: 'note_toggle', cell: targetCell, value: top.move.value };
+    } else if (priorCellState.cell.value !== null) {
+      compensating = { kind: 'value', cell: targetCell, value: priorCellState.cell.value as CellValue };
+    } else {
+      compensating = { kind: 'clear', cell: targetCell };
+    }
+    await submitCompensating(get, set, compensating);
   },
 
-  redo: () => {
-    const { board, history, settings } = get();
-    if (!board || !canRedo(history)) return;
+  redo: async () => {
+    // Symmetric to undo: re-apply the redone move and submit it so the
+    // server's progress_pct tracks it.
+    const { board, room, history, settings } = get();
+    if (!board || !room || !canRedo(history)) return;
     const result = redoHistory(board, history);
+    if (result.state === board) return;
     set({
       board: result.state,
       history: result.history,
       conflicts: recomputeConflicts(result.state, settings.showConflicts),
     });
+    const top = history.redoStack[history.redoStack.length - 1];
+    if (!top) return;
+    await submitCompensating(get, set, top.move);
   },
 
   markFinished: () => {

@@ -204,7 +204,7 @@ Every multiplayer move flows through this loop:
 - **Retried HTTP requests** are safe — `submit-move` looks up `(room_id, client_move_id)` and returns the prior seq + state instead of inserting twice.
 - **Submit failures** (rare; network or 5xx) trigger a **resync** on the client: fetch the room's authoritative move log (battle: own player only; coop: all moves), rebuild `remoteBoard`, drop the failed pending. The user sees the offending cell snap back to the server's truth with a brief toast.
 - **Same-cell race in coop**: each client re-materializes from the seq-sorted log on every fold, so both clients converge to the higher-seq write. This was the failure mode of the original `dedup-by-player_id` design; the new `dedup-by-client_move_id` + seq-sorted re-materialization fixes it.
-- **Coop undo** emits a server-side compensating move (clear / re-place / re-toggle) so peers see the revert. **Battle undo** stays local-only because the board is private; only the local progress bar briefly drifts, healed on the next legitimate move.
+- **Coop undo** emits a server-side compensating move (clear / re-place / re-toggle) so peers see the revert. **Battle undo/redo** do the same (see [DECISIONS #0039](DECISIONS.md)) — the board is private, but the move must reach the server or the authoritative `progress_pct` drifts. The compensating result reconciles `ownProgressPct`/autocheck/win just like a typed entry.
 
 ### Batching + delivery-recovery (see [DECISIONS #0037](DECISIONS.md))
 
@@ -239,7 +239,7 @@ All players write to the same board. Decisions:
 - **Notes are merged.** If player A toggles "3" in a cell's notes and player B toggles "5" at the same time, both notes end up set. Notes are per-cell sets; toggles are commutative on different values.
 - **No edit locks.** Locking cells while a player "is thinking" creates UX friction (forgotten locks, unclear who's holding what). LWW + visible cursors is enough for V1.
 - **Visible cursors.** Each player sees a colored highlight on every other player's currently-selected cell, broadcast via Presence. This is the primary "social awareness" mechanism that lets players naturally avoid stepping on each other.
-- **Undo reverts your own most recent move via a compensating move.** As of the [#0036](DECISIONS.md) sync rewrite, coop undo emits a server-side compensating move (`clear`, a re-place to the prior value, or a re-toggle for notes) so peers see the revert. It only undoes your own last move; if someone else has since overwritten that cell, the compensating move is just another LWW write ordered by `seq`. (Battle undo stays local-only — the board is private.)
+- **Undo reverts your own most recent move via a compensating move.** As of the [#0036](DECISIONS.md) sync rewrite, coop undo emits a server-side compensating move (`clear`, a re-place to the prior value, or a re-toggle for notes) so peers see the revert. It only undoes your own last move; if someone else has since overwritten that cell, the compensating move is just another LWW write ordered by `seq`. (Battle undo/redo emit compensating moves too as of [#0039](DECISIONS.md) — needed so the server's `progress_pct` doesn't drift, even though the board is private.)
 
 ### Game-over detection
 Run on the server (Edge Function or trigger) by comparing the current materialized board against `puzzle.solution`. Server announces the winner on the channel; clients trust the server. Never put `solution` in client code.

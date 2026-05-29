@@ -17,6 +17,22 @@ Format:
 
 ---
 
+## 0039 — Battle undo/redo emit server-side compensating moves
+**Date:** 2026-05-29
+**Status:** Accepted
+
+**Context.** Battle progress (`progress_pct`) is the server-authoritative count of filled non-given cells over total empties — no correctness check, so the solution never leaks ([#0022](DECISIONS.md)). The typed-entry and Clear paths (`enterValue`, `clearCell`) submit a move and reconcile `ownProgressPct` from the echo, so they track clear-then-refill correctly. But undo/redo were deliberately local-only ([#0036](DECISIONS.md)): they mutated the local board without submitting anything. That left two defects — the player's own bar showed a stale % until the next typed move, and the server's move log never learned of the revert, so opponents (and the win check) kept counting cells the player had emptied via undo.
+
+**Decision.** Battle undo/redo now emit a server-side compensating move, exactly as coop already does ([#0036](DECISIONS.md)): undo restores the prior visible state (`clear`, a re-place to the prior value, or a self-inverse `note_toggle`); redo re-submits the redone move. The result is reconciled through the same path as a typed entry — `ownProgressPct`, autocheck `incorrect` flags, and `won`→`finishedAt` all update from the echo (`submitCompensating` in `battle-store.ts`). Notes still don't count toward progress (the server ignores `note_toggle` when materializing), but the toggle is still logged so a resync replays faithfully.
+
+**Alternatives considered.**
+- *Keep undo local-only and just patch `ownProgressPct` locally.* Fixes the own-bar staleness but not the authoritative drift — the server would still over-count emptied cells, so opponents' view and the win check stay wrong. Rejected.
+- *Recompute the local board diff and emit moves for every changed cell.* A `value`/`clear` undo only ever changes its own cell's value (peer-note restoration doesn't affect progress), so the single-cell compensating move from `top.priors` is sufficient and matches the coop implementation.
+
+**Consequences.** Undo/redo are now async and go over the network like any move; on failure they resync from the server (`fetchOwnMoves`) like the other battle paths. The two-tab battle smoke now asserts fill→undo→redo moves the own progress bar 0→>0→0→>0. Supersedes the "battle undo stays local-only" note in [#0036](DECISIONS.md).
+
+---
+
 ## 0038 — Coop progress: per-player credit by last-placer (regardless of correctness)
 **Date:** 2026-05-23
 **Status:** Accepted
@@ -117,7 +133,7 @@ Plus two smaller things: a small race in coop init (subscribe and fetch were con
 
 Companion changes:
 - Submit failures now resync the board from the server: refetch all moves and rebuild remoteBoard, dropping the failed pending. Battle has a per-player equivalent (`fetchOwnMoves`). This realizes the "rollback" rule properly.
-- Coop undo emits a server-side compensating move (`clear`, a re-place to the prior value, or a re-toggle for notes) so peers see the revert. Battle keeps undo local-only because the board is private; only the local player's progress_pct briefly drifts, healed on the next legitimate move.
+- Coop undo emits a server-side compensating move (`clear`, a re-place to the prior value, or a re-toggle for notes) so peers see the revert. Battle kept undo local-only here because the board is private — but that drifted the progress bar, so [#0039](DECISIONS.md) made battle undo/redo emit compensating moves too.
 
 **Alternatives considered.**
 - **CRDTs (Yjs / Automerge).** Strong correctness guarantee but harder to make server-authoritative, and overkill for an 81-cell grid. Server-authoritative LWW with seqs is simpler and matches our anti-cheat needs.

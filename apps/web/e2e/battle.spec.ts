@@ -59,8 +59,9 @@ test('battle: create + join + start + sync', async ({ browser }) => {
     await expect(pageA.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: 10000 });
     await expect(pageB.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: 10000 });
 
-    // A (host) starts the game.
-    await pageA.getByRole('button', { name: /Start battle/i }).click();
+    // A (host) starts the game. Two Start controls exist (inline + FAB);
+    // target the inline one by its exact label.
+    await pageA.getByRole('button', { name: 'Start battle', exact: true }).click();
 
     // Both routes from LobbyClient to BattleGame on status='playing' broadcast.
     await Promise.all([
@@ -91,6 +92,29 @@ test('battle: create + join + start + sync', async ({ browser }) => {
     await expect(pageB.locator('li').filter({ hasText: '%' })).toHaveCount(2, {
       timeout: 10000,
     });
+
+    // Undo/redo progress sync (DECISIONS #0039). A's own progress bar reads
+    // `ownProgressPct`, set from the submit-move echo. Filling a cell must
+    // raise it, undo must drop it back, redo must restore it — i.e. undo/redo
+    // behave like real moves rather than drifting the bar (the old bug).
+    const maxOwnPct = async () => {
+      const texts = await pageA.locator('li').filter({ hasText: '%' }).allInnerTexts();
+      const nums = texts.flatMap((t) =>
+        Array.from(t.matchAll(/(\d+)\s*%/g)).map((m) => Number(m[1])),
+      );
+      return nums.length ? Math.max(...nums) : 0;
+    };
+
+    await expect.poll(maxOwnPct, { timeout: 10000 }).toBe(0);
+    await pageA.locator('[role="gridcell"]:not([aria-label*="given"])').first().click();
+    await pageA.getByRole('button', { name: 'Enter 1' }).click();
+    await expect.poll(maxOwnPct, { timeout: 10000 }).toBeGreaterThan(0);
+
+    await pageA.getByRole('button', { name: 'Undo' }).click();
+    await expect.poll(maxOwnPct, { timeout: 10000 }).toBe(0);
+
+    await pageA.getByRole('button', { name: 'Redo' }).click();
+    await expect.poll(maxOwnPct, { timeout: 10000 }).toBeGreaterThan(0);
   } finally {
     await ctxA.close();
     await ctxB.close();
