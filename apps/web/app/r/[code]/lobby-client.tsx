@@ -103,17 +103,41 @@ export function LobbyClient({ code }: { code: string }) {
       if (!cancelled) setRoomRow(r);
     }
 
+    function refreshBoth() {
+      void refreshPlayers();
+      void refreshRoom();
+    }
+
     let unsubPlayers: (() => void) | null = null;
     let unsubRoom: (() => void) | null = null;
     (async () => {
       await Promise.all([refreshPlayers(), refreshRoom()]);
       if (cancelled) return;
-      unsubPlayers = await subscribeToRoomPlayers(roomId, refreshPlayers);
-      unsubRoom = await subscribeToRoom(roomId, refreshRoom);
+      // On reconnect, postgres_changes does NOT replay events missed while the
+      // socket was down — so a dropped channel could otherwise strand us in
+      // the lobby (missed status='playing'), hide the winner, or freeze
+      // opponent progress. Refetch on every re-subscribe.
+      unsubPlayers = await subscribeToRoomPlayers(roomId, refreshPlayers, refreshPlayers);
+      unsubRoom = await subscribeToRoom(roomId, refreshRoom, refreshRoom);
     })();
+
+    // Backgrounded tabs throttle WebSockets and miss events; refetch on
+    // return-to-visible.
+    const onVis = () => {
+      if (document.visibilityState === 'visible') refreshBoth();
+    };
+    document.addEventListener('visibilitychange', onVis);
+
+    // Safety-net poll. Realtime is the primary path; this catches a silently
+    // wedged channel that never reports a reconnect (the worst case for "I'm
+    // stuck in the lobby while everyone else is playing"). 8s is frequent
+    // enough to feel live, cheap enough to ignore.
+    const pollId = window.setInterval(refreshBoth, 8000);
 
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', onVis);
+      window.clearInterval(pollId);
       unsubPlayers?.();
       unsubRoom?.();
     };

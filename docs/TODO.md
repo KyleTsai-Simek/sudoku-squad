@@ -123,6 +123,27 @@ The coop MVP is live: shared board, server-overlay sync (LWW by `seq` + local pe
 
 ---
 
+## Sync resilience hardening (from the 2026-05-29 architecture audit)
+
+Findings from a full review of the SP / battle / coop sync paths benchmarked against comparable real-time games (downforacross, boardgame.io, Colyseus) and the Supabase Realtime delivery model, **plus the move-log consolidation discussion (2026-05-29).** Ordered by impact / cost. None require schema changes except where noted. See the audit writeup in this session and the prose in [STATUS.md](STATUS.md) gotchas.
+
+Framing note (the move-log idea): the system is **already event-sourced** — the `moves` table is the durable append-only log and every client/server already re-materializes board state by replaying it. So the valuable upgrades are not "switch to a log" (we have one) but (b1) a **durable *local* log** for offline/crash/refresh recovery, and (b2) **delta catch-up** ("send me moves since seq N" + push my un-acked moves by `client_move_id`) replacing full-refetch resync. Keep incremental live push for peer-visibility and win-timing — the log is the durable substrate, not a replacement for the live channel. 1,000-move logs are a non-issue (~40–80 KB, sub-ms replay); only the full-replay-per-submit pattern is wasteful and delta catch-up removes it.
+
+**Near-term:**
+- [x] **(1, high impact) Room-level realtime recovery.** Landed 2026-05-29. `subscribeToRoom` / `subscribeToRoomPlayers` ([rooms.ts](../apps/web/lib/rooms.ts)) now take an `onReconnect` callback firing on every re-`SUBSCRIBED` (mirrors `subscribeToMoves`). [lobby-client.tsx](../apps/web/app/r/[code]/lobby-client.tsx) wires reconnect + `visibilitychange` refetch and an 8s safety-net poll while joined. Closes stranded-in-lobby / hidden-winner / frozen-opponent-progress on a silently-dropped channel — battle was fully exposed. Verified: battle two-context smoke green. (Recovery paths themselves aren't observable without fault injection; happy-path non-regression confirmed.)
+- [x] **(3, correctness) Fix `hasSeqGap` false positives.** Landed 2026-05-29. [coop-store.ts](../apps/web/lib/coop-store.ts) now tracks `knownMissingSeqs`, recomputed from the authoritative snapshot on every `startCoop`/`resync`: a hole still present right after a full server fetch is an abandoned reservation (from submit-move's 23505 re-reserve path), not a dropped event, so the gap check ignores it. Self-healing — a seq falsely flagged (committed just after a SELECT snapshot) is dropped at the next resync. Kills the post-race resync storm.
+
+**Consolidated durable-log track (do after near-term; the better form of old items #2/#4/#5):**
+- [ ] **(2 + b1) Durable local move log + retry-with-backoff.** Persist the client's local log (IndexedDB) instead of in-memory-only pendings; submit failures retry 2–3× with backoff before falling back (safe via `client_move_id`). Unlocks offline play, crash/refresh resume. Biggest win for **single-player** (today has *no* persistence — refresh loses the game) and **Phase 4 mobile**. Downside: failure feedback delayed by the retry window; new local-storage code path to test.
+- [ ] **(b2) Delta catch-up reconciliation.** Replace full-refetch resync with "give me moves since seq N" + push un-acked local moves. Removes the O(n²) full-replay cost and the resync storms. Aligns with downforacross/socket.io recovery.
+- [ ] **(coop merge rule — DECIDE before coding b1/b2 for coop) Offline-merge policy.** A coop player accumulating moves offline then syncing a stale batch can clobber newer online moves under pure LWW-by-seq ("I filled this 5 min ago" overwrites "someone fixed it 10s ago"). SP/battle are private boards → conflict-free, purely beneficial. Coop needs a deliberate rule (timestamp-aware merge, or "don't overwrite a cell touched since you forked"). Write a DECISIONS entry first.
+- [ ] **(5, portability) Lift coop LWW + overlay + resync + batching + the new durable-log/delta logic into `packages/core/src/sync/`.** Currently web-only in `coop-store.ts` / `move-batcher.ts`. Do it as part of the durable-log build so web + iOS converge through identical code. Downside: refactor cost.
+
+**Deferred:**
+- [ ] **(4, scaling) Migrate the `moves` channel from `postgres_changes` to Supabase Broadcast.** Single-threaded + per-subscriber RLS read per change — the scaling ceiling and the reason the hand-built resync triggers exist. Broadcast is the vendor-recommended game transport; keeps the seq-ordered LWW model intact. Highest-risk item (touches core sync path) — defer until approaching real concurrent load.
+
+---
+
 ## Phase 4 — iOS (React Native)
 
 ### Setup

@@ -142,13 +142,46 @@ function newCid(): string {
 let gapResyncTimer: ReturnType<typeof setTimeout> | null = null;
 const GAP_RESYNC_DEBOUNCE_MS = 500;
 
+/**
+ * Seqs that are permanently absent from the server's authoritative log and
+ * must NOT be treated as dropped realtime events. They arise when
+ * submit-move's 23505 dup-race path reserves a fresh seq block and abandons
+ * the original reservation — those reserved-but-unused seqs leave permanent
+ * holes. Without this, `hasSeqGap` would see the hole forever and refetch the
+ * whole log on every subsequent move (a resync storm).
+ *
+ * Recomputed from scratch on every authoritative refetch (startCoop /
+ * resync): a hole still present right after a full server fetch is, by
+ * definition, abandoned rather than dropped. This makes the set self-healing
+ * — a seq mistakenly marked here (e.g. one that committed just after our
+ * SELECT snapshot) is dropped from the set at the next resync once the fetch
+ * sees it. Module-level for the same reason as gapResyncTimer: one active
+ * room per tab.
+ */
+let knownMissingSeqs = new Set<number>();
+
+/** Holes in [1, max] absent from an authoritative server snapshot. */
+function computeAbandonedHoles(serverMoves: Map<number, ServerMove>): Set<number> {
+  const holes = new Set<number>();
+  const seqs = [...serverMoves.keys()];
+  if (seqs.length === 0) return holes;
+  const max = Math.max(...seqs);
+  for (let s = 1; s <= max; s++) {
+    if (!serverMoves.has(s)) holes.add(s);
+  }
+  return holes;
+}
+
 function hasSeqGap(serverMoves: Map<number, ServerMove>): boolean {
   const seqs = [...serverMoves.keys()];
   if (seqs.length === 0) return false;
   const max = Math.max(...seqs);
-  // Cheap check: if we have N moves whose max is M, no gap exists iff
-  // M === N (assuming seqs start at 1, which start-game ensures).
-  return seqs.length !== max;
+  // A gap is any seq in [1, max] (start-game resets the counter to 1) that we
+  // neither hold nor know to be a permanently-abandoned reservation.
+  for (let s = 1; s <= max; s++) {
+    if (!serverMoves.has(s) && !knownMissingSeqs.has(s)) return true;
+  }
+  return false;
 }
 
 function scheduleGapResync(resync: () => void): void {
@@ -268,6 +301,11 @@ export const useCoopStore = create<CoopState>((set, get) => ({
     for (const m of get().pendingRemote) {
       if (!serverMoves.has(m.seq)) serverMoves.set(m.seq, m);
     }
+    // initialMoves (+ drained buffer) is an authoritative full fetch, so any
+    // hole in it is an abandoned reservation, not a dropped event. Seed the
+    // known-missing set from it; a new round restarts seqs at 1 so this also
+    // clears stale entries from the prior round.
+    knownMissingSeqs = computeAbandonedHoles(serverMoves);
     const remoteBoard = materializeRemote(puzzleCode, givens, serverMoves);
     set({
       room,
@@ -617,6 +655,9 @@ export const useCoopStore = create<CoopState>((set, get) => ({
     const moves = await fetchAllMoves(room.room_id);
     const serverMoves = new Map<number, ServerMove>();
     for (const sm of moves) serverMoves.set(sm.seq, sm);
+    // This is the authoritative snapshot; recompute which seqs are genuinely
+    // abandoned so post-resync gap checks don't re-trigger on the same holes.
+    knownMissingSeqs = computeAbandonedHoles(serverMoves);
     // Drop pendings that have already landed (their cid is in serverMoves);
     // keep ones still genuinely in flight.
     const remaining = pendings.filter(

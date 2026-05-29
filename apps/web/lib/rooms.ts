@@ -189,9 +189,15 @@ export async function joinRoom(args: {
 export async function subscribeToRoomPlayers(
   roomId: string,
   onChange: () => void,
+  /** Fires when the channel re-subscribes after a transient drop.
+   *  postgres_changes doesn't replay events missed while the socket was down,
+   *  so callers should refetch the player list to recover progress / kicks /
+   *  has_returned that changed during the gap. */
+  onReconnect?: () => void,
 ): Promise<() => void> {
   const client = await ensureAuthClient();
   if (!client) return () => {};
+  let hasEverSubscribed = false;
   const channel = client
     .channel(`room_players:${roomId}`)
     .on(
@@ -204,7 +210,12 @@ export async function subscribeToRoomPlayers(
       },
       onChange,
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        if (hasEverSubscribed && onReconnect) onReconnect();
+        hasEverSubscribed = true;
+      }
+    });
   return () => {
     client.removeChannel(channel);
   };
@@ -426,9 +437,15 @@ export async function subscribeToPublicLobbies(onChange: () => void): Promise<()
 export async function subscribeToRoom(
   roomId: string,
   onChange: () => void,
+  /** Fires when the channel re-subscribes after a transient drop. The room
+   *  row carries status (lobby→playing→finished) and winner_player_id — a
+   *  missed event here can strand a player in the lobby or hide the winner,
+   *  so callers should refetch the room on reconnect. */
+  onReconnect?: () => void,
 ): Promise<() => void> {
   const client = await ensureAuthClient();
   if (!client) return () => {};
+  let hasEverSubscribed = false;
   const channel = client
     .channel(`rooms:${roomId}`)
     .on(
@@ -436,7 +453,12 @@ export async function subscribeToRoom(
       { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
       onChange,
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        if (hasEverSubscribed && onReconnect) onReconnect();
+        hasEverSubscribed = true;
+      }
+    });
   return () => {
     client.removeChannel(channel);
   };
