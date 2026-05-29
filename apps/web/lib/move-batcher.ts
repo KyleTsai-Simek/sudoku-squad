@@ -70,16 +70,50 @@ function getQueue(roomId: string): RoomQueueState {
  *  somehow, we'll send them in 200-move chunks. */
 const MAX_BATCH = 200;
 
+/** Transient-failure retry. Every move carries a `client_move_id`, so the
+ *  server dedups a retry that actually landed but whose response was lost —
+ *  retrying is idempotent and safe. We only retry `internal` errors (5xx /
+ *  network), never deterministic rejections (bad_request, forbidden,
+ *  invalid_move, room_finished, …) which will fail identically on retry.
+ *  After the attempts are exhausted we surface the error and the caller's
+ *  store falls back to a full resync. */
+const RETRY_BACKOFFS_MS = [250, 600]; // => up to 3 attempts total
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function submitWithRetry(
+  roomId: string,
+  moves: BatchMoveInput[],
+): Promise<Awaited<ReturnType<typeof submitMoves>>> {
+  let last: Awaited<ReturnType<typeof submitMoves>> = {
+    ok: false,
+    error: { code: 'internal', message: 'no attempt made' },
+  };
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await submitMoves({ room_id: roomId, moves });
+      if (res.ok) return res;
+      last = res;
+      // Deterministic failure — retrying won't help.
+      if (res.error.code !== 'internal') return res;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      last = { ok: false, error: { code: 'internal', message } };
+    }
+    if (attempt >= RETRY_BACKOFFS_MS.length) return last;
+    await delay(RETRY_BACKOFFS_MS[attempt]!);
+  }
+}
+
 async function flush(roomId: string): Promise<void> {
   const q = getQueue(roomId);
   if (q.inFlight || q.pending.length === 0) return;
   const batch = q.pending.splice(0, MAX_BATCH);
   q.inFlight = true;
   try {
-    const res = await submitMoves({
-      room_id: roomId,
-      moves: batch.map((b) => b.move),
-    });
+    const res = await submitWithRetry(roomId, batch.map((b) => b.move));
     if (!res.ok) {
       for (const b of batch) b.resolve({ ok: false, error: res.error });
     } else {
