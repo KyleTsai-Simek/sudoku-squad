@@ -86,12 +86,21 @@ async function invoke<T>(
   }
   const { data, error } = await client.functions.invoke(name, { body });
   if (error) {
-    // FunctionsHttpError includes the body in `context.response`.
+    // A FunctionsHttpError carries the raw Response as `error.context`
+    // directly — NOT wrapped in `{ response }`. Reading `context.response`
+    // always yielded undefined, so every non-2xx (room_full, not_found,
+    // room_in_progress, …) collapsed to the generic "internal" screen
+    // instead of the function's structured { error: { code, message } }.
+    // Handle both shapes defensively in case the SDK shape ever changes.
     let inner: RoomError | null = null;
     try {
-      const ctx = (error as { context?: { response?: Response } }).context;
-      if (ctx?.response) {
-        const parsed = await ctx.response.clone().json();
+      const ctx = (error as { context?: unknown }).context;
+      const response =
+        ctx instanceof Response
+          ? ctx
+          : (ctx as { response?: Response } | undefined)?.response;
+      if (response) {
+        const parsed = await response.clone().json();
         if (parsed?.error?.code) inner = parsed.error as RoomError;
       }
     } catch {}
