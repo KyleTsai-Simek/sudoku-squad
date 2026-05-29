@@ -17,6 +17,31 @@ Format:
 
 ---
 
+## 0040 — Durable local move log + delta catch-up, and the coop offline-merge rule
+**Date:** 2026-05-29
+**Status:** Open — proposal pending user decision on the merge rule (the rest is decided in direction). Do not implement coop persistence until the merge rule below is chosen.
+
+**Context.** The 2026-05-29 architecture audit (see [STATUS.md](STATUS.md) gotcha #9, [TODO.md](TODO.md) "Sync resilience hardening") confirmed the system is *already event-sourced* — the `moves` table is the durable append-only log and every client/server re-materializes board state by replaying it. The remaining resilience wins are therefore not "adopt a log" but two upgrades on top of the log we have:
+1. **Durable *local* log.** Client pendings live in memory only, so a refresh or crash loses unsynced moves, and single-player has *no* persistence at all (a reload loses the whole game). Persisting the local move log (IndexedDB on web, AsyncStorage on iOS) unlocks offline play and crash/refresh resume.
+2. **Delta catch-up.** Today "desync → resync" refetches the *entire* log. Replacing that with "give me moves since seq N" + "here are my un-acked moves (by `client_move_id`)" is incremental, removes the O(n²) full-replay-per-submit cost, and matches how downforacross/Colyseus recover. Retry-with-backoff (landed 2026-05-29 in `move-batcher.ts`) is the transient-failure slice of this and is already done.
+
+Incremental live push stays — the log is the durable substrate, **not** a replacement for the live channel. Peers need timely updates, and a board-completing move must still flush immediately so win-timing isn't delayed by batching. Scale is a non-issue: a 1,000-move log is ~40–80 KB and replays sub-millisecond.
+
+**The open sub-question (needs a user call).** Single-player and battle have private boards, so a durable local log + offline accumulation is conflict-free — purely beneficial. **Coop is not free.** Under the current last-write-wins-by-server-`seq` rule ([#0036](DECISIONS.md), [#0038](DECISIONS.md)), the server stamps a seq at *arrival*. A coop player who accumulates moves offline and syncs a stale batch later gets *fresh* (high) seqs for *old* intentions, so their 5-minute-old "I filled this cell" can clobber a teammate's 10-second-old correction. We need a deliberate rule before persisting coop offline edits.
+
+Candidate merge rules:
+- **(A) Pure LWW-by-arrival-seq (status quo, do nothing).** Simplest; offline batch wins everything it touches. Acceptable if we forbid coop *offline* edits (only persist for crash/refresh-while-online resume, flush on reconnect within the 2-min grace [#0025](DECISIONS.md)). Recommended default — it sidesteps the conflict by scoping persistence to short reconnects, not true offline sessions.
+- **(B) Timestamp-aware merge.** Stamp each move with a client `created_at`; on apply, a move doesn't overwrite a cell whose current value was set by a *later* timestamp. Needs a trusted-ish clock and a tiebreak; more correct for genuine offline but adds complexity and a clock-skew surface.
+- **(C) Fork-aware ("don't clobber what changed since you forked").** Record the seq the client was last synced at; an offline move skips (or flags) a cell that any higher-seq move has touched since. Closest to human intent, most code.
+
+**Decision (direction, pending the sub-question).** Build the durable local log + delta catch-up. Lift the consolidated sync logic into `packages/core/src/sync/` so web + iOS share it ([#0036](DECISIONS.md) deferred this; do it here). For coop, **default to (A) with persistence scoped to reconnect-resume rather than long offline sessions** unless the user wants true offline coop, in which case (C) is the recommended rule.
+
+**Alternatives considered.** *Whole-log push instead of incremental* — rejected: we already have the server log, peers need live updates, and win-timing can't wait for a batch. *Skip persistence, just keep retry* — leaves SP with no resume and mobile fragile; retry alone doesn't survive a refresh/crash.
+
+**Consequences.** SP and battle gain offline/resume for free. Coop gains crash/refresh resume immediately; true-offline coop waits on the merge-rule choice. New client-storage code path to test on web and (later) RN. No schema change for (A); (B)/(C) add a per-move client timestamp / last-synced-seq but both are client-derivable and don't change the server's authority.
+
+---
+
 ## 0039 — Battle undo/redo emit server-side compensating moves
 **Date:** 2026-05-29
 **Status:** Accepted
@@ -969,6 +994,7 @@ Resolved items get moved into the log above. These are still TBD. Items grouped 
 3. **Host migration in coop** — automatic transfer to the longest-tenured remaining player, or require acknowledgement?
 4. **Mobile cursor visualization in coop** — phones have no persistent cursor. Working assumption: ring persists on last-tapped cell, fades after ~3 s of inactivity. Validate during coop UI work.
 5. **`board_snapshots` table** — add now for fast rejoin or wait until measurable problem? Leaning wait.
+9. **Coop offline-merge rule** — see [#0040](DECISIONS.md). Before persisting coop offline edits, pick: (A) pure LWW + scope persistence to reconnect-resume (recommended default), (B) timestamp-aware merge, or (C) fork-aware "don't clobber what changed since you forked". SP/battle are conflict-free and not blocked.
 
 ## Open longer-term
 
