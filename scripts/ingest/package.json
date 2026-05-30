@@ -11,6 +11,7 @@
   "scripts": {
     "ingest": "tsx -r dotenv/config src/index.ts dotenv_config_path=../../.env.local",
     "ingest:qqwing": "tsx -r dotenv/config src/ingest-qqwing.ts dotenv_config_path=../../.env.local",
+    "ingest:qqwing-graded": "tsx -r dotenv/config src/ingest-qqwing-graded.ts dotenv_config_path=../../.env.local",
     "check": "tsx -r dotenv/config src/check-connectivity.ts dotenv_config_path=../../.env.local",
     "audit:difficulty": "tsx -r dotenv/config src/audit-difficulty.ts dotenv_config_path=../../.env.local",
     "check:puzzle": "tsx -r dotenv/config src/check-puzzle.ts dotenv_config_path=../../.env.local",

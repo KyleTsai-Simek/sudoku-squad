@@ -17,6 +17,40 @@ Format:
 
 ---
 
+## 0042 — Replace the Kaggle upper tiers with QQWing technique-graded generation
+**Date:** 2026-05-29
+**Status:** Accepted. Supersedes the Kaggle/radcliffe sourcing of medium/hard/expert/killer in [#0031](DECISIONS.md)–[#0034](DECISIONS.md); revives the `killer` tier (no longer "former-expert inventory" but the requires-a-guess class).
+
+**Context.** The medium/hard/expert/killer tiers came from the Kaggle 3M radcliffe set, banded by an opaque numeric rating ([#0031](DECISIONS.md)–[#0034](DECISIONS.md)). We wanted tiers defined by the *logic a puzzle forces* rather than a float, a single in-process generator for the whole bank (warmup/easy were already QQWing — [#0033](DECISIONS.md)), and an explicit "pure-logic vs. needs-a-guess" boundary. QQWing exposes per-puzzle technique counts and a difficulty class, which gives exactly that signal.
+
+**Decision.** Regenerate the four upper tiers locally with QQWing (`scripts/ingest/src/ingest-qqwing-graded.ts`), graded by QQWing's difficulty class + technique counts. No clue-count augmentation (it only eases; that's a warmup/easy device). Mapping:
+
+| tier | QQWing class | extra criterion | pure-logic? |
+|---|---|---|---|
+| medium | EASY | — | yes (guess=0) |
+| hard | INTERMEDIATE | exactly 1 distinct advanced technique | yes (guess=0) |
+| expert | INTERMEDIATE | ≥2 distinct advanced techniques | yes (guess=0) |
+| killer (hidden) | EXPERT | guess_count ≥ 1 | no — requires a guess |
+
+"Advanced techniques" = {naked pair, hidden pair, pointing pair/triple, box-line reduction}. The split keeps **expert fully guess-free** — QQWing's EXPERT class is *defined* as "requires guessing", so a no-guess expert can't be EXPERT; it's the hardest slice of pure-logic INTERMEDIATE instead. 2,500 per tier (10,000 total). Existing quality gates unchanged: unique solution (Norvig solver), solution-match, dedupe by puzzle code.
+
+QQWing's per-puzzle metadata is now stored as typed columns on `puzzles` (migration 0016): `qqwing_difficulty`, `clue_count`, `guess_count`, `backtrack_count`, the five technique counts, and the derived `advanced_technique_count`. Tiers are no longer assigned from a stored rating (there never was a rating column — the old ratings only bucketed at ingest time).
+
+**Alternatives considered.**
+- **Expert = QQWing EXPERT directly.** Rejected: every EXPERT puzzle requires guessing (verified: 2,840/2,840 in an 8k-gen sample), which we didn't want for the top *visible* tier. Those puzzles back killer instead.
+- **Split hard/expert by clue count.** Clue counts barely separate INTERMEDIATE puzzles (all cluster 22–29, peak 25); technique richness is the real signal.
+- **Stricter expert (hidden pairs or ≥3 techniques).** More distinctly "expert" but ~13% of INTERMEDIATE → ~35–40 min to generate 2,500, and starves the pool. ≥2 techniques (~31% of INTERMEDIATE, ~15 min) is the balance we picked.
+- **Keep Kaggle for the harder bands.** Rejected: opaque rating, external dataset dependency, and no clean pure-logic boundary.
+
+**Consequences.**
+- Migration 0016 adds the metadata columns (nullable; warmup/easy carry NULLs). Migration 0017 deletes the old Kaggle medium/hard/expert/killer rows (cascading through referencing rooms/completions first, since the puzzle FKs are `on update`—not `on delete`—cascade) and leaves the difficulty check constraint intact (killer retained).
+- `killer` stays hidden from the picker (still in `Difficulty` / excluded from `DIFFICULTIES_VISIBLE`); no type or UI changes were needed.
+- The old Kaggle ingest (`scripts/ingest/src/index.ts`) and the radcliffe audit tooling are now dormant — left in place but no longer the source of truth. The dataset (`data/sudoku-3m.csv`) is no longer required to seed the bank.
+- New tool: `pnpm --filter @sudoku-squad/ingest ingest:qqwing-graded` (`--dry-run` / `--count N` per tier). ~15 min for 10,000.
+- warmup + easy ([#0033](DECISIONS.md)) are untouched.
+
+---
+
 ## 0041 — Undo/redo/smart-clear emit a faithful move batch (notes stay in sync)
 **Date:** 2026-05-29
 **Status:** Accepted. Supersedes the single-compensating-move mechanism of [#0039](DECISIONS.md).

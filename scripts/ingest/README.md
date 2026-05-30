@@ -1,11 +1,13 @@
 # @sudoku-squad/ingest
 
-One-off scripts for populating the Supabase `puzzles` table. There are **two pipelines**:
+One-off scripts for populating the Supabase `puzzles` table. The whole bank is now **QQWing-generated** via **two pipelines**:
 
-1. **`ingest`** — samples the harder tiers from a Kaggle dataset (`src/index.ts`).
-2. **`ingest:qqwing`** — generates the two easiest tiers locally with QQWing (`src/ingest-qqwing.ts`).
+1. **`ingest:qqwing`** — the two easiest tiers, by clue count (`src/ingest-qqwing.ts`). See §4.
+2. **`ingest:qqwing-graded`** — the four upper tiers, graded by QQWing's difficulty class + technique counts (`src/ingest-qqwing-graded.ts`). See §4b.
 
-Together they seed **15,000 puzzles across six tiers, 2,500 each**: `warmup` / `easy` (QQWing, negative ratings) and `medium` / `hard` / `expert` / `killer` (Kaggle, rating-banded). `killer` is hidden from the UI. See [DECISIONS.md #0031](../../docs/DECISIONS.md)–[#0034](../../docs/DECISIONS.md).
+Together they seed **15,000 puzzles across six tiers, 2,500 each**: `warmup` / `easy` (clue-count graded, negative ratings, [#0033](../../docs/DECISIONS.md)) and `medium` / `hard` / `expert` / `killer` (technique graded, [#0042](../../docs/DECISIONS.md)). `killer` is hidden from the UI.
+
+> **The Kaggle pipeline (`ingest`, `src/index.ts`) is dormant** as of [#0042](../../docs/DECISIONS.md) — the upper tiers no longer come from the Kaggle 3M dataset. The script and the radcliffe audit tooling are kept for reference but are no longer the source of truth, and the dataset (§1) is no longer needed to seed the bank.
 
 **This package is not shipped to clients.** It runs locally, talks to Supabase via the service-role key, and exits. The Norvig solver lives here (not in `packages/core`) because it's only needed at ingest time. Per [docs/DECISIONS.md #0012](../../docs/DECISIONS.md).
 
@@ -92,9 +94,32 @@ The script **appends** by default. Pass `--truncate` to wipe and rebuild from sc
 pnpm --filter @sudoku-squad/ingest ingest:qqwing          # appends ~5,000 rows
 ```
 
-Generates **2,500 `warmup` + 2,500 `easy`** puzzles locally with QQWing — no dataset required. These sit below the Kaggle-sourced tiers with negative ratings in `[-10, 0)`: clues 35–40 → `warmup`, clues 29–34 → `easy`. Each candidate is solver-verified for a unique solution and coded identically to the Kaggle path. Runs ~60 minutes single-threaded. Targets live in `TARGET_PER_CELL` at the top of [src/ingest-qqwing.ts](src/ingest-qqwing.ts). See [DECISIONS.md #0033](../../docs/DECISIONS.md).
+Generates **2,500 `warmup` + 2,500 `easy`** puzzles locally with QQWing — no dataset required. These sit below the upper tiers with negative ratings in `[-10, 0)`: clues 35–40 → `warmup`, clues 29–34 → `easy`. Each candidate is solver-verified for a unique solution and coded identically to the graded path. Runs ~60 minutes single-threaded. Targets live in `TARGET_PER_CELL` at the top of [src/ingest-qqwing.ts](src/ingest-qqwing.ts). See [DECISIONS.md #0033](../../docs/DECISIONS.md).
 
 > Requires migrations `0012` (extends the `difficulty` check constraint for the easier tiers) and `0013` (the tier shift-rename) to be applied first.
+
+---
+
+## 4b. Generate the upper tiers (QQWing, technique-graded)
+
+```bash
+pnpm --filter @sudoku-squad/ingest ingest:qqwing-graded               # appends ~10,000 rows
+pnpm --filter @sudoku-squad/ingest ingest:qqwing-graded --dry-run     # generate + report, no writes
+pnpm --filter @sudoku-squad/ingest ingest:qqwing-graded --count 50    # 50 per tier (small test)
+```
+
+Generates **2,500 each of `medium` / `hard` / `expert` / `killer`** locally with QQWing, graded by QQWing's own difficulty class + technique counts rather than a rating ([DECISIONS.md #0042](../../docs/DECISIONS.md)):
+
+| tier | QQWing class | extra criterion | pure-logic? |
+|---|---|---|---|
+| medium | EASY | — | yes (`guess_count = 0`) |
+| hard | INTERMEDIATE | exactly 1 distinct advanced technique | yes |
+| expert | INTERMEDIATE | ≥2 distinct advanced techniques | yes |
+| killer (hidden) | EXPERT | `guess_count ≥ 1` | no — requires a guess |
+
+"Advanced techniques" = {naked pair, hidden pair, pointing pair/triple, box-line reduction}. There is **no clue-count augmentation** here — augmentation only eases a puzzle, which would erase the technique grade. Each candidate keeps the same gates (unique solution, solution-match, dedupe by code) and stores QQWing's per-puzzle metadata in the typed columns added by migration 0016 (`qqwing_difficulty`, `clue_count`, `guess_count`, `backtrack_count`, the five technique counts, and `advanced_technique_count`). The `expert` slice (≥2 techniques, ~5% of raw generations) is the throughput bottleneck; the full run is ~15 minutes single-threaded.
+
+> Requires migrations `0016` (metadata columns) and `0017` (clears the old Kaggle rows) to be applied first.
 
 ---
 
