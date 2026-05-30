@@ -83,9 +83,19 @@ These all default to per-room settings (host picks in the lobby):
 
 ## Player identity
 
-- On joining a room, player picks a username (1–20 chars, anonymous, scoped to that room).
-- Each player gets a system-assigned color (used for cursor highlight + progress bar).
-- No password, no account. The Supabase anon user ID persists in localStorage so a reconnect within ~24h restores you as the same player.
+- Every visitor is signed in **anonymously** by default — no signup required. The Supabase anon user ID persists in localStorage so a reconnect restores you as the same player, and progress (`player_completions`) accrues against that ID per device.
+- Anonymous players get a system-assigned, globally-unique **adjective-noun** username (server-issued — [DECISIONS #0027](DECISIONS.md)) and a system-assigned color (cursor highlight + progress bar). They **cannot** change their name.
+- `room_players.username` is a join-time snapshot of the player's display name (1–20 chars), scoped to that room.
+
+### Accounts (Phase 5 — [DECISIONS #0043](DECISIONS.md))
+
+Optional email sign-in, layered on top of anonymous play:
+
+- **Sign in / hamburger menu.** A top-corner hamburger (Google Material Symbols) on every screen has an **Account** item: "Sign in" when signed out, the username when signed in. Sign-in collects an email and accepts either the **magic link** or a **6-digit code** (Supabase OTP).
+- **Why sign in.** Progress becomes portable across devices, and you can change your username. First-time sign-in *links* the email to your current anonymous identity (same player ID — nothing is lost). Signing in on another device **merges** that device's anonymous progress into your account (union of solved puzzles).
+- **Renaming (signed-in only).** Pick any base name; if it's already taken, a random `#NNNN` discriminator is appended (`kyle#1234`), Discord-style — many people can be `kyle`. The width grows (5 digits, …) only if a base's number space fills up. Changing away from a name frees it for reuse.
+- **Sign out** drops you to a fresh anonymous identity; your account's progress stays safe and returns on next sign-in.
+- **Stats.** Solved counts per difficulty (and unique solved-puzzle hashes, backend-only) are captured server-side now; a visible stats/profile screen is a later pass.
 
 ---
 

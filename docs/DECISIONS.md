@@ -17,6 +17,47 @@ Format:
 
 ---
 
+## 0043 — Authenticated accounts (email OTP), Discord-style renames, durable cross-device progress
+**Date:** 2026-05-29
+**Status:** Accepted. Pulls forward ROADMAP "Stretch #3" and the GOALS_AND_SCOPE V2 "persistent accounts" item into a new **Phase 5**, executed ahead of Phase 4 (iOS). Builds on / extends [#0027](DECISIONS.md) (server-issued usernames) and resolves its consequences note ("future rename Edge Function"). Anonymous auth ([ARCHITECTURE §1](ARCHITECTURE.md)) is **kept** as the default identity, not replaced.
+
+**Context.** Today every visitor is a Supabase **anonymous** user; `auth.uid()` is the durable `player_id` behind `room_players`, `moves`, and `player_completions`. Progress (one row per solved puzzle in `player_completions`) therefore already persists — but only *per device*, with no way to carry it to another device, and usernames (server-issued, globally unique adj-noun via [#0027](DECISIONS.md)) cannot be changed (the current `setLocalUsernameOverride` only rewrites the local cache, leaving the server row stale). We want optional sign-in that (a) makes progress portable across devices, (b) unlocks renames, and (c) adds a top-corner account menu — without forcing signup on casual players.
+
+**Decision.** Seven coupled choices, each confirmed with the user (2026-05-29):
+
+1. **Anonymous stays the default; email is an upgrade.** Every visitor is still signed in anonymously on first load. "Sign in" *links an email* to that identity. Email auth uses Supabase's OTP flow (`signInWithOtp`) — one email carries both a **magic link** and a **numeric code**. We use Supabase's default **6-digit** OTP and the UI copy refers to a 6-digit code. *(We briefly speced an 8-digit code and configured it, then reverted to the 6-digit default 2026-05-29 — simpler, and there's no real benefit to 8.)*
+
+2. **First-time sign-in links in place (progress preserved for free).** When the email is *new*, we attach it to the current anonymous user via `auth.updateUser({ email })` and confirm via link or code (`verifyOtp`, `type: 'email_change'`). The anonymous user is promoted to permanent **with the same `auth.uid()`**, so all `player_completions` and the username carry over automatically — no merge needed. **The user keeps their current generated handle** on sign-in; signing in only *unlocks* renaming. No forced naming step.
+
+3. **Signing into an *existing* account merges progress (union).** If the email already maps to an account (e.g. the player signed in earlier on another device), `updateUser` fails ("email exists"); we fall back to `signInWithOtp` to sign into the existing account — which abandons this device's anon `uid`. Because Supabase **cannot merge two distinct user IDs**, a server-side **`merge-progress` Edge Function** unions the abandoned anon identity's progress into the account: `player_completions` rows are moved `source → dest` (`on conflict do nothing`, deduped by puzzle), the source's freed username row is released, and the now-empty anonymous user is deleted. Security: the function requires **both JWTs** — the destination account (Authorization header) and the source anon token (captured client-side *before* `verifyOtp` replaces the session, passed in the body) — and refuses unless the source is anonymous and the dest is the caller. Never merges two permanent accounts; never merges in the reverse direction.
+
+4. **Only signed-in users can rename; renames are Discord-style.** A new **`set-username` Edge Function** (signed-in only) sets the caller's username. Uniqueness shifts from "*full* name globally unique" ([#0027](DECISIONS.md)) to **"(base, discriminator) unique; base shared"**: picking a free base (e.g. `kyle`) gives the bare `kyle`; a taken base appends a `#NNNN` discriminator (`kyle#1234`). Discriminators are drawn **randomly** (not sequentially) from `[1000, 9999]`; when a base's 4-digit space is exhausted, the width grows to 5 digits, etc. **Changing away frees the old (base, discriminator) tuple** for reuse. Anonymous users keep today's auto-generated, globally-unique adj-noun handle (no discriminator) and cannot rename — the rename UI routes them to sign-in. Display string = `base` + (`#` + zero-free discriminator) when a discriminator is set.
+
+5. **Stats: backend capture only this iteration.** "Puzzles solved per difficulty" derives from existing `player_completions` joined to `puzzles.difficulty`; "unique solved puzzle hashes" = `puzzle_code`, already stored and never shown to the client. We add a `get_completion_stats()` RPC (per-difficulty + total for the caller) and ensure the merge unions completions. **No stats/profile screen ships this iteration** — surfacing them is a later pass.
+
+6. **Hamburger menu on all screens, account-only.** A top-corner hamburger (Google **Material Symbols**: `menu` + `account_circle`) appears on `/`, `/play/[code]`, and `/r/[code]`. Its only item for now is **Account**: signed-out → "Sign in" (opens the auth sheet); signed-in → the username (opens change-username / sign-out). Other entries (settings, shortcuts) are *not* folded in yet.
+
+7. **Sign-out returns a fresh anonymous identity.** Signing out starts a new anonymous session with a newly generated unique name; the account's progress stays safe under the account and returns on next sign-in.
+
+**Alternatives considered.**
+- **Replace anonymous auth with required sign-in.** Violates the product's "no signup required" core ([GOALS_AND_SCOPE](GOALS_AND_SCOPE.md)). Rejected — sign-in is strictly additive.
+- **"Account always wins" on cross-device sign-in (discard local anon progress).** Simpler (no merge function), but a player who solved puzzles on a fresh device *before* signing in would silently lose them. Rejected in favor of union merge.
+- **Move *all* users (anon included) to the base#discriminator model.** Unifies the username system but is a bigger rework and gives anonymous users an unfamiliar `#NNNN` name for no benefit. Rejected — anon keeps the adj-noun scheme; discriminators only appear on *chosen* names.
+- **Sequential discriminators.** Predictable and leaks "how many `kyle`s exist." Random draw chosen per spec.
+- **Use Supabase's default 6-digit OTP.** Less config, but the spec calls for 8. We set 8.
+- **Full account/stats screen now.** Deferred to keep the iteration scoped to auth + rename + menu.
+
+**Consequences.**
+- **New migrations.** `0018` reshapes `issued_usernames` from "issued once" to a mutable **current-username** table: add `base` + `discriminator` columns, a unique index on `(lower(base), coalesce(discriminator, 0))`, backfill existing rows (`base` = current name, `discriminator` = NULL), and relax RLS so a user can read their own row (writes stay service-role via Edge Functions). `0019` adds the `get_completion_stats()` RPC. No change to `player_completions` shape — the merge is an Edge-Function data move, not a schema change.
+- **New Edge Functions:** `set-username`, `merge-progress`. `claim-username` stays (the anonymous default path) but its insert now populates `base`/`discriminator`.
+- **Supabase project config (not a migration):** enable email provider settings, set OTP length to 8, configure email templates + Site URL / redirect allow-list for the magic-link callback (`/auth/callback`), and review auth rate limits. Tracked as a deploy step; mirror in `supabase/config.toml` for local dev.
+- **Client:** `lib/supabase.ts` gains link/sign-in/sign-out/merge helpers and an auth-state store; `lib/username.ts` gains a `setUsername` path and a display-string helper; a new `HamburgerMenu` + auth sheet + `/auth/callback` route; Material Symbols icons introduced (inlined SVGs to start — no runtime CDN dependency).
+- **`room_players.username` remains a join-time snapshot** of the display string; a mid-room rename does not retroactively rewrite active rooms (minor edge, acceptable).
+- **Profanity/hygiene filter on chosen names is still deferred** (the open question from [#0027](DECISIONS.md)) — revisit before any public launch.
+- **`packages/core` purity preserved** — all of this is web/Supabase glue; nothing platform-specific enters core. iOS (Phase 4) reuses the same Edge Functions and auth flow.
+
+---
+
 ## 0042 — Replace the Kaggle upper tiers with QQWing technique-graded generation
 **Date:** 2026-05-29
 **Status:** Accepted. Supersedes the Kaggle/radcliffe sourcing of medium/hard/expert/killer in [#0031](DECISIONS.md)–[#0034](DECISIONS.md); revives the `killer` tier (no longer "former-expert inventory" but the requires-a-guess class).

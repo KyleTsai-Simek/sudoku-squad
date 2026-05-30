@@ -6,7 +6,8 @@ import type { Difficulty } from '@sudoku-squad/core';
 import { getTierCounts, pickRandomUnsolved } from '@/lib/pick-puzzle';
 import { getCompletionCount } from '@/lib/completions';
 import { createRoom, joinRoom, type RoomMode } from '@/lib/rooms';
-import { getUsername, readCachedUsername } from '@/lib/username';
+import { getUsername } from '@/lib/username';
+import { useAuthStore } from '@/lib/auth-store';
 import { PublicLobbyList } from '@/components/public-lobby-list';
 
 interface TierState {
@@ -55,27 +56,34 @@ export function HomeClient() {
   const [joinPending, setJoinPending] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [completed, setCompleted] = useState<number | null>(null);
-  const [username, setUsernameState] = useState<string | null>(() =>
-    typeof window !== 'undefined' ? readCachedUsername() : null,
-  );
+  // Username display is owned by the auth store (kept fresh across sign-in /
+  // rename / sign-out). The AppHeader boots the store; we just read it here.
+  const username = useAuthStore((s) => s.username);
+  // Re-read the solved count whenever the identity changes (e.g. a sign-in that
+  // merged anonymous progress into an account changes the total).
+  const userId = useAuthStore((s) => s.userId);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [c, n, u] = await Promise.all([
-        getTierCounts(),
-        getCompletionCount(),
-        getUsername(),
-      ]);
-      if (cancelled) return;
-      setCounts(c);
-      setCompleted(n);
-      setUsernameState(u);
+      const c = await getTierCounts();
+      if (!cancelled) setCounts(c);
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const n = await getCompletionCount();
+      if (!cancelled) setCompleted(n);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   async function startSolo(tier: Difficulty) {
     setLoadingSolo(tier);

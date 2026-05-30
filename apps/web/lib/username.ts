@@ -77,16 +77,52 @@ export async function getUsername(): Promise<string> {
   }
 }
 
-/**
- * Manually overwrite the local cached name. The server-side `issued_usernames`
- * row stays as-is — display names diverge from the canonical name. We'll fix
- * this when a rename Edge Function lands.
- */
-export function setLocalUsernameOverride(name: string): void {
+/** Drop the cached name (e.g. on sign-out) so the next `getUsername()` re-reads
+ *  the server row for whatever identity is now current. */
+export function clearCachedUsername(): void {
   if (typeof window === 'undefined') return;
-  const trimmed = name.trim().slice(0, 20);
-  if (trimmed.length === 0) return;
   try {
-    window.localStorage.setItem(KEY, trimmed);
+    window.localStorage.removeItem(KEY);
   } catch {}
+}
+
+/**
+ * Change the signed-in user's username via the `set-username` Edge Function
+ * ([DECISIONS #0043]). `base` is the desired name; the server returns the full
+ * display string (`base` or `base#NNNN` if the base collides). Anonymous
+ * callers get `forbidden` — the UI should route them to sign-in first.
+ *
+ * On success the local cache is updated to the returned display string.
+ */
+export async function setUsername(
+  base: string,
+): Promise<{ ok: true; username: string } | { ok: false; error: string }> {
+  const client = await ensureAuthClient();
+  if (!client) return { ok: false, error: 'offline' };
+  const { data, error } = await client.functions.invoke('set-username', {
+    body: { username: base },
+  });
+  if (error) {
+    // A FunctionsHttpError carries the raw Response as `error.context` (see
+    // rooms.ts for the same parsing). The body is { error: { code, message } }.
+    let message = error.message || 'Could not change username';
+    try {
+      const ctx = (error as { context?: unknown }).context;
+      const response =
+        ctx instanceof Response
+          ? ctx
+          : (ctx as { response?: Response } | undefined)?.response;
+      if (response) {
+        const parsed = (await response.clone().json()) as { error?: { message?: string } };
+        if (parsed?.error?.message) message = parsed.error.message;
+      }
+    } catch {}
+    return { ok: false, error: message };
+  }
+  if (!data?.username) return { ok: false, error: 'Could not change username' };
+  const username = data.username as string;
+  try {
+    window.localStorage.setItem(KEY, username);
+  } catch {}
+  return { ok: true, username };
 }

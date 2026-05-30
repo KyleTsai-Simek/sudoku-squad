@@ -126,6 +126,45 @@ The coop MVP is live: shared board, server-overlay sync (LWW by `seq` + local pe
 
 ---
 
+## Phase 5 — Authenticated accounts 🔄 Planned (pulled ahead of Phase 4)
+
+Optional email sign-in: portable progress + renameable usernames, anonymous stays the default. Full design in [DECISIONS #0043](DECISIONS.md), scope in [ROADMAP Phase 5](ROADMAP.md). Ordered roughly by dependency.
+
+### Backend — schema + config
+- [x] Migration `0018` — mutable username table. Adds `base` + `discriminator` (int, nullable, `>= 1000` check) to `issued_usernames`; backfills `base` = old username; drops the old `unique(username)`; makes `username` a **generated** display column; unique index on `(lower(base), coalesce(discriminator, 0))`. **Written; pending deploy.**
+- [x] Migration `0019` — `get_completion_stats()` RPC (SECURITY DEFINER) returning the caller's per-difficulty solved counts. **Written; pending deploy.**
+- [ ] **Supabase project config (dashboard — needs the user):** enable email provider, set OTP length to **8**, customize magic-link + OTP email templates, set Site URL + redirect allow-list for `/auth/callback`, review auth rate limits. `supabase/config.toml` left without `[auth]` (project runs against the cloud, not a local stack).
+
+### Backend — Edge Functions
+- [x] `set-username({ username })` — signed-in only (anon → `forbidden`). Validates base (3–20, `[A-Za-z0-9 _-]`); reads current holders, picks a bare base if free else a random discriminator from the smallest non-full width (`pickDiscriminator`); upserts the caller's row (frees the old tuple); retries on 23505. **Written; pending deploy.**
+- [x] `merge-progress({ source_token })` — dest = caller JWT, source = body token. Guards source anonymous + ≠ dest + dest non-anon; upserts source `player_completions` onto dest (`ignoreDuplicates`), deletes source's username + completions, deletes the orphan anon user (best-effort). **Written; pending deploy.**
+- [x] `claim-username` — inserts `base` (was `username`, now generated); anon defaults stay bare bases. **Written; pending deploy.**
+- [x] Registered `set-username` + `merge-progress` in `config.toml`; added `getCaller` / `getUserFromToken` to `_shared/supabase.ts`.
+
+### Client — auth
+- [x] `lib/auth-store.ts` (Zustand) — `init`, `startEmailAuth` (link-in-place → fallback `signInWithOtp`, stashes anon token), `verifyCode` (type `email_change`/`email` + merge on existing-account path), `completeMagicLink`, `signOut` (re-anonymizes), `refreshUsername`. State: `userId`/`isAnonymous`/`email`/`username`/`awaitingCode`.
+- [x] `lib/supabase.ts` — PKCE flow + `detectSessionInUrl: false` for manual callback handling.
+- [x] `/auth/callback` route — exchanges `?code` (PKCE) or `?token_hash&type`, runs merge from localStorage-mirrored pending state, redirects home.
+
+### Client — username
+- [x] `lib/username.ts` — `setUsername(base)` (calls `set-username`, parses Edge error body), `clearCachedUsername()`. Removed the dead `setLocalUsernameOverride`. Display string comes straight from the server's generated `username`.
+
+### Client — UI
+- [x] `AppHeader` (hamburger, top-right) mounted in the root layout → shows on `/`, `/play`, `/r`. Material Symbols `menu` + `account_circle` inlined (`components/material-icons.tsx`). Boots the auth store.
+- [x] Account item: signed-out → "Sign in"; signed-in → username + email → "Change username" / "Sign out".
+- [x] `AuthSheet` — email → 6-digit code (Supabase default); magic link via `/auth/callback`.
+- [x] `UsernameSheet` — base input, `name#1234` hint, shows the assigned full name on success.
+- [x] Home "you're …" line now reads username from the auth store; solved count refetches on identity change.
+- [x] Verified in preview: hamburger renders + opens, Account/Sign-in shows, auth sheet renders, no console errors, prod build clean (incl. `/auth/callback`).
+
+### Testing
+- [x] Unit: discriminator allocation (random, never-reuses, width-grows) + base validation + display string. Pure logic extracted to `packages/core/src/username/discriminator.ts` (10 tests, incl. a property test; core 72→82) and imported directly by the `set-username` Edge Function — single source of truth, no drift. The cross-boundary import bundles cleanly on `supabase functions deploy`.
+- [ ] Edge Function checks (post-deploy): `set-username` collision → discriminator; rename frees old tuple; `merge-progress` unions completions + refuses bad inputs.
+- [ ] E2E (local, needs Supabase + deploy + email OTP enabled): anon solve → sign in (new email) preserves count; second device (fresh anon progress) → sign in (same email) shows the **union**; rename collision; sign-out → fresh anon with account progress intact on re-sign-in.
+- [ ] Non-regression: anonymous-only play (the default) unchanged; `packages/core` purity lint still clean.
+
+---
+
 ## Sync resilience hardening (from the 2026-05-29 architecture audit)
 
 Findings from a full review of the SP / battle / coop sync paths benchmarked against comparable real-time games (downforacross, boardgame.io, Colyseus) and the Supabase Realtime delivery model, **plus the move-log consolidation discussion (2026-05-29).** Ordered by impact / cost. None require schema changes except where noted. See the audit writeup in this session and the prose in [STATUS.md](STATUS.md) gotchas.

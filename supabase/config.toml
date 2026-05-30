@@ -86,3 +86,25 @@ entrypoint = "./functions/return-to-lobby/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/return-to-lobby/*.html" ]
+
+[functions.set-username]
+enabled = true
+verify_jwt = true
+import_map = "./functions/set-username/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/set-username/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/set-username/*.html" ]
+
+[functions.merge-progress]
+enabled = true
+verify_jwt = true
+import_map = "./functions/merge-progress/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/merge-progress/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/merge-progress/*.html" ]

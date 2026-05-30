@@ -48,3 +48,52 @@ export async function getCallerUserId(req: Request): Promise<string | null> {
   if (error || !data.user) return null;
   return data.user.id;
 }
+
+export interface Caller {
+  id: string;
+  /** True for Supabase anonymous sessions; false once an email is linked. */
+  isAnonymous: boolean;
+  email: string | null;
+}
+
+/**
+ * Like `getCallerUserId` but also surfaces whether the caller is anonymous and
+ * their email. Used by `set-username` (renames are signed-in-only) and
+ * `merge-progress` (the source identity must be anonymous).
+ */
+export async function getCaller(req: Request): Promise<Caller | null> {
+  const auth = req.headers.get('Authorization');
+  if (!auth) return null;
+  const client = callerClient(auth);
+  const { data, error } = await client.auth.getUser();
+  if (error || !data.user) return null;
+  return {
+    id: data.user.id,
+    isAnonymous: data.user.is_anonymous ?? false,
+    email: data.user.email ?? null,
+  };
+}
+
+/**
+ * Resolve a user from an arbitrary access token (not the request's
+ * Authorization header). Used by `merge-progress` to validate the *source*
+ * anonymous identity, whose token the client captures before it's replaced by
+ * the destination-account session.
+ */
+export async function getUserFromToken(token: string): Promise<Caller | null> {
+  const url = Deno.env.get('SUPABASE_URL');
+  const anon = Deno.env.get('SUPABASE_ANON_KEY');
+  if (!url || !anon) {
+    throw new Error('SUPABASE_URL or SUPABASE_ANON_KEY missing in Edge Function env');
+  }
+  const client = createClient(url, anon, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await client.auth.getUser(token);
+  if (error || !data.user) return null;
+  return {
+    id: data.user.id,
+    isAnonymous: data.user.is_anonymous ?? false,
+    email: data.user.email ?? null,
+  };
+}

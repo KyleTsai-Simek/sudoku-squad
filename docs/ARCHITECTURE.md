@@ -12,7 +12,7 @@ This document defines the technical foundation for Sudoku Squad: stack, data mod
 | iOS client (Phase 4) | **React Native via Expo** | Shares TypeScript core with web; first-class Supabase SDK. |
 | Shared logic | **`packages/core` (TS)** | Game logic, validators, sync helpers — consumed by both clients. |
 | Realtime / DB | **Supabase (Postgres + Realtime + Edge Functions)** | Postgres for durability, Realtime channels for live sync, Edge Functions for any server-authoritative logic. |
-| Auth | **Supabase anonymous sessions** | No signup. Each browser/device gets an anon user ID; username is per-room. |
+| Auth | **Supabase anonymous sessions + optional email OTP** | No signup required — each browser/device gets an anon user ID by default. Phase 5 ([DECISIONS #0043](DECISIONS.md)) adds optional email sign-in (magic link / 6-digit OTP) that *links* to the anon identity for portable progress + renames; the same `auth.uid()` survives the upgrade. |
 | Hosting | **Vercel (web) + Supabase Cloud** | Generous free tiers, deploy in minutes. |
 | State (client) | **Zustand** (or React Context for V1) + Supabase Realtime subscriptions | Simple, plays well with TS. |
 | Package manager | **pnpm 11** (workspaces) | Strict dep resolution enforces the `packages/core` purity rule. Per [DECISIONS.md #0014](DECISIONS.md). |
@@ -96,7 +96,7 @@ sudoku-squad/
 
 ## 4. Data model (Supabase / Postgres)
 
-Live SQL is in `supabase/migrations/`. Tables below reflect what's actually applied to the project (migrations 0001 → 0015).
+Live SQL is in `supabase/migrations/`. Tables below reflect what's actually applied to the project (migrations 0001 → 0017), plus the Phase 5 username/stats changes planned in migrations 0018–0019 ([#0043](DECISIONS.md), marked inline).
 
 ### `puzzles`
 Pre-generated puzzles. Immutable once ingested. **15,000 rows** live as of 2026-05-22 across **six tiers** (five visible, one hidden after the #0034 rename): 2,500 each in warmup / easy / medium / hard / expert / killer. Warmup + easy come from local QQWing generation (naked-singles-only, augmented to high clue counts); medium / hard / expert / killer come from the Kaggle 3M `radcliffe/3-million-sudoku-puzzles-with-ratings` dataset. See [DECISIONS #0032](DECISIONS.md) (radcliffe bands), [#0033](DECISIONS.md) (QQWing tiers), and [#0034](DECISIONS.md) (shift-rename).
@@ -180,7 +180,21 @@ One row per (player, puzzle) the player has ever completed. Source of truth for 
 | `completed_at` | timestamptz not null default now() | |
 | PK | (`player_id`, `puzzle_code`) | Dedupes re-solves. |
 
-Inserted by `submit-move` on first multiplayer win and by an RPC `record_completion(p_code, p_mode)` for single-player. `on conflict do nothing` everywhere; we don't re-stamp the timestamp.
+Inserted by `submit-move` on first multiplayer win and by an RPC `record_completion(p_code, p_mode)` for single-player. `on conflict do nothing` everywhere; we don't re-stamp the timestamp. `get_completion_stats()` (migration 0019, Phase 5) aggregates the caller's rows per difficulty (join to `puzzles.difficulty`) — backend capture for the accounts feature. The `merge-progress` Edge Function moves rows `source_player → dest_player` (`on conflict do nothing`) when an anon identity is merged into an account ([#0043](DECISIONS.md)).
+
+### `issued_usernames`
+The player's current username. Added in migration 0008 as an immutable "issued once" record ([#0027](DECISIONS.md)); migration 0018 (Phase 5, [#0043](DECISIONS.md)) reshapes it into a **mutable current-username** table to back renames.
+
+| col | type | notes |
+|---|---|---|
+| `player_id` | uuid PK | Supabase `auth.uid()`. |
+| `username` | text | The full display string (`base`, or `base#NNNN`). Kept for back-compat / direct reads. |
+| `base` | text | Migration 0018. The name without discriminator. |
+| `discriminator` | int nullable | Migration 0018. NULL = bare base (no `#`); else the 4+-digit suffix. |
+| `issued_at` | timestamptz | |
+| unique | `(lower(base), coalesce(discriminator, 0))` | Migration 0018. Replaces the old `unique(username)` model — base names are shared, the `(base, discriminator)` pair is unique. |
+
+Written only via Edge Functions (`claim-username` for the anon default, `set-username` for signed-in renames) using the service-role key. RLS lets a player read their own row. Renaming updates this row in place; the old `(base, discriminator)` tuple is freed for reuse.
 
 ### `board_snapshots` (optional optimization)
 For fast rejoin, we can persist the current materialized board state per room (coop) or per `(room_id, player_id)` (battle). Not required for V1 — we can always replay `moves` on join. Add if reconnect times feel slow.
@@ -311,6 +325,7 @@ Web passes a `localStorage`-backed impl; RN passes an `AsyncStorage`-backed impl
 - `room_players` writable only when `player_id = auth.uid()`.
 - `moves` insertable only by a current member of the room.
 - Edge Function `submit_move` (Phase 2) validates the move against game rules before persisting + broadcasting.
+- **Accounts (Phase 5, [#0043](DECISIONS.md)).** Email sign-in links to the anonymous user in place (same `auth.uid()`), so RLS scoping is unaffected. `issued_usernames` writes stay service-role (Edge Functions only); reads are self-scoped. `merge-progress` is the one place that touches two identities — it requires proof of **both** (the dest account JWT in the Authorization header and the source anon token in the body), refuses unless the source is anonymous and the dest is the caller, and never merges in reverse or between two permanent accounts. This prevents a caller from claiming someone else's progress.
 
 `scripts/ingest/check-connectivity.ts` asserts the contract: anon can read `puzzles_public`, anon's direct read of `puzzles` returns 0 rows despite the ~15,000 real rows (RLS deny), and anon cannot request `solution` from the view at all (column doesn't exist there). Run it on every schema change.
 
@@ -328,9 +343,11 @@ This is the part that most often confuses new contributors. There are five kinds
 | **Puzzle code** | text (6-char base36) | `puzzles.code` | URL slug `/play/[code]`, FK from `rooms.puzzle_code`, `BoardState.puzzleCode`, in-repo sample pinning |
 | Room DB key | uuid | `rooms.id` | move-log scope, realtime channel name `room:{room_id}` |
 | **Room code** | text (6-char base36, random) | `rooms.code` | URL slug `/r/[code]`, what users share with friends |
-| Player | uuid | Supabase `auth.uid()` | `room_players.player_id`, `moves.player_id` |
+| Player | uuid | Supabase `auth.uid()` | `room_players.player_id`, `moves.player_id`, `player_completions.player_id`, `issued_usernames.player_id` |
 
 The two `code` columns share a format but live in independent tables and URL namespaces. Per [DECISIONS.md #0019](DECISIONS.md), #0020, #0021.
+
+The **player uuid is the same whether the user is anonymous or has a linked email** — first-time email sign-in promotes the anonymous user in place ([#0043](DECISIONS.md)). The one case where two player uuids exist for the same human is signing into an *existing* account from a second device: the device's anon uid is distinct from the account uid, and `merge-progress` reconciles them by moving `player_completions` over and deleting the orphan.
 
 ---
 
@@ -344,7 +361,9 @@ Per [DECISIONS.md #0023](DECISIONS.md), multiplayer mutations go through TypeScr
 | `join-room` | `{code, username}` | `{room_id, room_code, mode, status, puzzle_code, player_id, color, is_host, rejoined}` | ✅ deployed |
 | `start-game` | `{room_id}` | `{status: 'playing', started_at, puzzle_code}` | ✅ deployed — extended to handle next-round reset per [#0030](DECISIONS.md) |
 | `submit-move` | Single: `{room_id, cell, kind, value, client_move_id?}`. Batch (preferred): `{room_id, moves: [...]}`. | Single: `{seq, accepted, progress_pct, won, is_winner, idempotent?, cell_correct?}`. Batch: `{results: [{seq, idempotent?, cell_correct?}], progress_pct, won, is_winner, shared_win?}`. | ✅ rewritten 2026-05-23 per [#0036](DECISIONS.md) + extended for batches per [#0037](DECISIONS.md). Atomic `reserve_room_seq` / `reserve_room_seqs` RPCs, parallel reads, client_move_id idempotency, batch cap 200. `cell_correct` returned only when `settings.autoCheck` is on. |
-| `claim-username` | `{}` | `{username}` | ✅ deployed — idempotent per `auth.uid()`; backed by `issued_usernames` (migration 0008) |
+| `claim-username` | `{}` | `{username}` | ✅ deployed — idempotent per `auth.uid()`; backed by `issued_usernames` (migration 0008). Phase 5 extends the insert to also populate `base`/`discriminator` (anon default: generated `base`, NULL discriminator). |
+| `set-username` | `{username}` | `{username, base, discriminator}` | ✅ deployed (Phase 5, [#0043](DECISIONS.md)) — **signed-in only**. Validates the base, claims a bare base if free else a random `#NNNN` discriminator (width grows on exhaustion), frees the caller's prior tuple. |
+| `merge-progress` | `{source_token}` (+ dest JWT in Authorization) | `{merged, moved_completions}` | ✅ deployed (Phase 5, [#0043](DECISIONS.md)) — unions an abandoned anonymous identity's `player_completions` into the caller's account, releases the source username, deletes the orphan anon user. Refuses unless source is anonymous and dest is the caller. |
 | `update-room-settings` | `{room_id, settings}` | `{settings}` | ✅ deployed — host-only, lobby-only |
 | `change-difficulty` | `{room_id, difficulty}` | `{puzzle_code, difficulty}` | ✅ deployed — host-only, lobby-only. Re-picks a random puzzle of the new tier; `killer` is intentionally rejected by the input validator. See [#0035](DECISIONS.md). |
 | `change-mode` | `{room_id, mode}` | `{mode}` | ✅ deployed — host-only, lobby-only. Flips the room between `battle` and `coop`; backs the lobby mode toggle. |

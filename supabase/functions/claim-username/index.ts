@@ -1,16 +1,21 @@
 // Edge Function: claim-username
 //
-// Per [DECISIONS.md #0027], every player gets a globally-unique adj-noun name
-// from the bundled wordlist. The function is idempotent for a given auth.uid():
-// calling it again returns the same name.
+// Per [DECISIONS.md #0027] + [#0043], every player gets a globally-unique
+// adj-noun name from the bundled wordlist. The function is idempotent for a
+// given auth.uid(): calling it again returns the same name.
+//
+// As of [#0043] / migration 0018 the name is stored as `base` (anonymous
+// defaults are *bare* bases — no `#NNNN` discriminator; that's reserved for
+// signed-in renames via `set-username`). `username` is a generated display
+// column, so we insert `base` and read back `username`. Uniqueness is the
+// `(lower(base), coalesce(discriminator,0))` index.
 //
 // Algorithm:
 //   1. If caller already has a row in `issued_usernames`, return it.
-//   2. Try up to MAX_RANDOM random adj+noun pairs. Insert with unique
-//      constraint as the safety net for concurrent claims of the same name.
-//   3. If all random attempts collide (vanishingly unlikely at 440k combos),
-//      fall back to "adj-noun-NNNN" with a random 4-digit suffix, retried.
-//   4. If even that fails, generate a 6-char base36 random handle.
+//   2. Try up to MAX_RANDOM random adj+noun pairs as bare bases.
+//   3. If all collide (vanishingly unlikely at 440k combos), fall back to
+//      "adj-noun-NNNN" with a numeric suffix baked into the base, retried.
+//   4. If even that fails, generate a 6-char base36 random base.
 
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { handlePreflight } from '../_shared/cors.ts';
@@ -69,19 +74,19 @@ Deno.serve(async (req) => {
     return jsonResponse({ username: existing.data.username, fresh: false });
   }
 
-  // 2. Random adj+noun attempts.
+  // 2. Random adj+noun attempts (bare bases).
   for (let i = 0; i < MAX_RANDOM; i++) {
     const candidate = randomCombo();
     const ins = await admin
       .from('issued_usernames')
-      .insert({ player_id: userId, username: candidate })
+      .insert({ player_id: userId, base: candidate })
       .select('username')
       .maybeSingle();
     if (!ins.error && ins.data) {
       return jsonResponse({ username: ins.data.username, fresh: true });
     }
     // 23505 = unique_violation. Could be on player_id (raced our own select)
-    // or on username (someone else got there). Either way we re-check player_id
+    // or on (base) (someone else got there). Either way we re-check player_id
     // and bail or retry.
     if (ins.error?.code === '23505') {
       const re = await admin
@@ -92,17 +97,18 @@ Deno.serve(async (req) => {
       if (re.data?.username) {
         return jsonResponse({ username: re.data.username, fresh: false });
       }
-      continue; // collision on username — try a new pair
+      continue; // collision on base — try a new pair
     }
     return errorResponse('internal', `insert failed: ${ins.error?.message ?? 'unknown'}`, 500);
   }
 
-  // 3. Random suffix on top of a fresh pair.
+  // 3. Numeric suffix baked into a fresh base (still a bare base, not a
+  //    `#NNNN` discriminator — those belong to signed-in renames).
   for (let i = 0; i < MAX_SUFFIX_ATTEMPTS; i++) {
     const candidate = `${randomCombo()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const ins = await admin
       .from('issued_usernames')
-      .insert({ player_id: userId, username: candidate })
+      .insert({ player_id: userId, base: candidate })
       .select('username')
       .maybeSingle();
     if (!ins.error && ins.data) {
@@ -117,7 +123,7 @@ Deno.serve(async (req) => {
   const candidate = fallbackRandom();
   const ins = await admin
     .from('issued_usernames')
-    .insert({ player_id: userId, username: candidate })
+    .insert({ player_id: userId, base: candidate })
     .select('username')
     .maybeSingle();
   if (ins.error) {

@@ -2,7 +2,7 @@
 
 Four phases, each with an explicit **exit criterion** — we don't move on until it's met. Single player first, then battle, then coop, then iOS. This sequencing exists for a reason: each phase de-risks the next.
 
-**Current position:** Phase 2 battle mode is substantially complete and live; remaining gaps are the two-context Playwright smoke and lifting the local board-lock on the loser path. Phase 3 coop has an MVP landed (shared board, server-overlay sync, shared win). See [STATUS.md](STATUS.md) for the live snapshot.
+**Current position:** Phase 2 battle mode is substantially complete and live; remaining gaps are the two-context Playwright smoke and lifting the local board-lock on the loser path. Phase 3 coop has an MVP landed (shared board, server-overlay sync, shared win). **Phase 5 (authenticated accounts) is planned and being pulled ahead of Phase 4 (iOS)** — see [DECISIONS #0043](DECISIONS.md). See [STATUS.md](STATUS.md) for the live snapshot.
 
 | Phase | Status |
 |---|---|
@@ -10,6 +10,7 @@ Four phases, each with an explicit **exit criterion** — we don't move on until
 | Phase 1 — Single-player web | ✅ Complete (deployed at https://sudoku-squad-web.vercel.app/) |
 | Phase 2 — Battle mode | 🔄 Substantially landed (chunks A–H + UX polish pass) |
 | Phase 3 — Coop mode | 🔄 MVP landed (shared board, server-overlay sync, shared win) |
+| Phase 5 — Authenticated accounts | 🔄 Planned (pulled ahead of Phase 4) — see [DECISIONS #0043](DECISIONS.md) |
 | Phase 4 — iOS (React Native) | Pending |
 
 ---
@@ -87,6 +88,29 @@ These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 wor
 
 ---
 
+## Phase 5 — Authenticated accounts (pulled ahead of Phase 4)
+
+**Goal:** Optional email sign-in so progress is portable across devices and usernames are changeable — *without* losing the "no signup required" feel. Anonymous play stays the default. Full design + rationale in [DECISIONS #0043](DECISIONS.md).
+
+**Schema state going in:** anonymous auth + `auth.uid()`-keyed `room_players` / `moves` / `player_completions` already exist; usernames live in `issued_usernames` (globally-unique, immutable — [#0027](DECISIONS.md)). Progress already persists per device; this phase makes it portable and renameable.
+
+**Scope**
+- Keep anonymous sign-in as the default identity; add email **OTP** sign-in (magic link + 6-digit code) that *links* to the current anon user.
+- First-time sign-in (new email): link in place → same `auth.uid()`, progress preserved automatically.
+- Existing-account sign-in: `merge-progress` Edge Function unions the device's anon progress into the account (Supabase can't merge two user IDs).
+- `set-username` Edge Function: signed-in renames with Discord-style `base#NNNN` discriminators (random, width-growing, freed on change-away). Anonymous users keep the immutable adj-noun handle.
+- Backend stats capture only: `get_completion_stats()` RPC (per-difficulty + total); no stats screen this iteration.
+- Top-corner hamburger menu (Material Symbols) on all screens; Account item → "Sign in" / username → change-username + sign-out.
+- Migrations `0018` (mutable username table: `base`/`discriminator` + uniqueness on `(lower(base), coalesce(discriminator,0))`) and `0019` (stats RPC). Supabase project config: email provider on (6-digit OTP default), email templates, redirect allow-list, `/auth/callback`.
+
+**Exit criterion**
+- A player solves puzzles anonymously on device A, signs in, then signs in on device B (fresh, with its own anon progress) — and device B shows the **union** of both devices' solved counts. Renaming to a taken base yields a `#NNNN` discriminator; changing away frees it. Sign-out drops to a fresh anonymous identity with progress intact under the account.
+- No regression to anonymous-only play (the default path), and `packages/core` stays platform-agnostic.
+
+**Estimate:** ~1–1.5 weeks (mostly Edge Functions + the auth UI; no game-logic changes).
+
+---
+
 ## Phase 4 — iOS (React Native)
 
 **Goal:** A native iOS app that plays cross-room with web players, sharing `packages/core`.
@@ -114,7 +138,7 @@ After Phase 4 lands, the natural next moves are:
 
 1. **A real "evil" / 7+ tier** once we have a richer high-difficulty source (the 3M dataset has only ~100 rows above rating 7.0 — not enough to seed a 2,500-row sample). Six tiers (warmup/easy/medium/hard/expert + hidden killer) already shipped in V1.
 2. **Daily puzzle** — same puzzle for everyone, leaderboard for the day.
-3. **Persistent accounts** (Sign in with Apple + magic link) → profiles, history, stats.
+3. ~~**Persistent accounts** (Sign in with Apple + magic link) → profiles, history, stats.~~ *Pulled forward as Phase 5* — email OTP accounts landing now ([DECISIONS #0043](DECISIONS.md)). Sign in with Apple, profiles/history UI, and leaderboards remain V2.
 4. **Match history & replays.**
 5. **Friends list & private invites.**
 6. **Android** (only if the iOS app gets traction).

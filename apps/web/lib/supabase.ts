@@ -24,7 +24,15 @@ export function getSupabase(): SupabaseClient | null {
   if (!url || !anon) return null;
   _client = createClient(url, anon, {
     // Persist the anon session so a refreshed tab is still the same player.
-    auth: { persistSession: true, autoRefreshToken: true },
+    // PKCE + manual URL handling: the /auth/callback route exchanges the
+    // magic-link code/token itself (see auth-store.completeMagicLink), so we
+    // turn off the SDK's auto-detect to avoid double-consuming the URL.
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+      flowType: 'pkce',
+    },
   });
   return _client;
 }

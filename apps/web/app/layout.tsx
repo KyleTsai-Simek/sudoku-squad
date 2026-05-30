@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { AppHeader } from '@/components/app-header';
 
 export const metadata: Metadata = {
   title: 'Sudoku Squad',
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-stone-50 text-stone-900 antialiased">{children}</body>
+      <body className="min-h-screen bg-stone-50 text-stone-900 antialiased">
+        <AppHeader />
+        {children}
+      </body>
     </html>
   );
 }
