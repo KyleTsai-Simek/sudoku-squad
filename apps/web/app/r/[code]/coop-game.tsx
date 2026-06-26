@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useCoopStore, computeOwnership } from '@/lib/coop-store';
+import { playerColorStyle } from '@/lib/player-colors';
 import {
   fetchAllMoves,
   fetchPuzzleGivens,
@@ -241,9 +242,9 @@ function CoopPlayerNames({
             <span
               aria-hidden
               className="inline-block h-2 w-2 shrink-0 rounded-full"
-              style={{ backgroundColor: p.color }}
+              style={playerColorStyle(p.color, 'backgroundColor')}
             />
-            <span className="font-semibold" style={{ color: p.color }}>
+            <span className="font-semibold" style={playerColorStyle(p.color, 'color')}>
               {p.username}
             </span>
             {count > 0 ? (
@@ -283,7 +284,7 @@ function CoopProgress({
   const segments = players
     .map((p) => ({
       player_id: p.player_id,
-      color: p.color,
+      colorStyle: playerColorStyle(p.color, 'backgroundColor'),
       count: cellOwnership.get(p.player_id) ?? 0,
     }))
     .filter((s) => s.count > 0);
@@ -302,7 +303,7 @@ function CoopProgress({
             className="h-full transition-all"
             style={{
               width: `${(s.count / Math.max(1, totalEmpty)) * 100}%`,
-              backgroundColor: s.color,
+              ...s.colorStyle,
             }}
           />
         ))}

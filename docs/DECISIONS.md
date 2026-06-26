@@ -17,6 +17,26 @@ Format:
 
 ---
 
+## 0045 — Theme-aware player identity colors
+**Date:** 2026-06-26
+**Status:** Accepted and implemented in web.
+
+**Context.** Multiplayer player colors are stored on `room_players.color` as one of the eight original palette hex values from [#0026](DECISIONS.md). After the semantic blue theme and dark-mode pass ([#0044](DECISIONS.md)), those raw colors still drove lobby dots, battle progress bars, coop player names, coop progress segments, and the battle winner label. Several original values were chosen for white backgrounds and were too bright to use as text in light mode, while others needed lighter variants in dark mode.
+
+**Decision.** Keep the stored server hex values as stable player-color identifiers, and map them in the web client to CSS custom properties. `apps/web/app/globals.css` now defines one light and one dark token for each player slot (`amber`, `sky`, `emerald`, `rose`, `violet`, `orange`, `teal`, `fuchsia`), and `apps/web/lib/player-colors.ts` translates the stored hex values to those tokens. Player dots, progress fills, coop player-name text, and winner labels use the token helper instead of raw inline hex values. Unknown legacy values fall back to the sky slot rather than introducing a raw color.
+
+**Alternatives considered.**
+- Change the server palette values. Rejected because existing rooms and rejoin flows already store the original hexes; treating those values as identifiers avoids data churn.
+- Store separate light/dark colors in `room_players`. Rejected because player colors are presentation concerns and the database only needs the stable identity slot.
+- Keep raw inline colors for non-text dots/progress bars only. Rejected because names and winner labels need text contrast, and a single helper keeps the whole player-color surface consistent.
+
+**Consequences.**
+- Player identity colors now participate in the unified web theme without changing Supabase schema or Edge Function behavior.
+- The chosen light tokens have at least 5.18:1 contrast on white surfaces; dark tokens have at least 6.56:1 contrast on the dark game surface.
+- Future cursor chips should use the same `playerColorStyle` helper and, if they need colored backgrounds with text inside, should add paired foreground/soft background tokens instead of deriving opacity from raw hex values.
+
+---
+
 ## 0044 — Semantic blue theme and local light/dark preference
 **Date:** 2026-06-26
 **Status:** Accepted and implemented in web; verification/user acceptance pending. Resolves the visual-identity open question enough to ship the palette/theme pass, while leaving logo/illustration work separate.

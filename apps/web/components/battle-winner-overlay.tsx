@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { fireWinConfetti } from '@/lib/confetti';
+import { playerColorStyle } from '@/lib/player-colors';
 import { returnToLobby, type RoomPlayerProgress } from '@/lib/rooms';
 
 interface Props {
@@ -58,7 +59,7 @@ export function BattleWinnerOverlay({
       <div className="w-full max-w-sm rounded-2xl bg-surface p-6 text-center shadow-2xl">
         <p
           className="text-sm font-medium uppercase tracking-widest"
-          style={{ color: winner?.color ?? '#f59e0b' }}
+          style={playerColorStyle(winner?.color, 'color')}
         >
           {youWon ? 'You won!' : `${winner?.username ?? 'Someone'} won`}
         </p>

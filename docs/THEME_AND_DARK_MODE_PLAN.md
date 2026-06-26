@@ -1,6 +1,6 @@
 # Theme Refresh + Dark Mode Plan
 
-**Last updated:** 2026-06-26. **Status:** Implemented and verified in web; user acceptance pending.
+**Last updated:** 2026-06-26. **Status:** Implemented and verified in web; player identity colors are now theme-aware; user acceptance pending.
 
 Goal: refresh the web app around a user-friendly, high-contrast blue primary color, extend it into a complete semantic palette, migrate the full UI to that scheme, and add light/dark mode support with a local `auto` / `light` / `dark` preference.
 
@@ -18,6 +18,7 @@ Goal: refresh the web app around a user-friendly, high-contrast blue primary col
 1. **Choose the palette contract.**
    - ✅ Use an accessible default blue centered on `#1d4ed8` / `#2563eb`, with semantic support colors for background, surface, text, border, selected cell, related cells, success/completed, warning/notes, danger/conflict, and multiplayer player colors.
    - ✅ Keep player identity colors distinct from the UI primary color so coop/battle ownership still reads clearly.
+   - ✅ Map the original eight stored player hex values to dedicated light/dark `--player-color-*` tokens instead of using raw inline colors in multiplayer UI.
 
 2. **Add theme infrastructure.**
    - ✅ Add Tailwind `darkMode: 'class'`.
@@ -32,6 +33,7 @@ Goal: refresh the web app around a user-friendly, high-contrast blue primary col
 
 4. **Migrate the UI.**
    - ✅ Replace hard-coded neutral/action colors across home, lobby, game screens, sheets, overlays, buttons, inputs, progress bars, and loading/error states with semantic tokens.
+   - ✅ Replace raw player-color usage in lobby dots, battle progress, battle winner text, coop names, and coop progress segments with the player-token helper.
    - ✅ Update the three board components together so single-player, battle, and coop remain visually consistent.
    - ✅ Preserve existing layout behavior and the integer-pixel board sizing.
 
@@ -39,6 +41,7 @@ Goal: refresh the web app around a user-friendly, high-contrast blue primary col
    - ✅ Run lint/typecheck/build plus affected Playwright smokes.
    - ✅ Manually verify desktop and mobile widths in both light and dark modes.
    - ✅ Check board-state contrast, modal/account-menu overlays, notes-mode amber, and theme persistence across reloads.
+   - ✅ Check player identity token contrast in light and dark mode; all eight player text colors are at least 5.18:1 on light surfaces and 6.56:1 on the dark game surface.
 
 6. **Manual acceptance.**
    - 🔲 The final project step is user manual confirmation that the refreshed palette, light/dark behavior, and settings override all feel correct.
@@ -50,6 +53,7 @@ Goal: refresh the web app around a user-friendly, high-contrast blue primary col
 - `pnpm --filter @sudoku-squad/web build` (passes with the same warning)
 - `pnpm --filter @sudoku-squad/web test:e2e` (5 / 5)
 - Browser check: desktop + 375 px mobile, home + `/play/3santv`, account-menu Light/Dark toggle, theme persistence across reload, board/number-pad fit, and active notes-mode amber. `auto` is implemented via `prefers-color-scheme`; final user acceptance should include a native system-setting check.
+- Player-color sweep: stored server colors now route through `apps/web/lib/player-colors.ts`; the only remaining hard-coded player hexes in web are the mapping table for the server-stored identifiers.
 
 ## Resolved implementation questions
 

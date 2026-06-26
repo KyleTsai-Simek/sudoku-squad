@@ -104,6 +104,7 @@ Optional email sign-in, layered on top of anonymous play:
 - Primary app color is a user-friendly, high-contrast blue, extended into semantic UI tokens instead of direct Tailwind palette utilities.
 - Light mode and dark mode are supported. Default behavior is `auto`, following the user's native system setting; users can override locally to `light` or `dark` from the account menu.
 - Notes mode keeps its warm amber accent.
+- Player identity colors are stable per room but rendered through theme-aware light/dark tokens, so lobby dots, battle progress, coop ownership, coop names, and winner labels remain readable in both modes.
 - Board state colors must remain readable in both modes: givens, entered values, selected cell, related row/column/box, same-value highlights, completed-digit state, conflicts, and incorrect auto-check state.
 - Color cannot be the only signal for important states; existing text, labels, icons, and focus affordances should remain intact.
 

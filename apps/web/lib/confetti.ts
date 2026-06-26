@@ -2,6 +2,21 @@
 
 import confetti from 'canvas-confetti';
 
+const CONFETTI_COLOR_VARS = [
+  '--color-warning',
+  '--color-primary',
+  '--color-success',
+  '--color-danger',
+  '--player-color-violet',
+];
+
+function themeColor(name: string): string | null {
+  const raw = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const parts = raw.split(/\s+/).map(Number);
+  if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) return null;
+  return `rgb(${parts[0]}, ${parts[1]}, ${parts[2]})`;
+}
+
 /**
  * Tiny wrapper around canvas-confetti. Three short bursts from random points
  * along the bottom edge — feels like fireworks more than a tickertape dump.
@@ -9,6 +24,7 @@ import confetti from 'canvas-confetti';
  */
 export function fireWinConfetti(): void {
   if (typeof window === 'undefined') return;
+  const colors = CONFETTI_COLOR_VARS.map(themeColor).filter((color) => color !== null);
   const burst = (originX: number, delay = 0) => {
     window.setTimeout(() => {
       confetti({
@@ -16,7 +32,7 @@ export function fireWinConfetti(): void {
         spread: 70,
         startVelocity: 45,
         origin: { x: originX, y: 0.85 },
-        colors: ['#f59e0b', '#0ea5e9', '#10b981', '#f43f5e', '#8b5cf6'],
+        colors: colors.length > 0 ? colors : undefined,
       });
     }, delay);
   };

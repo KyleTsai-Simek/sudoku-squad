@@ -28,6 +28,7 @@ The web theme refresh is tracked in [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK
 - `apps/web/app/globals.css` defines light and dark CSS custom properties for semantic colors.
 - `apps/web/tailwind.config.ts` exposes semantic color tokens that map to those CSS variables.
 - `apps/web/lib/theme-store.ts` owns the local `auto` / `light` / `dark` appearance preference. It is stored in `localStorage`; `auto` follows `prefers-color-scheme`, and manual choices override it immediately.
+- `room_players.color` remains a server-assigned stable hex from the eight-color palette, but the web app treats it as an identity key. `apps/web/lib/player-colors.ts` maps those stored hexes to `--player-color-*` CSS variables with separate light/dark values for lobby dots, battle progress, coop ownership segments, coop names, and winner labels ([DECISIONS #0045](DECISIONS.md)).
 - Board components should keep explicit state-to-class lookups so selected/conflict/same-value precedence stays deterministic.
 
 ---
@@ -158,7 +159,7 @@ A player's membership in a room. Anonymous; identified by `(room_id, player_id)`
 | `room_id` | uuid FK | |
 | `player_id` | uuid | Supabase anon user ID. |
 | `username` | text | User-chosen (defaults to a generated `adjective-noun`, persisted in localStorage; see [#0027](DECISIONS.md)). |
-| `color` | text | Auto-assigned from the 8-color palette ([#0026](DECISIONS.md)). |
+| `color` | text | Auto-assigned from the 8-color palette ([#0026](DECISIONS.md)); web maps the stored value to theme-aware player tokens ([#0045](DECISIONS.md)). |
 | `joined_at` | timestamptz | |
 | `is_host` | boolean | |
 | `progress_pct` | smallint | Cached % of non-given cells the player has *filled* (right or wrong). Updated by `submit-move`. Doesn't leak correctness — for that, the host enables `settings.autoCheck` and clients flag wrong cells from the per-move `cell_correct` response. Reset to 0 on each new round. |

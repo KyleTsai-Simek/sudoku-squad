@@ -45,6 +45,7 @@ Cross-cutting web UI project requested 2026-06-26. Working plan: [THEME_AND_DARK
 - [x] Add the theme selector to the account UI.
 - [x] Migrate home, lobby, game, overlays, sheets, controls, progress bars, and board states to semantic tokens.
 - [x] Keep notes mode on a warm amber accent.
+- [x] Extend player identity colors to light/dark tokens and migrate multiplayer dots, names, progress bars, and winner labels to the unified player-color helper.
 - [x] Verify lint/typecheck/build and affected Playwright smokes.
 - [x] Manually verify desktop/mobile light and dark modes, focus states, board contrast, and settings override persistence.
 - [ ] User manual confirmation should include `auto` behavior against the native system setting.

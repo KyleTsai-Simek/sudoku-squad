@@ -44,6 +44,14 @@
     --color-cell-entered: 29 78 216;
     --color-note-text: 100 116 139;
     --color-overlay: 15 23 42;
+    --player-color-amber: 146 64 14;
+    --player-color-sky: 3 105 161;
+    --player-color-emerald: 4 120 87;
+    --player-color-rose: 190 18 60;
+    --player-color-violet: 109 40 217;
+    --player-color-orange: 194 65 12;
+    --player-color-teal: 15 118 110;
+    --player-color-fuchsia: 162 28 175;
   }
 
   .dark {
@@ -87,6 +95,14 @@
     --color-cell-entered: 147 197 253;
     --color-note-text: 148 163 184;
     --color-overlay: 2 6 23;
+    --player-color-amber: 251 191 36;
+    --player-color-sky: 56 189 248;
+    --player-color-emerald: 52 211 153;
+    --player-color-rose: 251 113 133;
+    --player-color-violet: 167 139 250;
+    --player-color-orange: 251 146 60;
+    --player-color-teal: 45 212 191;
+    --player-color-fuchsia: 232 121 249;
   }
 
   html {

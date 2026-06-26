@@ -25,6 +25,7 @@ import { getUsername } from '@/lib/username';
 import { AppHeader } from '@/components/app-header';
 import { LobbySettingsPanel } from '@/components/lobby-settings-panel';
 import { DEFAULT_ROOM_SETTINGS } from '@/lib/rooms';
+import { playerColorStyle } from '@/lib/player-colors';
 import { BattleGame } from './battle-game';
 import { CoopGame } from './coop-game';
 
@@ -389,7 +390,7 @@ export function LobbyClient({ code }: { code: string }) {
                   <span
                     aria-hidden
                     className="inline-block h-3 w-3 rounded-full"
-                    style={{ backgroundColor: p.color }}
+                    style={playerColorStyle(p.color, 'backgroundColor')}
                   />
                   <span className="font-medium text-foreground">{p.username}</span>
                   {p.is_host ? (

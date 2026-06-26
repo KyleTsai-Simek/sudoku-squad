@@ -1,6 +1,7 @@
 'use client';
 
 import type { RoomPlayerProgress } from '@/lib/rooms';
+import { playerColorStyle } from '@/lib/player-colors';
 
 interface Props {
   players: RoomPlayerProgress[];
@@ -33,7 +34,7 @@ export function OpponentProgress({ players, ownPlayerId, ownProgressPct }: Props
             <span
               aria-hidden
               className="inline-block h-2 w-2 shrink-0 rounded-full"
-              style={{ backgroundColor: p.color }}
+              style={playerColorStyle(p.color, 'backgroundColor')}
             />
             <span
               className={
@@ -50,7 +51,7 @@ export function OpponentProgress({ players, ownPlayerId, ownProgressPct }: Props
                   className="block h-full rounded-full transition-all"
                   style={{
                     width: `${Math.min(100, Math.max(0, pct))}%`,
-                    backgroundColor: p.color,
+                    ...playerColorStyle(p.color, 'backgroundColor'),
                   }}
                 />
               </span>
