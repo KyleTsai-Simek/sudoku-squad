@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AppHeader } from '@/components/app-header';
 import { AuthForm } from '@/components/auth-sheet';
 import { useAuthStore } from '@/lib/auth-store';
 
@@ -26,30 +27,28 @@ export default function SignInPage() {
   }
 
   return (
-    <main className="min-h-dvh bg-background px-4 py-4 text-foreground sm:px-6">
-      <div className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-md flex-col">
-        <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-6 px-6 py-4">
+      <AppHeader />
+
+      <div className="text-center">
+        <h1 className="text-5xl font-semibold tracking-tight text-foreground">Sudoku Squad</h1>
+      </div>
+
+      <section className="flex w-full flex-col gap-3">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={goBack}
-            className="justify-self-start text-sm font-medium text-muted hover:text-foreground"
+            aria-label="Back"
+            className="rounded-md px-2 py-1 text-sm text-muted hover:bg-surface-muted"
           >
-            ← Back
+            ←
           </button>
-          <h1 className="justify-self-center text-sm font-semibold text-foreground">Sign in</h1>
-          <div aria-hidden="true" />
-        </header>
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Sign in</h2>
+        </div>
 
-        <section className="flex flex-1 flex-col justify-center py-10">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold tracking-normal text-foreground">
-              Sign in
-            </h2>
-          </div>
-
-          <AuthForm onComplete={() => router.push(nextPath)} />
-        </section>
-      </div>
+        <AuthForm onComplete={() => router.push(nextPath)} />
+      </section>
     </main>
   );
 }
