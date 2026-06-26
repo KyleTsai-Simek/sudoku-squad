@@ -93,12 +93,12 @@ async function main(): Promise<void> {
     console.log(`\nFound at row ${(idIdx >= 0 ? fields[idIdx] : `#${scanned}`)}:`);
     console.log(`  Raw rating: ${rating}`);
     // Show the tier band it falls in (kept in sync with RATING_BANDS in
-    // src/index.ts; see DECISIONS #0034 for the rename).
+    // src/index.ts; see DECISIONS #0047 for the latest rename).
     let band = '';
-    if (rating >= 0 && rating < 0.75) band = 'medium [0.0, 0.75)';
-    else if (rating < 2.5) band = 'hard   [0.75, 2.5)';
-    else if (rating < 5.0) band = 'expert [2.5, 5.0)';
-    else if (rating < 7.0) band = 'killer [5.0, 7.0)  (hidden tier)';
+    if (rating >= 0 && rating < 0.75) band = 'hard    [0.0, 0.75)';
+    else if (rating < 2.5) band = 'expert  [0.75, 2.5)';
+    else if (rating < 5.0) band = 'extreme [2.5, 5.0)';
+    else if (rating < 7.0) band = 'killer  [5.0, 7.0)  (hidden tier)';
     else band = 'above 7.0 (out of bands)';
     console.log(`  Band:       ${band}`);
     rl.close();

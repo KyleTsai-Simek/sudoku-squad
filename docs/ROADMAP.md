@@ -22,7 +22,7 @@ Four phases, each with an explicit **exit criterion** — we don't move on until
 
 **What landed:**
 - Monorepo (pnpm 11 workspaces, Next.js 15 app, `packages/core` with engine, `scripts/ingest`).
-- **15,000 puzzles** in Supabase across **six tiers, 2,500 each**, all QQWing-generated after [DECISIONS #0042](DECISIONS.md): warmup/easy use the original augmented naked-singles pipeline; medium/hard/expert/killer use technique-graded QQWing metadata. `killer` is hidden from the UI. Short 6-char codes assigned per puzzle. See [DECISIONS #0033](DECISIONS.md), [#0034](DECISIONS.md), and [#0042](DECISIONS.md).
+- **15,000 puzzles** in Supabase across **six tiers, 2,500 each**, all QQWing-generated after [DECISIONS #0042](DECISIONS.md) and shifted in [#0047](DECISIONS.md): easy/medium use the original augmented naked-singles pipeline; hard/expert/extreme/killer use technique-graded QQWing metadata. `killer` is hidden from the UI. Short 6-char codes assigned per puzzle. See [DECISIONS #0033](DECISIONS.md), [#0034](DECISIONS.md), [#0042](DECISIONS.md), and [#0047](DECISIONS.md).
 - `packages/core`: types, validator, conflict checker, completion checker, pure move reducer (with auto-clean peer notes), undo/redo history (multi-cell undo + `peekLastMove`), seq-log helpers, faithful board diffing, and username discriminator logic. **82/82 tests passing** including `fast-check` property tests.
 - Web app: home page with per-tier "New game" CTAs that pick a random unsolved puzzle and navigate to `/play/[code]`. Full sudoku UI (grid + number pad + notes + undo/redo + timer + settings + completion overlay + keyboard shortcuts overlay). Hint was removed in Chunk A. Conflict highlighting, same-value highlighting, optional auto-check. Completions tracked server-side in `player_completions` (Chunk F).
 - Tooling: ESLint flat config enforces `packages/core` purity. Playwright happy-path smoke. GitHub Actions CI runs everything on PR + push.
@@ -141,8 +141,8 @@ Detailed implementation/testing tracker: [SAVED_ACCOUNTS_PLAN.md](SAVED_ACCOUNTS
 
 After Phase 4 lands, the natural next moves are:
 
-1. **A real "evil" / 7+ tier** once we have a richer high-difficulty source (the 3M dataset has only ~100 rows above rating 7.0 — not enough to seed a 2,500-row sample). Six tiers (warmup/easy/medium/hard/expert + hidden killer) already shipped in V1.
-2. **Daily puzzle** — same puzzle for everyone, leaderboard for the day.
+1. **A real "evil" / 7+ tier** once we have a richer high-difficulty source (the 3M dataset has only ~100 rows above rating 7.0 — not enough to seed a 2,500-row sample). Six tiers (easy/medium/hard/expert/extreme + hidden killer) already shipped in V1.
+2. **Daily puzzle leaderboard** — the shared daily puzzle set and daily completion capture are implemented in the daily-puzzles branch ([DECISIONS #0046](DECISIONS.md)); ranking/history UI is still future work.
 3. ~~**Persistent accounts** (Sign in with Apple + magic link) → profiles, history, stats.~~ *Pulled forward as Phase 5* — email OTP accounts landing now ([DECISIONS #0043](DECISIONS.md)). Sign in with Apple, profiles/history UI, and leaderboards remain V2.
 4. **Match history & replays.**
 5. **Friends list & private invites.**

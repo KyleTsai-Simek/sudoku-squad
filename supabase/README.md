@@ -17,6 +17,8 @@ Numbered files in `migrations/` apply in order. Each one is a complete SQL scrip
 | `0005_pick_random_puzzle_code.sql` | SECURITY DEFINER RPC `pick_random_puzzle_code(difficulty)`. Used by `create-room` to assign a puzzle to a new room. |
 | `0006_fix_room_players_rls_recursion.sql` | Replaces the recursive `room_players_read_member` policy with one that goes through a SECURITY DEFINER `is_room_member(room_id)` helper. Same fix applied to `moves_read_member`. |
 | `0007_realtime_publications.sql` | Adds `room_players`, `moves`, `rooms` to the `supabase_realtime` publication so the client can subscribe to `postgres_changes` for live lobby/game updates. |
+| `0020_daily_puzzles.sql` | Adds daily puzzle assignments, daily completion tracking, solve-time metadata, and daily RPCs. |
+| `0021_fix_daily_puzzles_rpc_ambiguity.sql` | Replaces the daily assignment/read RPCs to avoid PL/pgSQL output-column ambiguity. |
 
 ### Running locally
 
@@ -45,6 +47,8 @@ Documented in [docs/ARCHITECTURE.md §4](../docs/ARCHITECTURE.md):
 
 - `puzzle_code_for(smallint[]) → text` — deterministic puzzle-code hash.
 - `sp_get_puzzle(p_code text) → table(...)` — single-player only; returns full row including solution.
+- `get_daily_puzzles(p_date date?) → table(...)` — assigns/returns the Easy / Medium / Hard daily set.
+- `record_single_player_completion(...) → bool` — records SP solve time and daily completion metadata.
 
 ## Edge Functions
 

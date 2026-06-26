@@ -1,7 +1,7 @@
 /**
  * One-off difficulty audit. Reports:
  *
- *   1. How many puzzles are in each tier (`easy` / `medium` / `hard` / `expert`).
+ *   1. How many puzzles are in each tier (`easy` / `medium` / `hard` / `expert` / `extreme`).
  *   2. The clue-count distribution within each tier (a proxy for difficulty —
  *      fewer clues ≈ harder).
  *   3. The raw rating distribution within each tier, by matching the DB rows
@@ -21,7 +21,7 @@ import { createClient } from '@supabase/supabase-js';
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const TIERS = ['warmup', 'easy', 'medium', 'hard', 'expert', 'killer'] as const;
+const TIERS = ['easy', 'medium', 'hard', 'expert', 'extreme', 'killer'] as const;
 type Tier = (typeof TIERS)[number];
 
 function countClues(givens: ReadonlyArray<number>): number {
@@ -204,18 +204,18 @@ async function main(): Promise<void> {
 
   // 4. Bucket boundaries used at ingest
   console.log('=== Ingest-time bucket boundaries (scripts/ingest/src/index.ts) ===');
-  console.log('  Radcliffe 3M tier bands (half-open [lo, hi)) — post #0034 rename:');
-  console.log('    medium  [0.0, 0.75)');
-  console.log('    hard    [0.75, 2.5)');
-  console.log('    expert  [2.5, 5.0)');
+  console.log('  Legacy Radcliffe 3M tier bands (half-open [lo, hi)) — post #0047 rename:');
+  console.log('    hard     [0.0, 0.75)');
+  console.log('    expert   [0.75, 2.5)');
+  console.log('    extreme  [2.5, 5.0)');
   console.log('    killer  [5.0, 7.0)  ← hidden in UI');
   console.log('    (rows with rating ≥ 7.0 are skipped — outside every band)');
   console.log('  QQWing tiers (negative ratings, naked-singles-only):');
-  console.log('    warmup  rating [-10, -5)  (clues 35-40)');
-  console.log('    easy    rating [-5, 0)    (clues 29-34)');
+  console.log('    easy    rating [-10, -5)  (clues 35-40)');
+  console.log('    medium  rating [-5, 0)    (clues 29-34)');
   console.log();
   console.log('  Per-(tier, clue-count) targets are configured in TARGET_PER_CELL.');
-  console.log('  Easy biases toward more clues, expert toward fewer.');
+  console.log('  Easier tiers bias toward more clues, harder tiers toward fewer.');
   console.log();
 
   console.log('Done.');

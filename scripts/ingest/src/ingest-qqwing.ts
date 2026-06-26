@@ -1,7 +1,6 @@
 /**
- * Generate easier-than-easy sudoku puzzles via QQWing and seed two new tiers
- * (`warmup`, `beginner`) that sit below the existing easy tier with negative
- * ratings in [-10, 0). See docs/DECISIONS.md #0033.
+ * Generate the two easiest sudoku tiers via QQWing. These are naked-singles-only
+ * puzzles with negative ratings in [-10, 0). See docs/DECISIONS.md #0033/#0047.
  *
  * Pipeline:
  *   1. Generate a puzzle via QQWing.
@@ -11,7 +10,7 @@
  *      correct givens can't make a puzzle harder, so the result stays SIMPLE
  *      by construction; we re-verify anyway to be paranoid.
  *   5. Assign rating = -((clues - 28) / 12) * 10, clamped to [-10, 0). Tier:
- *      rating < -5 → warmup, else → beginner.
+ *      rating < -5 → easy, else → medium.
  *   6. Solver-verify uniqueness (mirroring the radcliffe ingest) and insert.
  *
  * Run:
@@ -29,9 +28,8 @@ import { hasUniqueSolution, solve } from './solver';
 
 const SIMPLE = 1; // qqwing.Difficulty.SIMPLE
 
-/** Tiers produced by the QQWing ingest. After the #0034 rename: warmup
- *  unchanged; what was 'beginner' is now 'easy'. */
-type QqwingTier = 'warmup' | 'easy';
+/** Tiers produced by the QQWing ingest after the #0047 label shift. */
+type QqwingTier = 'easy' | 'medium';
 
 interface Args {
   dryRun: boolean;
@@ -49,13 +47,13 @@ function parseArgs(): Args {
 }
 
 // Per-(tier, clues) targets. Sums to 2,500 per tier (5,000 total). Tier
-// boundaries follow rating = -((clues - 28) / 12) * 10: clues 35-40 → warmup,
-// clues 29-34 → beginner. Within each tier the bias keeps the per-clue-count
-// shape monotonic — warmup leans toward 38-40 (almost-done puzzles), beginner
-// leans toward 29-30 (still trivial, but with some hunting).
+// boundaries follow rating = -((clues - 28) / 12) * 10: clues 35-40 → easy,
+// clues 29-34 → medium. Within each tier the bias keeps the per-clue-count
+// shape monotonic — easy leans toward 38-40 (almost-done puzzles), medium
+// leans toward 29-30 (still gentle, but with some hunting).
 const TARGET_PER_CELL: Record<QqwingTier, Record<number, number>> = {
-  warmup:   { 35: 100, 36: 200, 37: 300, 38: 500, 39: 700, 40: 700 }, // sum 2500
-  easy: { 29: 700, 30: 700, 31: 400, 32: 300, 33: 250, 34: 150 }, // sum 2500
+  easy: { 35: 100, 36: 200, 37: 300, 38: 500, 39: 700, 40: 700 }, // sum 2500
+  medium: { 29: 700, 30: 700, 31: 400, 32: 300, 33: 250, 34: 150 }, // sum 2500
 };
 
 function tierTotal(tier: QqwingTier): number {
@@ -135,8 +133,8 @@ interface CellState {
 
 function buildCounters(): Record<QqwingTier, Map<number, CellState>> {
   return {
-    warmup: new Map(Object.entries(TARGET_PER_CELL.warmup).map(([c, t]) => [Number(c), { filled: 0, target: t }])),
     easy: new Map(Object.entries(TARGET_PER_CELL.easy).map(([c, t]) => [Number(c), { filled: 0, target: t }])),
+    medium: new Map(Object.entries(TARGET_PER_CELL.medium).map(([c, t]) => [Number(c), { filled: 0, target: t }])),
   };
 }
 
@@ -147,7 +145,7 @@ function pickCell(counters: Record<QqwingTier, Map<number, CellState>>):
   | null {
   const open: Array<{ tier: QqwingTier; clues: number; remaining: number }> = [];
   let total = 0;
-  for (const tier of ['warmup', 'easy'] as const) {
+  for (const tier of ['easy', 'medium'] as const) {
     for (const [c, s] of counters[tier]) {
       const remaining = s.target - s.filled;
       if (remaining > 0) {
@@ -167,10 +165,10 @@ function pickCell(counters: Record<QqwingTier, Map<number, CellState>>):
 
 async function main(): Promise<void> {
   const args = parseArgs();
-  const overallTarget = args.count > 0 && args.count !== 5000 ? args.count : tierTotal('warmup') + tierTotal('easy');
+  const overallTarget = args.count > 0 && args.count !== 5000 ? args.count : tierTotal('easy') + tierTotal('medium');
   console.log(`Generating naked-singles-only puzzles via QQWing (target ${overallTarget}) ...`);
   console.log('Per-cell targets:');
-  for (const tier of ['warmup', 'easy'] as const) {
+  for (const tier of ['easy', 'medium'] as const) {
     const parts = Object.entries(TARGET_PER_CELL[tier]).map(([c, n]) => `${c}c=${n}`).join(' ');
     console.log(`  ${tier.padEnd(9)} ${parts}  (sum ${tierTotal(tier)})`);
   }

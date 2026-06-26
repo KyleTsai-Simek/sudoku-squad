@@ -98,6 +98,14 @@ function isWon(board: BoardState, solution: number[]): boolean {
   return isFilled(board) && isCompleteWithSolution(board, solution);
 }
 
+function recordCurrentCompletion(puzzle: FetchedPuzzle, startedAt: number | null): void {
+  void recordSinglePlayerCompletion({
+    code: puzzle.code,
+    solveTimeMs: startedAt === null ? undefined : Math.max(0, Date.now() - startedAt),
+    daily: puzzle.daily,
+  });
+}
+
 export const useGameStore = create<GameState>((set, get) => ({
   puzzle: null,
   board: null,
@@ -166,7 +174,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setNotesMode: (on) => set({ notesMode: on }),
 
   enterValue: (value) => {
-    const { board, selected, puzzle, notesMode, finishedAt } = get();
+    const { board, selected, puzzle, notesMode, finishedAt, startedAt } = get();
     if (!board || !puzzle || selected === null || finishedAt !== null) return;
     const cell = board.cells[selected];
     if (!cell || cell.given !== null) return;
@@ -188,7 +196,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (result.state === board) return;
     const derived = recomputeDerived(result.state, settings, puzzle.solution);
     const won = isWon(result.state, puzzle.solution);
-    if (won) void recordSinglePlayerCompletion(puzzle.code);
+    if (won) recordCurrentCompletion(puzzle, startedAt);
     set({
       board: result.state,
       history: result.history,
@@ -263,12 +271,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   redo: () => {
-    const { board, history, puzzle, settings } = get();
+    const { board, history, puzzle, settings, startedAt } = get();
     if (!board || !puzzle || !canRedo(history)) return;
     const result = redoHistory(board, history);
     const derived = recomputeDerived(result.state, settings, puzzle.solution);
     const won = isWon(result.state, puzzle.solution);
-    if (won && get().finishedAt === null) void recordSinglePlayerCompletion(puzzle.code);
+    if (won && get().finishedAt === null) recordCurrentCompletion(puzzle, startedAt);
     set({
       board: result.state,
       history: result.history,
@@ -290,7 +298,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   useHint: () => {
-    const { board, puzzle, history, settings, selected, finishedAt } = get();
+    const { board, puzzle, history, settings, selected, finishedAt, startedAt } = get();
     if (!board || !puzzle || finishedAt !== null) return;
 
     // Prefer the currently selected cell if it's empty and not a given.
@@ -320,7 +328,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (result.state === board) return;
     const derived = recomputeDerived(result.state, settings, puzzle.solution);
     const won = isWon(result.state, puzzle.solution);
-    if (won) void recordSinglePlayerCompletion(puzzle.code);
+    if (won) recordCurrentCompletion(puzzle, startedAt);
     set({
       board: result.state,
       history: result.history,

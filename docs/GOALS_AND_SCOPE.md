@@ -19,7 +19,7 @@ The bar for V1 is **a playable demo we can send to a friend over a link and have
 
 ### In scope for V1
 
-- **Single-player web** across six difficulty tiers (warmup / easy / medium / hard / expert visible, plus a hidden killer), 15,000 puzzles total. *(Originally scoped to a single tier; expanded during Phase 1.)*
+- **Single-player web** across six difficulty tiers (easy / medium / hard / expert / extreme visible, plus a hidden killer), 15,000 puzzles total. *(Originally scoped to a single tier; expanded during Phase 1.)*
 - **Battle mode** on web: create room → share link → both players join, pick a username, click Start. First to legally complete the puzzle wins.
 - **Coop mode** on web: create room → share link → both players join, pick a username. Both can input numbers simultaneously, with last-write-wins per cell (see [GAME_DESIGN.md](GAME_DESIGN.md) for conflict handling).
 - **Anonymous usernames** only for V1. No friends list, no history. *(Update: optional email accounts are landing post-V1 as [Phase 5](ROADMAP.md) — anonymous stays the default; accounts add portable progress + renames. Friends list and history remain out. See [DECISIONS #0043](DECISIONS.md).)*
@@ -38,7 +38,7 @@ These are good ideas, deliberately deferred:
 - ~~**More than 4 players per room.**~~ *Raised to 8* — rooms cap at 8 players (`MAX_PLAYERS` in `join-room`).
 - **Chat / voice.** Players coordinate through whatever channel they're already using (text, FaceTime, in person).
 - **Spectator mode.**
-- **Daily puzzle / shared world puzzle.** Could be a great future feature but not V1.
+- ~~**Daily puzzle / shared world puzzle.**~~ *Pulled forward after V1* — daily Easy / Medium / Hard assignments and daily completion tracking are implemented in the daily-puzzles branch ([DECISIONS #0046](DECISIONS.md)); leaderboard UI remains deferred.
 - **Monetization, paywalls, ads.**
 - **Internationalization.** English-only for V1; sudoku itself is language-neutral.
 
@@ -63,7 +63,7 @@ Both personas value: low friction to start, no signup, works on whatever device 
 
 Not committing to these yet — listed so we know what we're optimizing toward:
 - Native iOS app via React Native.
-- Multiple difficulty tiers + daily puzzle.
+- Daily puzzle leaderboards and richer daily stats.
 - Persistent accounts (magic link or Sign in with Apple) → stats, history, friends.
 - Leaderboards / ELO for battle mode.
 - Spectator + replays.

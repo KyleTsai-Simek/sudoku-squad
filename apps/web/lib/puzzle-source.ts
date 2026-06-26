@@ -16,6 +16,10 @@ export interface FetchedPuzzle {
   difficulty: Difficulty;
   givens: number[];
   solution: number[];
+  daily?: {
+    date: string;
+    difficulty: 'easy' | 'medium' | 'hard';
+  };
 }
 
 /** Public-view row, no solution. Used for browsing/listing. */
@@ -58,7 +62,7 @@ export async function loadPuzzle(code: PuzzleCode): Promise<FetchedPuzzle | null
 }
 
 /**
- * List every puzzle's (code, difficulty). 7500 rows of small objects ≈ 15 KB —
+ * List every puzzle's (code, difficulty). 15,000 rows of small objects ≈ 30 KB —
  * fine to fetch once at home-page load. Returns the bundled pack when Supabase
  * isn't configured.
  */

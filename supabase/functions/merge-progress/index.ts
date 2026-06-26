@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
   // 1. Read the source's completions and upsert them onto the dest account.
   const srcCompletions = await admin
     .from('player_completions')
-    .select('puzzle_code, mode, completed_at')
+    .select('puzzle_code, mode, completed_at, solve_time_ms')
     .eq('player_id', source.id);
   if (srcCompletions.error) {
     return errorResponse('internal', `read source completions failed: ${srcCompletions.error.message}`, 500);
@@ -84,6 +84,7 @@ Deno.serve(async (req) => {
       puzzle_code: r.puzzle_code,
       mode: r.mode,
       completed_at: r.completed_at,
+      solve_time_ms: r.solve_time_ms,
     }));
     const up = await admin
       .from('player_completions')
@@ -93,11 +94,48 @@ Deno.serve(async (req) => {
     }
   }
 
+  const srcDailyCompletions = await admin
+    .from('player_daily_completions')
+    .select('puzzle_date, difficulty, puzzle_code, completed_at, solve_time_ms, created_at')
+    .eq('player_id', source.id);
+  if (srcDailyCompletions.error) {
+    return errorResponse('internal', `read source daily completions failed: ${srcDailyCompletions.error.message}`, 500);
+  }
+  const dailyRows = srcDailyCompletions.data ?? [];
+
+  if (dailyRows.length > 0) {
+    const mergedDaily = dailyRows.map((r) => ({
+      player_id: dest.id,
+      puzzle_date: r.puzzle_date,
+      difficulty: r.difficulty,
+      puzzle_code: r.puzzle_code,
+      completed_at: r.completed_at,
+      solve_time_ms: r.solve_time_ms,
+      created_at: r.created_at,
+    }));
+    const up = await admin
+      .from('player_daily_completions')
+      .upsert(mergedDaily, {
+        onConflict: 'player_id,puzzle_date,difficulty',
+        ignoreDuplicates: true,
+      });
+    if (up.error) {
+      return errorResponse('internal', `merge daily upsert failed: ${up.error.message}`, 500);
+    }
+  }
+
   // 2. Tear down the source identity's data. The username row first (frees the
   //    name), then completions.
   const delName = await admin.from('issued_usernames').delete().eq('player_id', source.id);
   if (delName.error) {
     return errorResponse('internal', `release source username failed: ${delName.error.message}`, 500);
+  }
+  const delDailyCompletions = await admin
+    .from('player_daily_completions')
+    .delete()
+    .eq('player_id', source.id);
+  if (delDailyCompletions.error) {
+    return errorResponse('internal', `delete source daily completions failed: ${delDailyCompletions.error.message}`, 500);
   }
   const delCompletions = await admin.from('player_completions').delete().eq('player_id', source.id);
   if (delCompletions.error) {
@@ -111,5 +149,9 @@ Deno.serve(async (req) => {
     console.error('merge-progress: deleteUser failed (non-fatal)', delUser.error.message);
   }
 
-  return jsonResponse({ merged: true, moved_completions: rows.length });
+  return jsonResponse({
+    merged: true,
+    moved_completions: rows.length,
+    moved_daily_completions: dailyRows.length,
+  });
 });

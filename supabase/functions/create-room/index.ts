@@ -17,7 +17,7 @@ import { getCallerUserId, serviceClient } from '../_shared/supabase.ts';
 import { generateRoomCode, nextColor } from '../_shared/room-code.ts';
 
 type Mode = 'battle' | 'coop';
-type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
+type Difficulty = 'easy' | 'medium' | 'hard' | 'expert' | 'extreme';
 
 const MODES: ReadonlySet<Mode> = new Set(['battle', 'coop']);
 const DIFFICULTIES: ReadonlySet<Difficulty> = new Set([
@@ -25,6 +25,7 @@ const DIFFICULTIES: ReadonlySet<Difficulty> = new Set([
   'medium',
   'hard',
   'expert',
+  'extreme',
 ]);
 
 interface CreateRoomInput {
@@ -75,7 +76,7 @@ Deno.serve(async (req) => {
   if (!parsed) {
     return errorResponse(
       'bad_request',
-      'expected { mode: "battle"|"coop", difficulty: "easy"|"medium"|"hard"|"expert", username: 1..20 chars }',
+      'expected { mode: "battle"|"coop", difficulty: "easy"|"medium"|"hard"|"expert"|"extreme", username: 1..20 chars }',
     );
   }
   const { mode, difficulty, username, is_public = false } = parsed;

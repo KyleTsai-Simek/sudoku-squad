@@ -7,7 +7,7 @@ import type { PuzzleCode } from '@sudoku-squad/core';
  * Server-side completion tracking. Per [DECISIONS.md #0028] this replaces the
  * legacy localStorage-only `solved-tracker.ts`. Reads use the caller's anon
  * JWT (RLS-gated to own rows); writes go through the SECURITY DEFINER RPC
- * `record_completion` (single-player) or `submit-move` (multiplayer).
+ * `record_single_player_completion` (single-player) or `submit-move` (multiplayer).
  *
  * Local in-memory cache so the home page and pick-puzzle filter don't
  * round-trip on every render.
@@ -64,16 +64,30 @@ export async function getCompletionCount(): Promise<number> {
   return data;
 }
 
-/** Record a single-player completion. Idempotent (server-side on-conflict-do-nothing). */
-export async function recordSinglePlayerCompletion(code: PuzzleCode): Promise<void> {
+export interface SinglePlayerCompletionInput {
+  code: PuzzleCode;
+  solveTimeMs?: number;
+  daily?: {
+    date: string;
+    difficulty: 'easy' | 'medium' | 'hard';
+  };
+}
+
+/** Record a single-player completion. Idempotent for the ever-solved row and daily row. */
+export async function recordSinglePlayerCompletion(
+  input: PuzzleCode | SinglePlayerCompletionInput,
+): Promise<void> {
   const client = await ensureAuthClient();
   if (!client) return;
-  const { error } = await client.rpc('record_completion', {
-    p_code: code,
-    p_mode: 'single',
+  const payload = typeof input === 'string' ? { code: input } : input;
+  const { error } = await client.rpc('record_single_player_completion', {
+    p_code: payload.code,
+    p_solve_time_ms: payload.solveTimeMs ?? null,
+    p_daily_date: payload.daily?.date ?? null,
+    p_daily_difficulty: payload.daily?.difficulty ?? null,
   });
   if (error) {
-    console.error('record_completion error', error);
+    console.error('record_single_player_completion error', error);
     return;
   }
   invalidateCompletionsCache();

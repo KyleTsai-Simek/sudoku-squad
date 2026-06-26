@@ -17,6 +17,59 @@ Format:
 
 ---
 
+## 0047 — Shift visible difficulty labels to Easy through Extreme
+**Date:** 2026-06-26
+**Status:** Accepted and implemented locally; migration/function deploy still required.
+
+**Context.** After daily puzzles landed, the product language needed one more difficulty shift: "Warm-up" should become the new Easy, previous Easy becomes Medium, previous Medium becomes Hard, previous Hard becomes Expert, and previous Expert becomes Extreme. The hidden `killer` tier remains internal. Daily puzzles should keep exposing only Easy / Medium / Hard, but those labels now mean the former warmup / easy / medium pools.
+
+**Decision.** Add migration `0022_shift_difficulty_labels_to_extreme.sql` to rename `puzzles.difficulty` in-place, top-down: `expert → extreme`, `hard → expert`, `medium → hard`, `easy → medium`, and `warmup → easy`. The `puzzles_difficulty_check` constraint now allows `easy`, `medium`, `hard`, `expert`, `extreme`, and `killer`.
+
+The frontend visible tier list is now Easy / Medium / Hard / Expert / Extreme for single-player and multiplayer lobby selection. New multiplayer rooms default to Hard so the default puzzle strength stays equivalent to the old Medium. Daily puzzle RPCs still assign only `easy`, `medium`, and `hard`, which now correspond to the former warmup, easy, and medium pools. Existing daily assignments are cleared during the migration so the next lazy assignment chooses from the shifted pools.
+
+Ingest scripts were updated to emit the new names directly: `ingest:qqwing` now writes Easy / Medium, while `ingest:qqwing-graded` writes Hard / Expert / Extreme / Killer. The dormant Kaggle ingest and audit tools were updated to the same vocabulary for consistency.
+
+**Alternatives considered.**
+- Keep `warmup` in the database and relabel it only in UI. Rejected because daily assignments, stats, room difficulty changes, and future ingest would all carry a semantic mismatch.
+- Expose `killer` as Extreme. Rejected because `killer` is the QQWing EXPERT/requires-a-guess bucket; the requested Extreme is the former visible Expert, which stays pure-logic.
+- Preserve existing daily assignments through the migration. Rejected because an already-assigned `easy` daily would become Medium-content after the rename. Clearing daily rows lets the same Pacific day rebuild against the new labels.
+
+**Consequences.**
+- Apply migration `0022`, then redeploy `create-room` and `change-difficulty` so remote Edge Functions accept `extreme` and reject the removed `warmup` value.
+- Completion/stat rows reference puzzle codes, so solved history inherits the new labels through joins to `puzzles`.
+- Any external references or scripts that assumed `warmup` must use `easy` after this migration.
+
+---
+
+## 0046 — Daily puzzles and daily completion tracking
+**Date:** 2026-06-26
+**Status:** Accepted and implemented locally; migration/function deploy still required.
+
+**Context.** The app already records one ever-solved row per `(player, puzzle)` in `player_completions`, and optional email accounts merge those rows across devices. Daily puzzles need a different surface: everyone should see the same Easy / Medium / Hard puzzle for a Pacific calendar day, the selection should prefer puzzles nobody has solved yet, and we need to remember when a player solved the daily puzzle on the day it was daily. We also want solve duration for future stats/leaderboards.
+
+**Decision.** Add a daily schedule table and a separate daily-completion table instead of overloading the ever-solved row. Migration `0020` adds:
+
+- `daily_puzzles(puzzle_date, difficulty, puzzle_code)` for the Pacific-day assignment, limited to `easy` / `medium` / `hard`.
+- `player_completions.solve_time_ms` for the first known solve duration on the existing ever-solved row.
+- `player_daily_completions(player_id, puzzle_date, difficulty, puzzle_code, completed_at, solve_time_ms)` for daily-specific solves.
+- `current_pacific_date()`, `assign_daily_puzzles(date)`, and `get_daily_puzzles(date)` RPCs. Assignment uses a transaction-scoped advisory lock and orders candidates by "has no row in `player_completions`" first, then random, falling back to solved puzzles when necessary.
+- `record_single_player_completion(...)`, which records the ever-solved row and, when the submitted puzzle matches today's assigned daily puzzle in Pacific time, records the daily row.
+
+The web app adds `/daily`, with Easy / Medium / Hard cards linking into the existing single-player board via daily query params. The home screen also surfaces those three daily puzzles directly in a horizontal row above Quick Play. Only one home CTA uses the primary color at a time: Daily Easy, then Daily Medium, then Daily Hard, then Start a game after all three dailies are solved. Completed daily buttons use the success treatment, show a checkmark, and display the solve time. The single-player store records elapsed time and forwards daily metadata on completion. `merge-progress` now unions `player_daily_completions` as well as `player_completions`.
+
+**Alternatives considered.**
+- Store daily metadata directly on `player_completions`. Rejected because a puzzle can be solved before it later appears as a daily; the ever-solved row's `completed_at` should stay the first solve, while a daily solve needs its own date and duration.
+- Pre-generate daily assignments with an external cron. Deferred: lazy assignment inside `get_daily_puzzles()` is simpler and reliable at the current scale. A scheduled job can call `assign_daily_puzzles()` later if we want assignments created before the first visitor arrives.
+- Include Warm-up / Expert in the daily set. Rejected for this pass because the requested daily set is specifically Easy / Medium / Hard.
+
+**Consequences.**
+- Daily rotation happens at midnight Pacific because assignment keys off `current_pacific_date()`.
+- Daily leaderboard work can read `player_daily_completions` without disturbing the main solved-count semantics.
+- Deployment order matters: apply migration `0020`, then redeploy `merge-progress` so account merges know about the new table/column.
+- Multiplayer completions still do not have solve duration; adding that requires server-side elapsed-time semantics for battle/coop and is separate.
+
+---
+
 ## 0045 — Theme-aware player identity colors
 **Date:** 2026-06-26
 **Status:** Accepted and implemented in web.
@@ -1134,7 +1187,7 @@ Resolved items get moved into the log above. These are still TBD. Items grouped 
 ## Open longer-term
 
 6. **Logo / illustration identity** — palette and app theming are now resolved for implementation by #0044; logo, app icon, Open Graph art, and any richer illustration style still need a separate design pass before a public-facing push.
-7. **Visible tier above expert** — `killer` now exists as a hidden QQWing EXPERT/requires-a-guess tier ([#0042](DECISIONS.md)). Decide whether and how to expose a true "evil" tier before public launch.
+7. **Visible tier above Extreme** — `killer` now exists as a hidden QQWing EXPERT/requires-a-guess tier ([#0042](DECISIONS.md)). Decide whether and how to expose a true "evil" tier before public launch.
 8. **Vercel ↔ Supabase preview environment** — preview deploys currently hit the *production* Supabase project. Fine for V1; revisit before more users.
 
 ## Recently resolved (and where it landed)

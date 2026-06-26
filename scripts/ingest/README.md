@@ -5,7 +5,7 @@ One-off scripts for populating the Supabase `puzzles` table. The whole bank is n
 1. **`ingest:qqwing`** — the two easiest tiers, by clue count (`src/ingest-qqwing.ts`). See §4.
 2. **`ingest:qqwing-graded`** — the four upper tiers, graded by QQWing's difficulty class + technique counts (`src/ingest-qqwing-graded.ts`). See §4b.
 
-Together they seed **15,000 puzzles across six tiers, 2,500 each**: `warmup` / `easy` (clue-count graded, negative ratings, [#0033](../../docs/DECISIONS.md)) and `medium` / `hard` / `expert` / `killer` (technique graded, [#0042](../../docs/DECISIONS.md)). `killer` is hidden from the UI.
+Together they seed **15,000 puzzles across six tiers, 2,500 each**: `easy` / `medium` (clue-count graded, negative ratings, [#0033](../../docs/DECISIONS.md), shifted in [#0047](../../docs/DECISIONS.md)) and `hard` / `expert` / `extreme` / `killer` (technique graded, [#0042](../../docs/DECISIONS.md), shifted in [#0047](../../docs/DECISIONS.md)). `killer` is hidden from the UI.
 
 > **The Kaggle pipeline (`ingest`, `src/index.ts`) is dormant** as of [#0042](../../docs/DECISIONS.md) — the upper tiers no longer come from the Kaggle 3M dataset. The script and the radcliffe audit tooling are kept for reference but are no longer the source of truth, and the dataset (§1) is no longer needed to seed the bank.
 
@@ -15,9 +15,9 @@ Together they seed **15,000 puzzles across six tiers, 2,500 each**: `warmup` / `
 
 ## 1. Get the dataset
 
-The `medium` / `hard` / `expert` / `killer` tiers come from the [3 million Sudoku puzzles with ratings](https://www.kaggle.com/datasets/radcliffe/3-million-sudoku-puzzles-with-ratings) dataset (~215 MB zipped, ~535 MB CSV after extract). The dataset ships a numeric `difficulty` rating column which the ingest uses to band puzzles into tiers — see [DECISIONS.md #0031](../../docs/DECISIONS.md)–[#0034](../../docs/DECISIONS.md).
+The `hard` / `expert` / `extreme` / `killer` legacy tiers came from the [3 million Sudoku puzzles with ratings](https://www.kaggle.com/datasets/radcliffe/3-million-sudoku-puzzles-with-ratings) dataset (~215 MB zipped, ~535 MB CSV after extract). The dataset ships a numeric `difficulty` rating column which the dormant ingest uses to band puzzles into tiers — see [DECISIONS.md #0031](../../docs/DECISIONS.md)–[#0034](../../docs/DECISIONS.md), then the latest label shift in [#0047](../../docs/DECISIONS.md).
 
-The `warmup` / `easy` tiers are **generated locally** via QQWing and don't need this dataset — see §5.
+The `easy` / `medium` tiers are **generated locally** via QQWing and don't need this dataset — see §5.
 
 The script also accepts other Kaggle sudoku CSVs (`bryanpark/sudoku`, `rohanrao/sudoku`) — header layout is auto-detected. If the CSV lacks a difficulty/rating column, the script falls back to clue count.
 
@@ -74,12 +74,12 @@ What it does:
 1. Finds the largest `.csv` under `scripts/ingest/data/`.
 2. Streams rows, parsing the puzzle/solution columns (header names auto-detected — handles `puzzle`/`solution`, `quizzes`/`solutions`, etc.).
 3. Buckets each row into one of the four Kaggle tiers:
-   - **From a `difficulty`/`level`/`rating` column** if the dataset has one, using half-open rating bands: `[0, 0.75)` → medium, `[0.75, 2.5)` → hard, `[2.5, 5.0)` → expert, `[5.0, 7.0)` → killer.
+   - **From a `difficulty`/`level`/`rating` column** if the dataset has one, using half-open rating bands: `[0, 0.75)` → hard, `[0.75, 2.5)` → expert, `[2.5, 5.0)` → extreme, `[5.0, 7.0)` → killer.
    - **Otherwise from clue count** (fallback for datasets without a rating column).
    - A per-(tier, clue-count) target distribution shapes each tier toward a realistic clue spread (`TARGET_PER_CELL` in [src/index.ts](src/index.ts)).
 4. Runs the Norvig solver on every kept candidate to verify it has a unique solution *and* that the solution matches what the dataset claims.
 5. Computes `puzzle.code` via the same algorithm as the Postgres `puzzle_code_for` function — see [DECISIONS.md #0019](../../docs/DECISIONS.md).
-6. Stops once each tier hits its target (**2,500 each across medium / hard / expert / killer = 10,000**).
+6. Stops once each tier hits its target (**2,500 each across hard / expert / extreme / killer = 10,000**).
 7. Inserts the sampled rows (including `code`) into the Supabase `puzzles` table in batches of **500**.
 
 Tiers, rating bands, targets, and batch size are constants at the top of [src/index.ts](src/index.ts) — edit and re-run if you want a different mix.
@@ -94,7 +94,7 @@ The script **appends** by default. Pass `--truncate` to wipe and rebuild from sc
 pnpm --filter @sudoku-squad/ingest ingest:qqwing          # appends ~5,000 rows
 ```
 
-Generates **2,500 `warmup` + 2,500 `easy`** puzzles locally with QQWing — no dataset required. These sit below the upper tiers with negative ratings in `[-10, 0)`: clues 35–40 → `warmup`, clues 29–34 → `easy`. Each candidate is solver-verified for a unique solution and coded identically to the graded path. Runs ~60 minutes single-threaded. Targets live in `TARGET_PER_CELL` at the top of [src/ingest-qqwing.ts](src/ingest-qqwing.ts). See [DECISIONS.md #0033](../../docs/DECISIONS.md).
+Generates **2,500 `easy` + 2,500 `medium`** puzzles locally with QQWing — no dataset required. These sit below the upper tiers with negative ratings in `[-10, 0)`: clues 35–40 → `easy`, clues 29–34 → `medium`. Each candidate is solver-verified for a unique solution and coded identically to the graded path. Runs ~60 minutes single-threaded. Targets live in `TARGET_PER_CELL` at the top of [src/ingest-qqwing.ts](src/ingest-qqwing.ts). See [DECISIONS.md #0033](../../docs/DECISIONS.md) and [#0047](../../docs/DECISIONS.md).
 
 > Requires migrations `0012` (extends the `difficulty` check constraint for the easier tiers) and `0013` (the tier shift-rename) to be applied first.
 
@@ -108,13 +108,13 @@ pnpm --filter @sudoku-squad/ingest ingest:qqwing-graded --dry-run     # generate
 pnpm --filter @sudoku-squad/ingest ingest:qqwing-graded --count 50    # 50 per tier (small test)
 ```
 
-Generates **2,500 each of `medium` / `hard` / `expert` / `killer`** locally with QQWing, graded by QQWing's own difficulty class + technique counts rather than a rating ([DECISIONS.md #0042](../../docs/DECISIONS.md)):
+Generates **2,500 each of `hard` / `expert` / `extreme` / `killer`** locally with QQWing, graded by QQWing's own difficulty class + technique counts rather than a rating ([DECISIONS.md #0042](../../docs/DECISIONS.md), shifted in [#0047](../../docs/DECISIONS.md)):
 
 | tier | QQWing class | extra criterion | pure-logic? |
 |---|---|---|---|
-| medium | EASY | — | yes (`guess_count = 0`) |
-| hard | INTERMEDIATE | exactly 1 distinct advanced technique | yes |
-| expert | INTERMEDIATE | ≥2 distinct advanced techniques | yes |
+| hard | EASY | — | yes (`guess_count = 0`) |
+| expert | INTERMEDIATE | exactly 1 distinct advanced technique | yes |
+| extreme | INTERMEDIATE | ≥2 distinct advanced techniques | yes |
 | killer (hidden) | EXPERT | `guess_count ≥ 1` | no — requires a guess |
 
 "Advanced techniques" = {naked pair, hidden pair, pointing pair/triple, box-line reduction}. There is **no clue-count augmentation** here — augmentation only eases a puzzle, which would erase the technique grade. Each candidate keeps the same gates (unique solution, solution-match, dedupe by code) and stores QQWing's per-puzzle metadata in the typed columns added by migration 0016 (`qqwing_difficulty`, `clue_count`, `guess_count`, `backtrack_count`, the five technique counts, and `advanced_technique_count`). The `expert` slice (≥2 techniques, ~5% of raw generations) is the throughput bottleneck; the full run is ~15 minutes single-threaded.
@@ -146,8 +146,8 @@ Independent sanity check on the small in-repo `apps/web/lib/sample-puzzles.ts` p
 | `src/solver.ts` | Norvig-ported constraint-propagation solver. Used to verify uniqueness. |
 | `src/csv.ts` | Tiny streaming CSV reader. Sufficient for Kaggle's uniform sudoku format. |
 | `src/code.ts` | Puzzle-code hash (`md5(givens) → 40 bits → mod 36^6 → 6-char base36`). Byte-identical to Postgres' `puzzle_code_for`. Pinned by `code.test.ts`. |
-| `src/index.ts` | The Kaggle ingest entrypoint (medium / hard / expert / killer). |
-| `src/ingest-qqwing.ts` | Local QQWing generator for the warmup / easy tiers. |
+| `src/index.ts` | The dormant Kaggle ingest entrypoint (hard / expert / extreme / killer). |
+| `src/ingest-qqwing.ts` | Local QQWing generator for the easy / medium tiers. |
 | `src/check-connectivity.ts` | Supabase reachability + RLS sanity (4 checks). |
 | `src/verify-samples.ts` | Verifies the in-repo sample pack against the solver AND that the pinned codes still match the algorithm. |
 | `fixtures/synthetic.csv` | 5 valid + 2 deliberately-bad rows for the repeatable dry-run regression test (`pnpm ingest:dry-fixture`). |

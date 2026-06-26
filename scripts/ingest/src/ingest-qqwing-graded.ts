@@ -1,23 +1,23 @@
 /**
- * Generate the four upper tiers (`medium`, `hard`, `expert`, `killer`) locally
+ * Generate the four upper tiers (`hard`, `expert`, `extreme`, `killer`) locally
  * via QQWing, graded by QQWing's own difficulty classification + technique
  * counts rather than the (now-retired) Kaggle rating bands. See
  * docs/DECISIONS.md #0042.
  *
  * Tier mapping:
- *   QQWing EASY                                          -> medium
- *   QQWing INTERMEDIATE, 1 advanced technique  (guess=0) -> hard
- *   QQWing INTERMEDIATE, >=2 advanced techniques (guess=0)-> expert
+ *   QQWing EASY                                          -> hard
+ *   QQWing INTERMEDIATE, 1 advanced technique  (guess=0) -> expert
+ *   QQWing INTERMEDIATE, >=2 advanced techniques (guess=0)-> extreme
  *   QQWing EXPERT                              (guess>=1) -> killer (hidden)
  *
  * "Advanced techniques" = the four non-single solving techniques QQWing tracks:
  * naked pair, hidden pair, pointing pair/triple, box-line reduction. QQWing's
  * INTERMEDIATE class is exactly "needs >=1 of these, but no guessing"; we split
- * it into hard (needs one) and expert (needs to chain two or more), so expert
- * stays fully pure-logic (guess_count = 0). EXPERT is QQWing's "requires a
+ * it into expert (needs one) and extreme (needs to chain two or more), so
+ * extreme stays fully pure-logic (guess_count = 0). EXPERT is QQWing's "requires a
  * guess" class and backs the hidden killer tier.
  *
- * SIMPLE generations are discarded (they belong to warmup/easy, produced by
+ * SIMPLE generations are discarded (they belong to easy/medium, produced by
  * ingest-qqwing.ts). There is NO clue-count augmentation: augmentation only
  * eases a puzzle, which would destroy the technique requirement that defines
  * these tiers. We take QQWing's minimal output as-is.
@@ -46,8 +46,8 @@ const QQ_EASY = 2;
 const QQ_INTERMEDIATE = 3;
 const QQ_EXPERT = 4;
 
-type GradedTier = 'medium' | 'hard' | 'expert' | 'killer';
-const TIERS: GradedTier[] = ['medium', 'hard', 'expert', 'killer'];
+type GradedTier = 'hard' | 'expert' | 'extreme' | 'killer';
+const TIERS: GradedTier[] = ['hard', 'expert', 'extreme', 'killer'];
 
 const DEFAULT_PER_TIER = 2500;
 
@@ -136,11 +136,11 @@ function generateOne(): Generated {
 function classify(gen: Generated): GradedTier | null {
   switch (gen.qqDifficulty) {
     case QQ_EASY:
-      return 'medium';
+      return 'hard';
     case QQ_INTERMEDIATE:
       // All intermediate puzzles are pure-logic (guess_count == 0). Split by
       // how many distinct advanced techniques the solve required.
-      return gen.meta.advanced_technique_count >= 2 ? 'expert' : 'hard';
+      return gen.meta.advanced_technique_count >= 2 ? 'extreme' : 'expert';
     case QQ_EXPERT:
       // QQWing EXPERT == requires guessing. Guard the invariant anyway.
       return gen.meta.guess_count >= 1 ? 'killer' : null;
@@ -161,7 +161,7 @@ async function main(): Promise<void> {
   const overallTarget = args.perTier * TIERS.length;
   console.log(
     `Generating QQWing-graded puzzles: ${args.perTier} each of\n` +
-      `  medium(EASY) / hard(INTERMEDIATE,1 tech) / expert(INTERMEDIATE,>=2 tech) / killer(EXPERT,guess>=1)\n` +
+      `  hard(EASY) / expert(INTERMEDIATE,1 tech) / extreme(INTERMEDIATE,>=2 tech) / killer(EXPERT,guess>=1)\n` +
       `  = ${overallTarget} total.`,
   );
 
@@ -174,7 +174,7 @@ async function main(): Promise<void> {
         return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
       })();
 
-  const kept: Record<GradedTier, Row[]> = { medium: [], hard: [], expert: [], killer: [] };
+  const kept: Record<GradedTier, Row[]> = { hard: [], expert: [], extreme: [], killer: [] };
   const seenCodes = new Set<string>();
   const rejects = { discarded: 0, tierFull: 0, nonUnique: 0, solutionMismatch: 0, duplicate: 0 };
   let attempts = 0;
@@ -234,7 +234,7 @@ async function main(): Promise<void> {
       const eta = rate > 0 ? (overallTarget - totalKept()) / rate : 0;
       console.log(
         `  kept ${totalKept()}/${overallTarget} ` +
-          `[m=${kept.medium.length} h=${kept.hard.length} e=${kept.expert.length} k=${kept.killer.length}] ` +
+          `[h=${kept.hard.length} ex=${kept.expert.length} xt=${kept.extreme.length} k=${kept.killer.length}] ` +
           `attempts=${attempts}  ${rate.toFixed(1)} kept/sec  eta=${eta.toFixed(0)}s`,
       );
     }

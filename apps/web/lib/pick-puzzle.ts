@@ -17,7 +17,7 @@ function getManifest(): Promise<PuzzleSummary[]> {
  * any puzzle of that tier (so the menu never goes empty).
  *
  * Returns null only when the catalog has no puzzles of that difficulty at
- * all (e.g. expert tier is currently empty).
+ * all.
  */
 export async function pickRandomUnsolved(
   difficulty: Difficulty,
@@ -43,11 +43,11 @@ export async function getTierCounts(): Promise<
   const all = await getManifest();
   const solved = await getCompletedSet();
   const out: Record<Difficulty, { total: number; unsolved: number }> = {
-    warmup: { total: 0, unsolved: 0 },
     easy: { total: 0, unsolved: 0 },
     medium: { total: 0, unsolved: 0 },
     hard: { total: 0, unsolved: 0 },
     expert: { total: 0, unsolved: 0 },
+    extreme: { total: 0, unsolved: 0 },
     killer: { total: 0, unsolved: 0 },
   };
   for (const p of all) {

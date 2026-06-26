@@ -110,16 +110,16 @@ sudoku-squad/
 
 ## 4. Data model (Supabase / Postgres)
 
-Live SQL is in `supabase/migrations/`. Tables below reflect what's applied to the linked project (migrations 0001 → 0019), including the Phase 5 username/stats changes from [#0043](DECISIONS.md).
+Live SQL is in `supabase/migrations/`. Tables below reflect the in-repo schema through migration 0022; the linked Supabase project currently has 0020/0021 applied and needs 0022 pushed for the latest difficulty labels.
 
 ### `puzzles`
-Pre-generated puzzles. Immutable once ingested. **15,000 rows** live across **six tiers** (five visible, one hidden): 2,500 each in warmup / easy / medium / hard / expert / killer. The whole bank is now QQWing-generated after [#0042](DECISIONS.md): warmup/easy use the original high-clue naked-singles pipeline ([#0033](DECISIONS.md)); medium/hard/expert/killer use QQWing difficulty class + technique counts and carry typed QQWing metadata columns (migration 0016). Migration 0017 removed the old Kaggle-sourced upper tiers.
+Pre-generated puzzles. Immutable once ingested. **15,000 rows** live across **six tiers** (five visible, one hidden): 2,500 each in easy / medium / hard / expert / extreme / killer after the [#0047](DECISIONS.md) label shift. The whole bank is now QQWing-generated after [#0042](DECISIONS.md): easy/medium use the original high-clue naked-singles pipeline ([#0033](DECISIONS.md)); hard/expert/extreme/killer use QQWing difficulty class + technique counts and carry typed QQWing metadata columns (migration 0016). Migration 0017 removed the old Kaggle-sourced upper tiers.
 
 | col | type | notes |
 |---|---|---|
 | `id` | uuid PK | Internal DB key. Not visible client-side. |
 | `code` | text unique not null | 6-char lowercase base36 hash of `givens`. URL slug and the cross-mode puzzle identifier. Per [DECISIONS.md #0019](DECISIONS.md). |
-| `difficulty` | text | `warmup` / `easy` / `medium` / `hard` / `expert` / `killer`. All six tiers populated. Current mapping: warmup/easy from augmented QQWing singles with synthetic rating bands `[-10,-5)` / `[-5,0)`; medium = QQWing EASY; hard = QQWing INTERMEDIATE with exactly 1 advanced technique; expert = QQWing INTERMEDIATE with 2+ advanced techniques; killer = QQWing EXPERT / requires guessing. `killer` is intentionally hidden from the picker. Constraint added in migration 0012, renamed in 0013. |
+| `difficulty` | text | `easy` / `medium` / `hard` / `expert` / `extreme` / `killer`. All six tiers populated after migration 0022. Current mapping: easy/medium from augmented QQWing singles with synthetic rating bands `[-10,-5)` / `[-5,0)`; hard = QQWing EASY; expert = QQWing INTERMEDIATE with exactly 1 advanced technique; extreme = QQWing INTERMEDIATE with 2+ advanced techniques; killer = QQWing EXPERT / requires guessing. `killer` is intentionally hidden from the picker. Constraint added in migration 0012, renamed in 0013 and 0022. |
 | `givens` | smallint[81] | Starting clues. `0` = empty cell. |
 | `solution` | smallint[81] | Unique solution. **Never sent to the client during multiplayer.** Single-player gets it via the SECURITY DEFINER RPC `sp_get_puzzle(code)` — see [#0022](DECISIONS.md). |
 | `created_at` | timestamptz | |
@@ -132,6 +132,19 @@ Pure SQL that computes the puzzle code. Same algorithm as `scripts/ingest/src/co
 
 #### `sp_get_puzzle(p_code text)` (RPC)
 SECURITY DEFINER. Returns the full row for a single puzzle including `solution`. Granted to `anon`. **Single-player only** — the comment on the function says so. Phase 2 multiplayer must use Edge Functions that take a room/player context and return only what that player is allowed to see.
+
+### `daily_puzzles`
+One row per Pacific calendar day and daily difficulty. Added in migration 0020 ([DECISIONS #0046](DECISIONS.md)); migration 0021 fixes the RPC implementation. Assignments are created lazily by `get_daily_puzzles()` / `assign_daily_puzzles()` and rotate at midnight Pacific via `current_pacific_date()`.
+
+| col | type | notes |
+|---|---|---|
+| `puzzle_date` | date | Pacific calendar date. |
+| `difficulty` | text | `easy` / `medium` / `hard`. |
+| `puzzle_code` | text FK → `puzzles(code)` | The assigned puzzle. Unique per day. |
+| `selected_at` | timestamptz | |
+| PK | (`puzzle_date`, `difficulty`) | |
+
+Assignment prefers puzzles with no rows in `player_completions` globally, then falls back to any puzzle in the tier if needed. The table is anon-readable; it never exposes solutions.
 
 ### `rooms`
 A multiplayer session. Created when a host clicks "Battle" or "Coop" and gets a shareable link.
@@ -192,9 +205,25 @@ One row per (player, puzzle) the player has ever completed. Source of truth for 
 | `puzzle_code` | text FK → `puzzles(code)` | |
 | `mode` | text | `single` / `battle` / `coop` — the mode the player completed in. |
 | `completed_at` | timestamptz not null default now() | |
+| `solve_time_ms` | integer nullable | First known elapsed solve time for this `(player, puzzle)`; currently populated by single-player completions. |
 | PK | (`player_id`, `puzzle_code`) | Dedupes re-solves. |
 
-Inserted by `submit-move` on first multiplayer win and by an RPC `record_completion(p_code, p_mode)` for single-player. `on conflict do nothing` everywhere; we don't re-stamp the timestamp. `get_completion_stats()` (migration 0019, Phase 5) aggregates the caller's rows per difficulty (join to `puzzles.difficulty`) — backend capture for the accounts feature. The `merge-progress` Edge Function moves rows `source_player → dest_player` (`on conflict do nothing`) when an anon identity is merged into an account ([#0043](DECISIONS.md)).
+Inserted by `submit-move` on first multiplayer win and by the RPC `record_single_player_completion(...)` for single-player. Re-solves do not duplicate rows or re-stamp `completed_at`; single-player can fill a missing `solve_time_ms` on an existing row. `get_completion_stats()` (migration 0019, Phase 5) aggregates the caller's rows per difficulty (join to `puzzles.difficulty`) — backend capture for the accounts feature. The `merge-progress` Edge Function moves rows `source_player → dest_player` (`on conflict do nothing`) when an anon identity is merged into an account ([#0043](DECISIONS.md)).
+
+### `player_daily_completions`
+Daily-specific completion rows, added in migration 0020. These are separate from `player_completions` because a puzzle may have been solved before it later appears as a daily.
+
+| col | type | notes |
+|---|---|---|
+| `player_id` | uuid | Supabase anon or signed-in user ID. |
+| `puzzle_date` | date | The assigned Pacific daily date. |
+| `difficulty` | text | `easy` / `medium` / `hard`. |
+| `puzzle_code` | text FK → `puzzles(code)` | |
+| `completed_at` | timestamptz | When the daily solve was recorded. |
+| `solve_time_ms` | integer nullable | Elapsed solve time, for future leaderboard/stat surfaces. |
+| PK | (`player_id`, `puzzle_date`, `difficulty`) | One daily result per player/tier/day. |
+
+Written only by `record_single_player_completion(...)` when the submitted puzzle matches today's `daily_puzzles` assignment in Pacific time. `merge-progress` unions these rows across anonymous → saved-account merges.
 
 ### `issued_usernames`
 The player's current username. Added in migration 0008 as an immutable "issued once" record ([#0027](DECISIONS.md)); migration 0018 (Phase 5, [#0043](DECISIONS.md)) reshapes it into a **mutable current-username** table to back renames.
@@ -279,21 +308,21 @@ Run on the server (Edge Function or trigger) by comparing the current materializ
 
 ## 7. Puzzle source
 
-The live bank is **15,000 puzzles across six tiers**, all QQWing-generated (see [DECISIONS #0033](DECISIONS.md)/[#0034](DECISIONS.md)/[#0042](DECISIONS.md)):
+The live bank is **15,000 puzzles across six tiers**, all QQWing-generated (see [DECISIONS #0033](DECISIONS.md)/[#0034](DECISIONS.md)/[#0042](DECISIONS.md)/[#0047](DECISIONS.md)):
 
-- **`warmup` / `easy`** (5,000, 2,500 each) are generated locally via QQWing (naked-singles-only, augmented to high clue counts), rated on a synthetic `[-10, 0)` scale.
-- **`medium` / `hard` / `expert` / `killer`** (10,000, 2,500 each) are generated locally via QQWing and bucketed by QQWing difficulty class + technique counts:
-  - medium: QQWing EASY.
-  - hard: QQWing INTERMEDIATE with exactly 1 distinct advanced technique and `guess_count = 0`.
-  - expert: QQWing INTERMEDIATE with 2+ distinct advanced techniques and `guess_count = 0`.
+- **`easy` / `medium`** (5,000, 2,500 each) are generated locally via QQWing (naked-singles-only, augmented to high clue counts), rated on a synthetic `[-10, 0)` scale.
+- **`hard` / `expert` / `extreme` / `killer`** (10,000, 2,500 each) are generated locally via QQWing and bucketed by QQWing difficulty class + technique counts:
+  - hard: QQWing EASY.
+  - expert: QQWing INTERMEDIATE with exactly 1 distinct advanced technique and `guess_count = 0`.
+  - extreme: QQWing INTERMEDIATE with 2+ distinct advanced techniques and `guess_count = 0`.
   - killer: QQWing EXPERT with `guess_count >= 1`.
 
 `killer` is solver-verified and playable by direct URL but hidden from the picker — reserved for a future "evil mode."
 
 Current QQWing ingest flow:
-1. Generate candidate puzzles with QQWing (`ingest:qqwing` for warmup/easy, `ingest:qqwing-graded` for medium+).
+1. Generate candidate puzzles with QQWing (`ingest:qqwing` for easy/medium, `ingest:qqwing-graded` for hard+).
 2. Run our Norvig-ported solver to confirm a unique solution and that QQWing's solution matches.
-3. Bucket by clue count/synthetic rating for warmup/easy, or QQWing difficulty/technique metadata for medium/hard/expert/killer.
+3. Bucket by clue count/synthetic rating for easy/medium, or QQWing difficulty/technique metadata for hard/expert/extreme/killer.
 4. Compute `puzzles.code = puzzleCodeFor(givens)` for every kept row (the TS port of the in-DB function — see [#0019](DECISIONS.md)).
 5. Bulk insert into `puzzles` via the service-role client. The `unique(code)` constraint catches collisions.
 
@@ -377,13 +406,15 @@ Per [DECISIONS.md #0023](DECISIONS.md), multiplayer mutations go through TypeScr
 | `submit-move` | Single: `{room_id, cell, kind, value, client_move_id?}`. Batch (preferred): `{room_id, moves: [...]}`. | Single: `{seq, accepted, progress_pct, won, is_winner, idempotent?, cell_correct?}`. Batch: `{results: [{seq, idempotent?, cell_correct?}], progress_pct, won, is_winner, shared_win?}`. | ✅ rewritten 2026-05-23 per [#0036](DECISIONS.md) + extended for batches per [#0037](DECISIONS.md). Atomic `reserve_room_seq` / `reserve_room_seqs` RPCs, parallel reads, client_move_id idempotency, batch cap 200. `cell_correct` returned only when `settings.autoCheck` is on. |
 | `claim-username` | `{}` | `{username}` | ✅ deployed — idempotent per `auth.uid()`; backed by `issued_usernames` (migration 0008). Phase 5 extends the insert to also populate `base`/`discriminator` (anon default: generated `base`, NULL discriminator). |
 | `set-username` | `{username}` | `{username, base, discriminator}` | ✅ deployed (Phase 5, [#0043](DECISIONS.md)) — **signed-in only**. Validates the base, claims a bare base if free else a random `#NNNN` discriminator (width grows on exhaustion), frees the caller's prior tuple. |
-| `merge-progress` | `{source_token}` (+ dest JWT in Authorization) | `{merged, moved_completions}` | ✅ deployed (Phase 5, [#0043](DECISIONS.md)) — unions an abandoned anonymous identity's `player_completions` into the caller's account, releases the source username, deletes the orphan anon user. Refuses unless source is anonymous and dest is the caller. |
+| `merge-progress` | `{source_token}` (+ dest JWT in Authorization) | `{merged, moved_completions, moved_daily_completions?}` | ✅ deployed pre-daily; daily-aware update in branch ([#0046](DECISIONS.md)) — unions an abandoned anonymous identity's `player_completions` and `player_daily_completions` into the caller's account, releases the source username, deletes the orphan anon user. Refuses unless source is anonymous and dest is the caller. |
 | `update-room-settings` | `{room_id, settings}` | `{settings}` | ✅ deployed — host-only, lobby-only |
 | `change-difficulty` | `{room_id, difficulty}` | `{puzzle_code, difficulty}` | ✅ deployed — host-only, lobby-only. Re-picks a random puzzle of the new tier; `killer` is intentionally rejected by the input validator. See [#0035](DECISIONS.md). |
 | `change-mode` | `{room_id, mode}` | `{mode}` | ✅ deployed — host-only, lobby-only. Flips the room between `battle` and `coop`; backs the lobby mode toggle. |
 | `kick-player` | `{room_id, player_id}` | `{kicked: true}` | ✅ deployed — host-only |
 | `return-to-lobby` | `{room_id}` | `{status, has_returned: true}` | ✅ deployed — flips caller's `has_returned`; transitions room to `lobby` if not already |
-| `record_completion` (RPC) | `(p_code, p_mode)` → bool | inserts `player_completions` with `on conflict do nothing`. SECURITY DEFINER. | ✅ deployed (migration 0009) |
+| `record_completion` (RPC) | `(p_code, p_mode)` → bool | legacy completion RPC. SECURITY DEFINER. | ✅ deployed (migration 0009); retained for compatibility |
+| `record_single_player_completion` (RPC) | `(p_code, p_solve_time_ms?, p_daily_date?, p_daily_difficulty?)` → bool | records the ever-solved SP row and, when the puzzle matches today's Pacific daily assignment, records `player_daily_completions`. SECURITY DEFINER. | ✅ deployed (migration 0020, [#0046](DECISIONS.md)) |
+| `get_daily_puzzles` (RPC) | `(p_date?)` → `{puzzle_date, difficulty, puzzle_code, givens}[]` | lazily assigns and returns the Easy / Medium / Hard daily set. SECURITY DEFINER. | ✅ deployed (migrations 0020/0021, [#0046](DECISIONS.md)) |
 | `get_completion_count` (RPC) | `()` → int | reads caller's row count. SECURITY DEFINER. | ✅ deployed (migration 0009) |
 | `hint` | (removed for V1) | — | dropped per the May 22 product changes |
 

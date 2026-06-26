@@ -29,6 +29,7 @@ Live at https://sudoku-squad-web.vercel.app/. Engine + UI + ingest + tests + CI 
 - [x] **warmup + beginner tiers** shipped 2026-05-22. Generated 5,000 naked-singles-only puzzles via QQWing, augmented to 29-40 clues. Ratings in [-10, 0). Migration 0012 extends `puzzles.difficulty` check constraint. See [DECISIONS #0033](DECISIONS.md).
 - [x] **Shift-rename** 2026-05-22 ([#0034](DECISIONS.md)): beginner → easy → medium → hard → expert → killer. The five-button picker is now Warm-up / Easy / Medium / Hard / Expert; the former-expert tier survives as a hidden `killer` (no UI surface yet). Migration 0013 does the in-place rename + extends the check constraint.
 - [x] **Kaggle → QQWing upper-tier regeneration** shipped 2026-05-29 ([#0042](DECISIONS.md)). Replaced the Kaggle-sourced medium/hard/expert/killer with QQWing technique-graded generation: medium=EASY, hard=INTERMEDIATE-1-technique, expert=INTERMEDIATE-≥2-techniques (both pure-logic), killer=EXPERT/requires-a-guess (revived). QQWing metadata stored as typed columns (migration 0016); migration 0017 cleared the old rows. Tool: `ingest:qqwing-graded`. The whole bank (15,000) is now QQWing-generated; the Kaggle pipeline + 3M dataset are dormant.
+- [x] **Difficulty labels shifted to Easy → Extreme** locally on 2026-06-26 ([#0047](DECISIONS.md)): Warm-up → Easy, Easy → Medium, Medium → Hard, Hard → Expert, Expert → Extreme, with `killer` still hidden. Migration 0022 is present locally; deploy requires `supabase db push --linked` plus `create-room` / `change-difficulty` Edge Function redeploys. Daily puzzles remain Easy / Medium / Hard, now backed by the former warmup/easy/medium pools.
 
 ---
 
@@ -168,6 +169,25 @@ Optional email sign-in: portable progress + renameable usernames, anonymous stay
 - [~] Manual product checks: production token-hash magic-link sign-in and username change are confirmed. Still verify OTP-code entry, sign-out → fresh anon → sign back in, and cross-device progress union.
 - [ ] E2E (local, needs Supabase + deploy + email OTP enabled + token-hash email templates): anon solve → sign in (new email) preserves count; second device (fresh anon progress) → sign in (same email) shows the **union**; rename collision; sign-out → fresh anon with account progress intact on re-sign-in.
 - [x] Non-regression: anonymous-only play and local multiplayer smokes are green; `packages/core` purity lint is clean.
+
+---
+
+## Daily puzzles 🔄 Implemented in branch, deploy/verification remaining
+
+Same Easy / Medium / Hard puzzle for every player each Pacific day, with daily solve tracking for future leaderboard/history work. See [DECISIONS #0046](DECISIONS.md).
+
+- [x] Migration `0020` — `daily_puzzles`, `player_daily_completions`, `player_completions.solve_time_ms`, Pacific-day helper, lazy assignment RPC, and daily-aware SP completion RPC.
+- [x] Web `/daily` route with Easy / Medium / Hard cards.
+- [x] Home Daily Puzzles row with Easy / Medium / Hard, completion checkmark/time, and one-primary-CTA hierarchy.
+- [x] Quick Play "Start a game" button routes to the previous Single-player / Co-op / Battle menu.
+- [x] Single-player completion recording includes elapsed time and daily metadata.
+- [x] `merge-progress` unions daily completion rows during anonymous → saved-account merges.
+- [ ] Apply migration `0020` to the linked Supabase project.
+- [ ] Redeploy `merge-progress` after migration `0020`.
+- [ ] Verify `get_daily_puzzles()` creates exactly three rows for today's Pacific date and returns no solutions.
+- [ ] Manual web check: `/daily` → solve one daily puzzle → `player_completions.solve_time_ms` and `player_daily_completions` are recorded.
+- [ ] Add e2e/live verification for daily route once migration 0020 is deployed.
+- [ ] Future: daily leaderboard/history UI using `player_daily_completions`.
 
 ---
 

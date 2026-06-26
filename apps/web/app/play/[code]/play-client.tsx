@@ -19,11 +19,26 @@ import {
 
 type Status = 'loading' | 'ready' | 'not-found';
 
-export function PlayClient({ code }: { code: string }) {
+function dailyDifficultyOrNull(value: string | undefined): 'easy' | 'medium' | 'hard' | null {
+  return value === 'easy' || value === 'medium' || value === 'hard' ? value : null;
+}
+
+export function PlayClient({
+  code,
+  dailyDate,
+  dailyDifficulty,
+}: {
+  code: string;
+  dailyDate?: string;
+  dailyDifficulty?: string;
+}) {
   const board = useGameStore((s) => s.board);
   const puzzle = useGameStore((s) => s.puzzle);
   const startGame = useGameStore((s) => s.startGame);
   const [status, setStatus] = useState<Status>('loading');
+  const daily = dailyDate
+    ? { date: dailyDate, difficulty: dailyDifficultyOrNull(dailyDifficulty) }
+    : null;
 
   // Install autosave once so an in-progress game survives a refresh/crash.
   useEffect(() => installSpAutosave(), []);
@@ -48,13 +63,17 @@ export function PlayClient({ code }: { code: string }) {
         setStatus('not-found');
         return;
       }
-      startGame(p);
+      startGame(
+        daily?.difficulty
+          ? { ...p, daily: { date: daily.date, difficulty: daily.difficulty } }
+          : p,
+      );
       setStatus('ready');
     })();
     return () => {
       cancelled = true;
     };
-  }, [code, puzzle?.code, board, startGame]);
+  }, [code, daily?.date, daily?.difficulty, puzzle?.code, board, startGame]);
 
   if (status === 'not-found') {
     return (
@@ -85,6 +104,7 @@ export function PlayClient({ code }: { code: string }) {
         center={
           <span className="text-xs uppercase tracking-widest text-muted">
             {puzzle?.difficulty ?? ''}
+            {puzzle?.daily ? ' daily' : ''}
           </span>
         }
         actions={

@@ -7,7 +7,7 @@ A multiplayer sudoku web app. Single-player, battle, and a coop MVP are live; op
   - **Single player** — pick a tier, solve a random unsolved puzzle.
   - **Battle** — up to 8 players race to finish the same puzzle (live).
   - **Coop** — 2–8 players collaboratively solve one shared board (Phase 3, MVP landed: shared board, server-overlay sync, shared win).
-- **Live features:** 15,000 QQWing-generated puzzles across warm-up / easy / medium / hard / expert (plus a hidden killer tier), 2,500 each; auto-check; undo/redo with multi-cell undo; auto-clean peer notes; keyboard shortcuts (Space toggles notes, `?` shows overlay, Tab advances); persistent username + completion count; public lobbies; host kick; return-to-lobby replay cycle; optional email account UI with username rename support.
+- **Live features:** 15,000 QQWing-generated puzzles across easy / medium / hard / expert / extreme (plus a hidden killer tier), 2,500 each; auto-check; undo/redo with multi-cell undo; auto-clean peer notes; keyboard shortcuts (Space toggles notes, `?` shows overlay, Tab advances); persistent username + completion count; public lobbies; host kick; return-to-lobby replay cycle; optional email account UI with username rename support.
 
 Inspired by Down for a Cross (multiplayer crosswords), Words With Friends, and the NYT Games apps.
 
@@ -107,7 +107,7 @@ supabase link --project-ref <your-ref>
 supabase db push --linked
 ```
 
-Currently applied to the linked project: `0001_initial.sql` through `0019_completion_stats.sql` (nineteen migrations covering schema, RLS recursion fix, realtime publications, persistent usernames, completions, public lobbies, return-to-lobby, difficulty tiers, atomic per-room seq + batch reservation, QQWing metadata/cutover, mutable usernames, and completion stats).
+Currently applied to the linked project: `0001_initial.sql` through `0021_fix_daily_puzzles_rpc_ambiguity.sql`. Migration `0022_shift_difficulty_labels_to_extreme.sql` is present locally and should be pushed with the difficulty-label release.
 
 ### Ingesting puzzles
 
@@ -118,11 +118,11 @@ Empty `puzzles` table is fine for browsing-but-not-playing. To populate:
 cd /Users/kylets/sudoku-squad
 pnpm --filter @sudoku-squad/ingest ingest:dry-fixture
 
-# Generate the two easiest QQWing tiers (warmup + easy).
+# Generate the two easiest QQWing tiers (easy + medium).
 pnpm --filter @sudoku-squad/ingest ingest:qqwing
 
 # Generate the upper QQWing technique-graded tiers
-# (medium / hard / expert / hidden killer, 2,500 each).
+# (hard / expert / extreme / hidden killer, 2,500 each).
 pnpm --filter @sudoku-squad/ingest ingest:qqwing-graded
 ```
 

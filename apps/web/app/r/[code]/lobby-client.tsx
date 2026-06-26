@@ -445,7 +445,7 @@ export function LobbyClient({ code }: { code: string }) {
           <p className="text-sm text-muted">Loading…</p>
         ) : isHost && status === 'lobby' ? (
           <div className="grid grid-cols-5 gap-2">
-            {(['warmup', 'easy', 'medium', 'hard', 'expert'] as const).map((d) => {
+            {(['easy', 'medium', 'hard', 'expert', 'extreme'] as const).map((d) => {
               // Show the optimistic selection if we have one — keeps the
               // button visually in sync with the user's last click even
               // before the server confirms.
@@ -467,7 +467,7 @@ export function LobbyClient({ code }: { code: string }) {
                       : 'border-border bg-surface text-muted hover:border-primary-border',
                   )}
                 >
-                  {d === 'warmup' ? 'Warm-up' : d[0]!.toUpperCase() + d.slice(1)}
+                  {difficultyLabel(d)}
                 </button>
               );
             })}
@@ -475,11 +475,7 @@ export function LobbyClient({ code }: { code: string }) {
         ) : (
           <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm">
             <span className="text-xs uppercase tracking-widest text-muted">selected</span>
-            <span className="font-semibold text-foreground">
-              {currentDifficulty === 'warmup'
-                ? 'Warm-up'
-                : currentDifficulty[0]!.toUpperCase() + currentDifficulty.slice(1)}
-            </span>
+            <span className="font-semibold text-foreground">{difficultyLabel(currentDifficulty)}</span>
           </div>
         )}
       </section>
@@ -665,6 +661,10 @@ function StartFab({
       </button>
     </div>
   );
+}
+
+function difficultyLabel(difficulty: Difficulty): string {
+  return difficulty[0]!.toUpperCase() + difficulty.slice(1);
 }
 
 function lobbyErrorHeadline(code: RoomError['code']): string {

@@ -18,12 +18,12 @@ import { errorResponse, jsonResponse } from '../_shared/errors.ts';
 import { getCallerUserId, serviceClient } from '../_shared/supabase.ts';
 
 const VALID_DIFFICULTIES = new Set([
-  'warmup',
   'easy',
   'medium',
   'hard',
   'expert',
-  // Note: `killer` is the hidden top tier (DECISIONS #0034). It's a valid
+  'extreme',
+  // Note: `killer` is the hidden top tier (DECISIONS #0047). It's a valid
   // value in the DB, but we do NOT accept it from the client — a future
   // "evil mode" reveal will gate access separately.
 ]);
@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
   if (!parsed) {
     return errorResponse(
       'bad_request',
-      'expected { room_id, difficulty: warmup|easy|medium|hard|expert }',
+      'expected { room_id, difficulty: easy|medium|hard|expert|extreme }',
     );
   }
 
