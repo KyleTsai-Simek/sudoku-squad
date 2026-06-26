@@ -34,24 +34,13 @@ export default function SignInPage() {
             onClick={goBack}
             className="justify-self-start text-sm font-medium text-muted hover:text-foreground"
           >
-            Back
+            ← Back
           </button>
-          <div className="justify-self-center text-sm font-semibold text-foreground">
-            Account
-          </div>
+          <h1 className="justify-self-center text-sm font-semibold text-foreground">Sign in</h1>
           <div aria-hidden="true" />
         </header>
 
         <section className="flex flex-1 flex-col justify-center py-10">
-          <div className="mb-6">
-            <h1 className="text-2xl font-semibold tracking-normal text-foreground">
-              Sign in to save progress
-            </h1>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              Keep your solved puzzles and username available across devices.
-            </p>
-          </div>
-
           <AuthForm onComplete={() => router.push(nextPath)} />
         </section>
       </div>
