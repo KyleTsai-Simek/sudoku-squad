@@ -34,7 +34,7 @@ Live at https://sudoku-squad-web.vercel.app/. Engine + UI + ingest + tests + CI 
 
 ## Phase 2 — Battle mode 🔄 Substantially landed (live)
 
-See [ROADMAP.md Phase 2](ROADMAP.md) for scope. Remaining: two-context race-to-completion smoke and lifting the loser-path board lock.
+See [ROADMAP.md Phase 2](ROADMAP.md) for scope. Remaining: two-context race-to-completion stress coverage; loser-keeps-solving is landed.
 
 ### Backend
 - [x] Migrations 0005 (`pick_random_puzzle_code`), 0006 (RLS recursion fix via `is_room_member`), 0007 (Realtime publications).
@@ -57,7 +57,7 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope. Remaining: two-context race-to-c
 - [x] `/r/[code]` lobby route: room code display, copy share link button, player list with realtime updates, rename (local), error states (not found / full / over / in progress).
 - [x] Host "Start" button — wires up `start-game`. Disabled when < 2 players in battle.
 - [x] Battle game view: own board (`BattleBoard`) + opponent progress bars (`OpponentProgress`) + own number pad (`BattleNumberPad`, hint omitted) + keyboard controller. Duplicates the SP components rather than refactoring them; revisit in Phase 3.
-- [x] Server-broadcast Win overlay (announces winner; dismissible). Losers can dismiss but their board stays locked — full "keep solving" support is task #27.
+- [x] Server-broadcast Win overlay (announces winner; dismissible). Losers can dismiss and keep solving their own board; late completions are recorded.
 - [x] Lobby settings panel (host-editable, locks at Start): showConflicts / autoCheck / highlightSameValue + is_public — shipped in Chunk D (`LobbySettingsPanel` + `update-room-settings` Edge Function).
 - [x] Play-again flow — shipped in Chunk H as the return-to-lobby same-room cycle (`return-to-lobby` Edge Function + `start-game` extended to reset + re-pick puzzle). Distinct from "fresh room with same players" but covers the same need.
 - [x] Polish: losers can keep solving their own board after a winner is declared. Server already accepted late moves; lifted the local board lock in `battle-game.tsx` so `markFinished()` only fires when the local player IS the winner. The winner overlay's "Keep solving" button dismisses, the elapsed-time ticker keeps running, and when the late solver finishes (their own `submit-move` returns `won=true`), the overlay re-opens so they can pick Return-to-lobby or Back-to-menu. `canKeepSolving` now also gates on `finishedAt === null` so the dismiss button hides once they're done.
@@ -83,9 +83,9 @@ ADRs [#0026](DECISIONS.md)–[#0030](DECISIONS.md). Migrations 0008–0011. Edge
 - [x] **Chunk H** — Migration 0011 (`room_players.has_returned`). `submit-move` flips all `has_returned=false` on the winning move + allows late finishes for losers (records their completion). New `return-to-lobby` Edge Function. `start-game` extended for replay: clears `moves`, picks a new puzzle of the same difficulty, resets progress/winner. Winner overlay's primary action is "Return to lobby"; non-returned players render with `opacity-60` + a 3-dot waiting animation; Start button disables with "Waiting on N players…".
 
 ### Phase 2 testing
-- [ ] Two-browser manual test: both join, both play, one finishes, winner declared correctly.
+- [x] Two-browser/local two-context smoke: both join, start, sync opponent progress, and recover battle state after a reload.
 - [ ] Race-condition test: both submit a completing move within milliseconds — exactly one wins.
-- [x] Playwright two-context smoke ([DECISIONS #0013](DECISIONS.md)) — minimal version landed (`apps/web/e2e/battle.spec.ts`). Covers create + join + start + lobby→game routing + opponent-progress Realtime subscription. Stops short of race-to-completion because `submit-move`'s ~1.5s warm latency with the new client-side serialization queue makes 50-cell drain time ~75s. Extension tracked as a separate follow-up.
+- [x] Playwright two-context smoke ([DECISIONS #0013](DECISIONS.md)) — `apps/web/e2e/battle.spec.ts` covers create + join + start + lobby→game routing + opponent-progress Realtime subscription, undo/redo progress sync, and mid-battle reload resume. Stops short of race-to-completion because full-board server drain is still slow. Extension tracked as a separate follow-up.
 
 ---
 
@@ -126,19 +126,19 @@ The coop MVP is live: shared board, server-overlay sync (LWW by `seq` + local pe
 
 ---
 
-## Phase 5 — Authenticated accounts 🔄 Planned (pulled ahead of Phase 4)
+## Phase 5 — Authenticated accounts 🔄 Built/deployed, e2e verification remaining
 
 Optional email sign-in: portable progress + renameable usernames, anonymous stays the default. Full design in [DECISIONS #0043](DECISIONS.md), scope in [ROADMAP Phase 5](ROADMAP.md). Ordered roughly by dependency.
 
 ### Backend — schema + config
-- [x] Migration `0018` — mutable username table. Adds `base` + `discriminator` (int, nullable, `>= 1000` check) to `issued_usernames`; backfills `base` = old username; drops the old `unique(username)`; makes `username` a **generated** display column; unique index on `(lower(base), coalesce(discriminator, 0))`. **Written; pending deploy.**
-- [x] Migration `0019` — `get_completion_stats()` RPC (SECURITY DEFINER) returning the caller's per-difficulty solved counts. **Written; pending deploy.**
-- [ ] **Supabase project config (dashboard — needs the user):** enable email provider, set OTP length to **8**, customize magic-link + OTP email templates, set Site URL + redirect allow-list for `/auth/callback`, review auth rate limits. `supabase/config.toml` left without `[auth]` (project runs against the cloud, not a local stack).
+- [x] Migration `0018` — mutable username table. Adds `base` + `discriminator` (int, nullable, `>= 1000` check) to `issued_usernames`; backfills `base` = old username; drops the old `unique(username)`; makes `username` a **generated** display column; unique index on `(lower(base), coalesce(discriminator, 0))`. **Live on the linked project.**
+- [x] Migration `0019` — `get_completion_stats()` RPC (SECURITY DEFINER) returning the caller's per-difficulty solved counts. **Live on the linked project.**
+- [x] **Supabase project config:** email provider enabled with Supabase's default **6-digit** OTP, Site URL + `/auth/callback` redirect allow-list configured. `supabase/config.toml` intentionally stays function-focused because the project runs against Supabase Cloud, not a local auth stack.
 
 ### Backend — Edge Functions
-- [x] `set-username({ username })` — signed-in only (anon → `forbidden`). Validates base (3–20, `[A-Za-z0-9 _-]`); reads current holders, picks a bare base if free else a random discriminator from the smallest non-full width (`pickDiscriminator`); upserts the caller's row (frees the old tuple); retries on 23505. **Written; pending deploy.**
-- [x] `merge-progress({ source_token })` — dest = caller JWT, source = body token. Guards source anonymous + ≠ dest + dest non-anon; upserts source `player_completions` onto dest (`ignoreDuplicates`), deletes source's username + completions, deletes the orphan anon user (best-effort). **Written; pending deploy.**
-- [x] `claim-username` — inserts `base` (was `username`, now generated); anon defaults stay bare bases. **Written; pending deploy.**
+- [x] `set-username({ username })` — signed-in only (anon → `forbidden`). Validates base (3–20, `[A-Za-z0-9 _-]`); reads current holders, picks a bare base if free else a random discriminator from the smallest non-full width (`pickDiscriminator`); upserts the caller's row (frees the old tuple); retries on 23505. **Deployed.**
+- [x] `merge-progress({ source_token })` — dest = caller JWT, source = body token. Guards source anonymous + ≠ dest + dest non-anon; upserts source `player_completions` onto dest (`ignoreDuplicates`), deletes source's username + completions, deletes the orphan anon user (best-effort). **Deployed.**
+- [x] `claim-username` — inserts `base` (was `username`, now generated); anon defaults stay bare bases. **Deployed.**
 - [x] Registered `set-username` + `merge-progress` in `config.toml`; added `getCaller` / `getUserFromToken` to `_shared/supabase.ts`.
 
 ### Client — auth
@@ -159,9 +159,9 @@ Optional email sign-in: portable progress + renameable usernames, anonymous stay
 
 ### Testing
 - [x] Unit: discriminator allocation (random, never-reuses, width-grows) + base validation + display string. Pure logic extracted to `packages/core/src/username/discriminator.ts` (10 tests, incl. a property test; core 72→82) and imported directly by the `set-username` Edge Function — single source of truth, no drift. The cross-boundary import bundles cleanly on `supabase functions deploy`.
-- [ ] Edge Function checks (post-deploy): `set-username` collision → discriminator; rename frees old tuple; `merge-progress` unions completions + refuses bad inputs.
+- [~] Edge Function checks (post-deploy): basic anon smoke is green (`claim-username` succeeds; `set-username` rejects anon). Still verify collision → discriminator, rename frees old tuple, and `merge-progress` unions completions + refuses bad inputs.
 - [ ] E2E (local, needs Supabase + deploy + email OTP enabled): anon solve → sign in (new email) preserves count; second device (fresh anon progress) → sign in (same email) shows the **union**; rename collision; sign-out → fresh anon with account progress intact on re-sign-in.
-- [ ] Non-regression: anonymous-only play (the default) unchanged; `packages/core` purity lint still clean.
+- [x] Non-regression: anonymous-only play and local multiplayer smokes are green; `packages/core` purity lint is clean.
 
 ---
 

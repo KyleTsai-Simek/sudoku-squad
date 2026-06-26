@@ -44,13 +44,13 @@ Format:
 - **"Account always wins" on cross-device sign-in (discard local anon progress).** Simpler (no merge function), but a player who solved puzzles on a fresh device *before* signing in would silently lose them. Rejected in favor of union merge.
 - **Move *all* users (anon included) to the base#discriminator model.** Unifies the username system but is a bigger rework and gives anonymous users an unfamiliar `#NNNN` name for no benefit. Rejected — anon keeps the adj-noun scheme; discriminators only appear on *chosen* names.
 - **Sequential discriminators.** Predictable and leaks "how many `kyle`s exist." Random draw chosen per spec.
-- **Use Supabase's default 6-digit OTP.** Less config, but the spec calls for 8. We set 8.
+- **Use a custom 8-digit OTP.** Considered briefly, but reverted to Supabase's default 6-digit code because it needs less project config and the extra digits did not add meaningful product value here.
 - **Full account/stats screen now.** Deferred to keep the iteration scoped to auth + rename + menu.
 
 **Consequences.**
 - **New migrations.** `0018` reshapes `issued_usernames` from "issued once" to a mutable **current-username** table: add `base` + `discriminator` columns, a unique index on `(lower(base), coalesce(discriminator, 0))`, backfill existing rows (`base` = current name, `discriminator` = NULL), and relax RLS so a user can read their own row (writes stay service-role via Edge Functions). `0019` adds the `get_completion_stats()` RPC. No change to `player_completions` shape — the merge is an Edge-Function data move, not a schema change.
 - **New Edge Functions:** `set-username`, `merge-progress`. `claim-username` stays (the anonymous default path) but its insert now populates `base`/`discriminator`.
-- **Supabase project config (not a migration):** enable email provider settings, set OTP length to 8, configure email templates + Site URL / redirect allow-list for the magic-link callback (`/auth/callback`), and review auth rate limits. Tracked as a deploy step; mirror in `supabase/config.toml` for local dev.
+- **Supabase project config (not a migration):** enable email provider settings, keep the default 6-digit OTP, configure email templates + Site URL / redirect allow-list for the magic-link callback (`/auth/callback`), and review auth rate limits. Tracked as a deploy step; `supabase/config.toml` stays focused on Edge Function config because this project uses Supabase Cloud rather than a local auth stack.
 - **Client:** `lib/supabase.ts` gains link/sign-in/sign-out/merge helpers and an auth-state store; `lib/username.ts` gains a `setUsername` path and a display-string helper; a new `HamburgerMenu` + auth sheet + `/auth/callback` route; Material Symbols icons introduced (inlined SVGs to start — no runtime CDN dependency).
 - **`room_players.username` remains a join-time snapshot** of the display string; a mid-room rename does not retroactively rewrite active rooms (minor edge, acceptable).
 - **Profanity/hygiene filter on chosen names is still deferred** (the open question from [#0027](DECISIONS.md)) — revisit before any public launch.
@@ -1094,7 +1094,7 @@ Resolved items get moved into the log above. These are still TBD. Items grouped 
 ## Open longer-term
 
 6. **Visual identity** — color palette, typography, logo, completion celebration style. Current interim is Tailwind stone-900 + amber-200 accents (sufficient for V1 demo, not committed to). Needs a design pass before any public-facing push.
-7. **Expert tier sourcing** — the 3M Kaggle dataset has only ~100 puzzles rated > 7.0, not enough for a 2 500-row sample (per #0018). Find or generate a higher-difficulty source before re-enabling the tier.
+7. **Visible tier above expert** — `killer` now exists as a hidden QQWing EXPERT/requires-a-guess tier ([#0042](DECISIONS.md)). Decide whether and how to expose a true "evil" tier before public launch.
 8. **Vercel ↔ Supabase preview environment** — preview deploys currently hit the *production* Supabase project. Fine for V1; revisit before more users.
 
 ## Recently resolved (and where it landed)
@@ -1108,4 +1108,4 @@ Resolved items get moved into the log above. These are still TBD. Items grouped 
 - **`rooms.mode` includes `single`** — resolved (dropped via migration 0004; single-player doesn't use rooms).
 - **Coop offline-merge rule** — resolved in #0040 (rule A: pure LWW, persistence scoped to reconnect/refresh resume; escalate to fork-aware C only if true offline coop is needed).
 - **Solution exposure for SP vs. multiplayer** — resolved in #0022 (SP uses the `sp_get_puzzle` RPC; multiplayer uses Edge Functions that never expose `solution`).
-- **Puzzle dataset variant** — resolved in #0018 (Kaggle 3M with the rating column; supersedes #0011).
+- **Puzzle dataset variant** — resolved in #0042 (QQWing-generated bank; supersedes the Kaggle 3M source for live puzzles).

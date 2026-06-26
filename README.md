@@ -1,13 +1,13 @@
 # Sudoku Squad
 
-A multiplayer sudoku web app. Single-player + battle mode live; coop in flight.
+A multiplayer sudoku web app. Single-player, battle, and a coop MVP are live; optional accounts are in progress.
 
 - **Live demo:** https://sudoku-squad-web.vercel.app/
 - **Modes:**
   - **Single player** — pick a tier, solve a random unsolved puzzle.
   - **Battle** — up to 8 players race to finish the same puzzle (live).
   - **Coop** — 2–8 players collaboratively solve one shared board (Phase 3, MVP landed: shared board, server-overlay sync, shared win).
-- **Live features:** 15,000 puzzles across warm-up / easy / medium / hard / expert (plus a hidden killer tier), 2,500 each (the two easiest tiers generated locally via QQWing with negative ratings); auto-check; undo/redo with multi-cell undo; auto-clean peer notes; keyboard shortcuts (Space toggles notes, `?` shows overlay, Tab advances); persistent username + completion count; public lobbies; host kick; return-to-lobby replay cycle.
+- **Live features:** 15,000 QQWing-generated puzzles across warm-up / easy / medium / hard / expert (plus a hidden killer tier), 2,500 each; auto-check; undo/redo with multi-cell undo; auto-clean peer notes; keyboard shortcuts (Space toggles notes, `?` shows overlay, Tab advances); persistent username + completion count; public lobbies; host kick; return-to-lobby replay cycle; optional email account UI with username rename support.
 
 Inspired by Down for a Cross (multiplayer crosswords), Words With Friends, and the NYT Games apps.
 
@@ -15,7 +15,7 @@ Inspired by Down for a Cross (multiplayer crosswords), Words With Friends, and t
 
 ## Status
 
-**Phase 1 complete.** Single-player web is built and deployed. **Phase 2 (battle) is substantially landed** — chunks A–H from the May 22 product changes shipped plus a UX polish pass. **Phase 3 (coop) has an MVP landed** — shared board, server-overlay sync, atomic seq, shared win. Remaining: two-context Playwright smoke and the loser-keeps-solving local lock (battle); presence cursors, private notes, disconnect grace (coop). See [docs/STATUS.md](docs/STATUS.md) for the live snapshot.
+**Phase 1 complete.** Single-player web is built and deployed. **Phase 2 (battle) is playable end-to-end** — chunks A–H, loser-keeps-solving, battle reload resume, and local two-context Playwright coverage are landed. **Phase 3 (coop) has an MVP landed** — shared board, server-overlay sync, atomic seq, shared win, and a local two-context notes-sync smoke. **Phase 5 accounts are built/deployed at the backend + client level, with full email-link/merge/rename e2e verification still remaining.** See [docs/STATUS.md](docs/STATUS.md) for the live snapshot.
 
 ## Document set (read in this order)
 
@@ -29,6 +29,7 @@ Inspired by Down for a Cross (multiplayer crosswords), Words With Friends, and t
 | [docs/TODO.md](docs/TODO.md) | Active task list, broken out by phase. |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | ADR log + open questions. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to set up, the rules to follow, how to verify and ship. |
+| [AGENTS.md](AGENTS.md) | Current repo instructions for AI coding agents. |
 | [CLAUDE.md](CLAUDE.md) | Instructions for AI agents working in this repo. |
 
 ## Tech stack
@@ -37,7 +38,7 @@ Inspired by Down for a Cross (multiplayer crosswords), Words With Friends, and t
 - **iOS (Phase 4):** React Native via Expo, sharing `packages/core`
 - **Backend:** Supabase (Postgres + Realtime + Edge Functions)
 - **Hosting:** Vercel (web) + Supabase Cloud
-- **Auth:** Anonymous, with per-room usernames
+- **Auth:** Anonymous by default, with optional email OTP accounts and renameable usernames
 - **Package manager:** pnpm 11 workspaces
 
 ## Getting started
@@ -81,7 +82,7 @@ cp .env.example .env.local
 ln -s ../../.env.local apps/web/.env.local
 
 # 3. Sanity-check the engine, solver, RLS
-pnpm --filter @sudoku-squad/core test          # expect 65/65
+pnpm --filter @sudoku-squad/core test          # expect 82/82
 pnpm --filter @sudoku-squad/ingest test        # expect 9/9
 pnpm --filter @sudoku-squad/ingest check       # 4/4 if puzzles are ingested
 
@@ -105,32 +106,23 @@ supabase link --project-ref <your-ref>
 supabase db push --linked
 ```
 
-Currently applied: `0001_initial.sql` through `0015_reserve_room_seqs_batch.sql` (fifteen migrations covering schema, RLS recursion fix, realtime publications, persistent usernames, completions, public lobbies, return-to-lobby, the easier/shifted difficulty tiers, and atomic per-room seq + batch reservation for coop sync).
+Currently applied to the linked project: `0001_initial.sql` through `0019_completion_stats.sql` (nineteen migrations covering schema, RLS recursion fix, realtime publications, persistent usernames, completions, public lobbies, return-to-lobby, difficulty tiers, atomic per-room seq + batch reservation, QQWing metadata/cutover, mutable usernames, and completion stats).
 
 ### Ingesting puzzles
 
 Empty `puzzles` table is fine for browsing-but-not-playing. To populate:
 
 ```bash
-# Download the Kaggle 3M dataset (see scripts/ingest/README.md for kaggle CLI setup)
-mkdir -p scripts/ingest/data
-cd scripts/ingest/data
-kaggle datasets download -d radcliffe/3-million-sudoku-puzzles-with-ratings
-unzip 3-million-sudoku-puzzles-with-ratings.zip
-
-# Dry-run first to inspect bucket counts
+# Dry-run the legacy fixture first to sanity-check the solver/code path
 cd /Users/kylets/sudoku-squad
-pnpm --filter @sudoku-squad/ingest ingest -- --dry-run
+pnpm --filter @sudoku-squad/ingest ingest:dry-fixture
 
-# Real ingest (writes 10,000 rows via service-role key, across 4 Kaggle tiers:
-# medium / hard / expert / killer, 2,500 each).
-# Use --truncate to wipe puzzles + downstream tables first.
-pnpm --filter @sudoku-squad/ingest ingest
-pnpm --filter @sudoku-squad/ingest ingest -- --truncate
-
-# Plus 5,000 additional easier puzzles via local QQWing generation
-# (warmup + easy tiers, 2,500 each, ratings in [-10, 0)). ~60 minutes single-threaded.
+# Generate the two easiest QQWing tiers (warmup + easy).
 pnpm --filter @sudoku-squad/ingest ingest:qqwing
+
+# Generate the upper QQWing technique-graded tiers
+# (medium / hard / expert / hidden killer, 2,500 each).
+pnpm --filter @sudoku-squad/ingest ingest:qqwing-graded
 ```
 
 ## Repo layout
@@ -143,9 +135,9 @@ sudoku-squad/
   packages/
     core/                 # Shared platform-agnostic game logic (TS only)
   scripts/
-    ingest/               # Kaggle dataset ingest + Norvig solver (server-only)
+    ingest/               # QQWing/legacy dataset ingest + Norvig solver (server-only)
   supabase/
-    migrations/           # SQL migrations (0001..0015)
+    migrations/           # SQL migrations (0001..0019)
     functions/            # Edge Functions: create-room, join-room, start-game,
                           # submit-move, change-difficulty, change-mode,
                           # claim-username, kick-player, update-room-settings,
@@ -156,7 +148,7 @@ sudoku-squad/
 
 ## Workflow expectations
 
-- **All meaningful changes update the relevant docs in the same PR.** See [CLAUDE.md](CLAUDE.md) §1 for the doc-update protocol.
-- **`packages/core` is platform-agnostic.** No imports from `next/*`, `react-native/*`, `react-dom/*`, or browser globals. Lint-enforced via `packages/core/eslint.config.js`. See [CLAUDE.md](CLAUDE.md) §2.
+- **All meaningful changes update the relevant docs in the same PR.** See [AGENTS.md](AGENTS.md) §1 for the doc-update protocol.
+- **`packages/core` is platform-agnostic.** No imports from `next/*`, `react-native/*`, `react-dom/*`, or browser globals. Lint-enforced via `packages/core/eslint.config.js`. See [AGENTS.md](AGENTS.md) §2.
 - **Server is authoritative for game-determining state.** Win/loss in multiplayer happens server-side. `puzzles.solution` reaches the client only in single-player, via the `sp_get_puzzle` RPC ([DECISIONS.md #0022](docs/DECISIONS.md)).
 - **Verification per [DECISIONS.md #0013](docs/DECISIONS.md):** property tests in core, two-tab Playwright smoke for sync (Phase 2), solver-verified dataset ingest.

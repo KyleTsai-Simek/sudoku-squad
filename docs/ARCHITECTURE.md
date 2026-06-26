@@ -51,8 +51,8 @@ sudoku-squad/
                           # move-batcher, puzzle-source, pick-puzzle,
                           # completions (server-backed), rooms, username,
                           # supabase, sample-puzzles, confetti
-      e2e/                # Playwright smokes: single-player (CI) +
-                          # battle two-context (local-only, needs Supabase)
+      e2e/                # Playwright smokes: single-player/SP resume (CI-safe) +
+                          # battle/coop two-context (local-only, needs Supabase)
     ios/                  # Expo / React Native (added in Phase 4)
   packages/
     core/                 # SHARED — must stay platform-agnostic
@@ -68,13 +68,13 @@ sudoku-squad/
                           # iOS nears. See DECISIONS #0040.
   scripts/
     ingest/               # one-off: dataset import, Norvig solver, code hashing
-      data/               # gitignored: source CSVs from Kaggle
+      data/               # gitignored: legacy source CSVs, if used
       fixtures/           # small in-repo synthetic CSVs (committed)
       src/                # solver, csv reader, code hash, ingest entrypoint,
                           # preflight-3m (source scan), audit-difficulty
                           # (live DB audit), check-connectivity
   supabase/
-    migrations/           # 0001..0015 applied to live project
+    migrations/           # 0001..0019 applied to live project
     functions/            # Edge Functions: create-room, join-room, start-game,
                           # submit-move, change-difficulty, change-mode,
                           # claim-username, kick-player, update-room-settings,
@@ -96,16 +96,16 @@ sudoku-squad/
 
 ## 4. Data model (Supabase / Postgres)
 
-Live SQL is in `supabase/migrations/`. Tables below reflect what's actually applied to the project (migrations 0001 → 0017), plus the Phase 5 username/stats changes planned in migrations 0018–0019 ([#0043](DECISIONS.md), marked inline).
+Live SQL is in `supabase/migrations/`. Tables below reflect what's applied to the linked project (migrations 0001 → 0019), including the Phase 5 username/stats changes from [#0043](DECISIONS.md).
 
 ### `puzzles`
-Pre-generated puzzles. Immutable once ingested. **15,000 rows** live as of 2026-05-22 across **six tiers** (five visible, one hidden after the #0034 rename): 2,500 each in warmup / easy / medium / hard / expert / killer. Warmup + easy come from local QQWing generation (naked-singles-only, augmented to high clue counts); medium / hard / expert / killer come from the Kaggle 3M `radcliffe/3-million-sudoku-puzzles-with-ratings` dataset. See [DECISIONS #0032](DECISIONS.md) (radcliffe bands), [#0033](DECISIONS.md) (QQWing tiers), and [#0034](DECISIONS.md) (shift-rename).
+Pre-generated puzzles. Immutable once ingested. **15,000 rows** live across **six tiers** (five visible, one hidden): 2,500 each in warmup / easy / medium / hard / expert / killer. The whole bank is now QQWing-generated after [#0042](DECISIONS.md): warmup/easy use the original high-clue naked-singles pipeline ([#0033](DECISIONS.md)); medium/hard/expert/killer use QQWing difficulty class + technique counts and carry typed QQWing metadata columns (migration 0016). Migration 0017 removed the old Kaggle-sourced upper tiers.
 
 | col | type | notes |
 |---|---|---|
 | `id` | uuid PK | Internal DB key. Not visible client-side. |
 | `code` | text unique not null | 6-char lowercase base36 hash of `givens`. URL slug and the cross-mode puzzle identifier. Per [DECISIONS.md #0019](DECISIONS.md). |
-| `difficulty` | text | `warmup` / `easy` / `medium` / `hard` / `expert` / `killer`. All six tiers populated. Rating bands by source: warmup rating `[-10, -5)`, easy `[-5, 0)` (both via QQWing — see [#0033](DECISIONS.md)); medium `[0, 0.75)`, hard `[0.75, 2.5)`, expert `[2.5, 5)`, killer `[5, 7)` (Kaggle 3M — see [#0032](DECISIONS.md) + [#0034](DECISIONS.md)). `killer` is intentionally hidden from the picker. Constraint added in migration 0012, renamed in 0013. |
+| `difficulty` | text | `warmup` / `easy` / `medium` / `hard` / `expert` / `killer`. All six tiers populated. Current mapping: warmup/easy from augmented QQWing singles with synthetic rating bands `[-10,-5)` / `[-5,0)`; medium = QQWing EASY; hard = QQWing INTERMEDIATE with exactly 1 advanced technique; expert = QQWing INTERMEDIATE with 2+ advanced techniques; killer = QQWing EXPERT / requires guessing. `killer` is intentionally hidden from the picker. Constraint added in migration 0012, renamed in 0013. |
 | `givens` | smallint[81] | Starting clues. `0` = empty cell. |
 | `solution` | smallint[81] | Unique solution. **Never sent to the client during multiplayer.** Single-player gets it via the SECURITY DEFINER RPC `sp_get_puzzle(code)` — see [#0022](DECISIONS.md). |
 | `created_at` | timestamptz | |
@@ -265,25 +265,25 @@ Run on the server (Edge Function or trigger) by comparing the current materializ
 
 ## 7. Puzzle source
 
-The live bank is **15,000 puzzles across six tiers** from two pipelines (see [DECISIONS #0032](DECISIONS.md)/[#0033](DECISIONS.md)/[#0034](DECISIONS.md)):
+The live bank is **15,000 puzzles across six tiers**, all QQWing-generated (see [DECISIONS #0033](DECISIONS.md)/[#0034](DECISIONS.md)/[#0042](DECISIONS.md)):
 
-- **`medium` / `hard` / `expert` / `killer`** (10,000, 2,500 each) come from the Kaggle [3 million Sudoku puzzles with ratings](https://www.kaggle.com/datasets/radcliffe/3-million-sudoku-puzzles-with-ratings) dataset (`radcliffe/3-million-sudoku-puzzles-with-ratings`). One row per puzzle: `id,puzzle,solution,clues,difficulty`. The rating column buckets by the dataset's own difficulty without inferring from clue count.
 - **`warmup` / `easy`** (5,000, 2,500 each) are generated locally via QQWing (naked-singles-only, augmented to high clue counts), rated on a synthetic `[-10, 0)` scale.
+- **`medium` / `hard` / `expert` / `killer`** (10,000, 2,500 each) are generated locally via QQWing and bucketed by QQWing difficulty class + technique counts:
+  - medium: QQWing EASY.
+  - hard: QQWing INTERMEDIATE with exactly 1 distinct advanced technique and `guess_count = 0`.
+  - expert: QQWing INTERMEDIATE with 2+ distinct advanced techniques and `guess_count = 0`.
+  - killer: QQWing EXPERT with `guess_count >= 1`.
 
 `killer` is solver-verified and playable by direct URL but hidden from the picker — reserved for a future "evil mode."
 
-Radcliffe ingest flow (`scripts/ingest/src/index.ts`, one-off):
-1. Stream the CSV.
-2. For each row, run our Norvig-ported solver to confirm a unique solution and that the dataset's claimed solution matches.
-3. Bucket by the dataset's `difficulty` rating into `medium` / `hard` / `expert` / `killer` using the half-open bands `[0, 0.75)` / `[0.75, 2.5)` / `[2.5, 5)` / `[5, 7)` ([#0032](DECISIONS.md), shifted/renamed in [#0034](DECISIONS.md)). Rows whose rating sits at or above 7.0 are skipped entirely (no clue-count fallback). Per-(tier, clue-count) targets in `TARGET_PER_CELL` mean lower tiers admit more high-clue puzzles, higher tiers more low-clue ones. Stop sampling once every cell hits its target — 2,500 per tier.
+Current QQWing ingest flow:
+1. Generate candidate puzzles with QQWing (`ingest:qqwing` for warmup/easy, `ingest:qqwing-graded` for medium+).
+2. Run our Norvig-ported solver to confirm a unique solution and that QQWing's solution matches.
+3. Bucket by clue count/synthetic rating for warmup/easy, or QQWing difficulty/technique metadata for medium/hard/expert/killer.
 4. Compute `puzzles.code = puzzleCodeFor(givens)` for every kept row (the TS port of the in-DB function — see [#0019](DECISIONS.md)).
-5. Bulk insert into `puzzles` via the service-role client (batches of 500). The `unique(code)` constraint catches the impossible collision case.
+5. Bulk insert into `puzzles` via the service-role client. The `unique(code)` constraint catches collisions.
 
-The QQWing ingest (`scripts/ingest/src/ingest-qqwing.ts`, `pnpm --filter @sudoku-squad/ingest ingest:qqwing`) generates the two easiest tiers — see [DECISIONS #0033](DECISIONS.md).
-
-Two read-only utility scripts complement the ingest:
-- `pnpm --filter @sudoku-squad/ingest preflight:3m` — scan the source CSV and report rating + clue-count distributions, used to design `TARGET_PER_CELL`.
-- `pnpm --filter @sudoku-squad/ingest audit:difficulty` — audit the live DB: per-tier counts, clue stats, and source-rating distribution by re-matching rows against the CSV.
+The old Radcliffe/Kaggle ingest (`scripts/ingest/src/index.ts`) and audit tooling are dormant legacy paths retained for provenance and fixture tests; they are no longer the source of truth for the live bank.
 
 Runtime never invokes the solver. Hints, auto-check, and win detection in single-player read `solution` via the RPC `sp_get_puzzle`; multiplayer hits Edge Functions instead — see [#0022](DECISIONS.md). The solver code lives in `scripts/ingest/` and is lint-blocked from being imported by `packages/core` or `apps/web`. Per [DECISIONS.md #0012](DECISIONS.md).
 

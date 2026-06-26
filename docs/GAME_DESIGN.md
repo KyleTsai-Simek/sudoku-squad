@@ -147,5 +147,4 @@ Optional email sign-in, layered on top of anonymous play:
 2. **Host migration** acknowledgement — explicit or silent? Leaning silent (transfer to longest-tenured remaining player).
 3. **Mobile lobby / share link UX** — auto-copy on room create? Native share sheet? QR code for in-person play?
 4. **Mobile cursor visualization in coop** — phones have no persistent cursor. Working assumption: ring stays on the last-tapped cell, fades after ~3 seconds of inactivity. Confirm with testing.
-5. **Hint disclosure UX in battle** — how is "X used a hint" shown to opponents? An icon on their progress bar? A toast?
-6. **Mid-game join policy** — confirmed working assumption: battle is locked after Start; coop is open anytime.
+5. **Mid-game join policy** — confirmed working assumption: battle is locked after Start; coop is open anytime.

@@ -2,15 +2,15 @@
 
 Four phases, each with an explicit **exit criterion** — we don't move on until it's met. Single player first, then battle, then coop, then iOS. This sequencing exists for a reason: each phase de-risks the next.
 
-**Current position:** Phase 2 battle mode is substantially complete and live; remaining gaps are the two-context Playwright smoke and lifting the local board-lock on the loser path. Phase 3 coop has an MVP landed (shared board, server-overlay sync, shared win). **Phase 5 (authenticated accounts) is planned and being pulled ahead of Phase 4 (iOS)** — see [DECISIONS #0043](DECISIONS.md). See [STATUS.md](STATUS.md) for the live snapshot.
+**Current position:** Phase 2 battle mode is playable end-to-end and live, with local two-context Playwright coverage plus loser-keeps-solving and reload-resume fixes. Phase 3 coop has an MVP landed (shared board, server-overlay sync, shared win) with a local two-context notes-sync smoke. **Phase 5 (authenticated accounts) is built/deployed at the backend + client level and needs full email/merge/rename e2e verification before it is called complete** — see [DECISIONS #0043](DECISIONS.md). See [STATUS.md](STATUS.md) for the live snapshot.
 
 | Phase | Status |
 |---|---|
 | Phase 0 — Setup, scaffold, doc set | ✅ Complete |
 | Phase 1 — Single-player web | ✅ Complete (deployed at https://sudoku-squad-web.vercel.app/) |
-| Phase 2 — Battle mode | 🔄 Substantially landed (chunks A–H + UX polish pass) |
-| Phase 3 — Coop mode | 🔄 MVP landed (shared board, server-overlay sync, shared win) |
-| Phase 5 — Authenticated accounts | 🔄 Planned (pulled ahead of Phase 4) — see [DECISIONS #0043](DECISIONS.md) |
+| Phase 2 — Battle mode | 🔄 Playable end-to-end; race-to-completion stress remains |
+| Phase 3 — Coop mode | 🔄 MVP landed (shared board, server-overlay sync, shared win, local two-context smoke) |
+| Phase 5 — Authenticated accounts | 🔄 Built/deployed; full email/merge/rename e2e verification remains |
 | Phase 4 — iOS (React Native) | Pending |
 
 ---
@@ -21,8 +21,8 @@ Four phases, each with an explicit **exit criterion** — we don't move on until
 
 **What landed:**
 - Monorepo (pnpm 11 workspaces, Next.js 15 app, `packages/core` with engine, `scripts/ingest`).
-- **15,000 puzzles** in Supabase across **six tiers, 2,500 each**: `warmup`/`easy` generated locally via QQWing (negative ratings), and `medium`/`hard`/`expert`/`killer` from the Kaggle `radcliffe/3-million-sudoku-puzzles-with-ratings` dataset (rating-banded). `killer` is hidden from the UI. Short 6-char codes assigned per puzzle. See [DECISIONS #0031](DECISIONS.md), [#0033](DECISIONS.md), [#0034](DECISIONS.md).
-- `packages/core`: types, validator, conflict checker, completion checker, pure move reducer (with auto-clean peer notes), undo/redo history (multi-cell undo + `peekLastMove`). **65/65 tests passing** including `fast-check` property tests.
+- **15,000 puzzles** in Supabase across **six tiers, 2,500 each**, all QQWing-generated after [DECISIONS #0042](DECISIONS.md): warmup/easy use the original augmented naked-singles pipeline; medium/hard/expert/killer use technique-graded QQWing metadata. `killer` is hidden from the UI. Short 6-char codes assigned per puzzle. See [DECISIONS #0033](DECISIONS.md), [#0034](DECISIONS.md), and [#0042](DECISIONS.md).
+- `packages/core`: types, validator, conflict checker, completion checker, pure move reducer (with auto-clean peer notes), undo/redo history (multi-cell undo + `peekLastMove`), seq-log helpers, faithful board diffing, and username discriminator logic. **82/82 tests passing** including `fast-check` property tests.
 - Web app: home page with per-tier "New game" CTAs that pick a random unsolved puzzle and navigate to `/play/[code]`. Full sudoku UI (grid + number pad + notes + undo/redo + timer + settings + completion overlay + keyboard shortcuts overlay). Hint was removed in Chunk A. Conflict highlighting, same-value highlighting, optional auto-check. Completions tracked server-side in `player_completions` (Chunk F).
 - Tooling: ESLint flat config enforces `packages/core` purity. Playwright happy-path smoke. GitHub Actions CI runs everything on PR + push.
 - Deployed to https://sudoku-squad-web.vercel.app/, auto-deploys from `main`.
@@ -61,7 +61,7 @@ These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 wor
 - Race-condition test: both submit a completing move within milliseconds — exactly one wins.
 
 **Remaining work**
-- Two-context Playwright smoke that drives both sides automatically and asserts converged state, including a late-finisher path (see Phase 2 Testing in [TODO.md](TODO.md)).
+- Extend battle testing to a full race-to-completion + near-simultaneous final-move stress path (see Phase 2 Testing in [TODO.md](TODO.md)).
 
 ---
 
@@ -79,12 +79,12 @@ These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 wor
 - 🔲 Visible colored cursors via Supabase Presence (throttled).
 - 🔲 Private/per-player notes merge logic.
 - 🔲 Disconnect/rejoin grace handling.
-- 🔲 Two-context coop Playwright smoke.
+- ✅ Two-context coop Playwright smoke (local-only; CI still skips live Supabase specs).
 
 **Exit criterion**
 - Two browsers in the same coop room can fluidly co-solve a puzzle. Simultaneous typing into the same cell produces a deterministic result (LWW), and both clients converge. No state desync over 10+ minute sessions.
 
-**Estimate:** ~2 weeks (more than battle because of conflict resolution + cursors).
+**Estimate:** MVP landed; remaining polish is presence/private-notes/disconnect UX.
 
 ---
 
@@ -101,13 +101,15 @@ These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 wor
 - `set-username` Edge Function: signed-in renames with Discord-style `base#NNNN` discriminators (random, width-growing, freed on change-away). Anonymous users keep the immutable adj-noun handle.
 - Backend stats capture only: `get_completion_stats()` RPC (per-difficulty + total); no stats screen this iteration.
 - Top-corner hamburger menu (Material Symbols) on all screens; Account item → "Sign in" / username → change-username + sign-out.
-- Migrations `0018` (mutable username table: `base`/`discriminator` + uniqueness on `(lower(base), coalesce(discriminator,0))`) and `0019` (stats RPC). Supabase project config: email provider on (6-digit OTP default), email templates, redirect allow-list, `/auth/callback`.
+- ✅ Migrations `0018` (mutable username table: `base`/`discriminator` + uniqueness on `(lower(base), coalesce(discriminator,0))`) and `0019` (stats RPC) are live.
+- ✅ Edge Functions `claim-username`, `set-username`, and `merge-progress` are deployed; basic anon smoke is green.
+- ✅ Supabase project config is set for email OTP using the default 6-digit code, plus `/auth/callback` redirects.
 
 **Exit criterion**
 - A player solves puzzles anonymously on device A, signs in, then signs in on device B (fresh, with its own anon progress) — and device B shows the **union** of both devices' solved counts. Renaming to a taken base yields a `#NNNN` discriminator; changing away frees it. Sign-out drops to a fresh anonymous identity with progress intact under the account.
 - No regression to anonymous-only play (the default path), and `packages/core` stays platform-agnostic.
 
-**Estimate:** ~1–1.5 weeks (mostly Edge Functions + the auth UI; no game-logic changes).
+**Estimate:** implementation is in place; budget remaining time for live e2e verification and fixes found there.
 
 ---
 
