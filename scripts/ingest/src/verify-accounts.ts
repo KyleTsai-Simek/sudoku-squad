@@ -14,6 +14,7 @@
  *   7. Username collisions get discriminators.
  *   8. Changing away frees the previous bare username.
  *   9. merge-progress unions anonymous completions into a saved account.
+ *  10. merge-progress rejects permanent-account source tokens.
  *
  * The script creates temporary auth users, then removes their
  * usernames/completions/auth rows with the service-role client.
@@ -104,6 +105,15 @@ async function setUsername(client: SupabaseClient, username: string): Promise<{ 
     fail(`set-username(${username}) failed: ${res.error.message}`);
   }
   return readUsernamePayload(res.data);
+}
+
+async function getAccessToken(client: SupabaseClient, label: string): Promise<string> {
+  const session = await client.auth.getSession();
+  const token = session.data.session?.access_token;
+  if (!token) {
+    fail(`could not read access token for ${label}: ${session.error?.message ?? 'no session'}`);
+  }
+  return token;
 }
 
 async function main(): Promise<void> {
@@ -268,6 +278,15 @@ async function main(): Promise<void> {
       fail(`merge-progress did not clear source completions: ${sourceRows.error?.message ?? JSON.stringify(sourceRows.data)}`);
     }
     ok('merge-progress unions anonymous completions into a saved account');
+
+    const permanentSourceToken = await getAccessToken(accountC.client, 'permanent source account');
+    const permanentSourceMerge = await accountB.client.functions.invoke('merge-progress', {
+      body: { source_token: permanentSourceToken },
+    });
+    if (!permanentSourceMerge.error) {
+      fail('merge-progress unexpectedly accepted a permanent-account source token');
+    }
+    ok('merge-progress rejects permanent-account source tokens');
 
     console.log('\nAll account infrastructure checks passed.');
   } finally {

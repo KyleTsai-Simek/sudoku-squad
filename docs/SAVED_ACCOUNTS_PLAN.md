@@ -1,6 +1,6 @@
 # Saved Accounts Plan
 
-**Status:** Phase 5 active. Backend + client scaffolding is landed; automated live backend verification now covers anonymous accounts, generated saved-account sessions, username collision/freeing behavior, and completion merges. Real email delivery and cross-device product testing remain.
+**Status:** Phase 5 active. Backend + client scaffolding is landed; automated live backend verification now covers anonymous accounts, generated saved-account sessions, username collision/freeing behavior, and completion merges. Real email magic-link sign-in and username change have been manually confirmed on production; OTP entry, sign-out/re-sign-in, and cross-device merge remain.
 
 This is the implementation and verification tracker for functional saved accounts. Keep it updated as each milestone lands. Summary state belongs in [STATUS.md](STATUS.md); granular task checkboxes live here and in [TODO.md](TODO.md).
 
@@ -96,6 +96,7 @@ The reliable link format is:
 
 - Magic link / OTP template: `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email`
 - Change email address template: `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email_change`
+- Confirm sign up template, if enabled later: `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=signup`
 
 The callback route already supports `token_hash` + `type` by calling `verifyOtp`. Keep the 6-digit `{{ .Token }}` code in the email as the primary no-redirect path.
 
@@ -136,9 +137,9 @@ The callback route already supports `token_hash` + `type` by calling `verifyOtp`
 - [ ] Confirm Supabase dashboard settings:
   - [ ] Email provider enabled.
   - [ ] OTP length is 6 digits unless the product decision changes.
-  - [ ] Magic link / OTP template references Sudoku Squad, includes `{{ .Token }}`, and uses `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email`.
+  - [x] Magic link / OTP template references Sudoku Squad, includes `{{ .Token }}`, and uses `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email`.
   - [ ] Change email address template references Sudoku Squad, includes `{{ .Token }}`, and uses `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email_change`.
-  - [ ] Redirect allow-list includes local, Vercel preview, and production `/auth/callback`.
+  - [~] Redirect allow-list includes local, Vercel preview, and production `/auth/callback` (production confirmed by manual magic-link test; local/preview still need explicit dashboard confirmation).
   - [ ] Rate limits are acceptable for manual testing.
 - [ ] Confirm `0018` and `0019` are live.
 - [ ] Confirm deployed functions match repo code:
@@ -166,7 +167,7 @@ The callback route already supports `token_hash` + `type` by calling `verifyOtp`
   - [x] changing away frees the old tuple
   - [x] `merge-progress` unions completions
   - [x] `merge-progress` rejects invalid source tokens
-  - [ ] `merge-progress` rejects permanent-source tokens
+  - [x] `merge-progress` rejects permanent-source tokens
 - [x] Document email/session constraints: generated sessions cover backend behavior; real email delivery, redirect allow-list, and callback UX remain manual/e2e checks.
 
 ### M3 — Client Flow Hardening
@@ -175,9 +176,9 @@ The callback route already supports `token_hash` + `type` by calling `verifyOtp`
 - [ ] Ensure pending magic-link state survives reload.
 - [x] Ensure merge failure is visible/retryable instead of silently swallowed.
 - [ ] Ensure username and solved-count refresh after:
-  - [ ] new-email link
+  - [x] new-email link
   - [~] existing-account sign-in
-  - [ ] rename
+  - [x] rename
   - [ ] sign-out
 - [ ] Ensure anonymous-only play still works when Supabase email config is unavailable.
 - [ ] Remove any misleading "signed out" copy: users are always anonymous or saved-account, not unauthenticated.
@@ -207,10 +208,10 @@ The callback route already supports `token_hash` + `type` by calling `verifyOtp`
 
 Ask the user to manually test on production or preview:
 
-- [ ] Save account from a fresh anonymous session.
-- [ ] Click the magic link in email and land back in the app.
+- [x] Save account from a fresh anonymous session.
+- [x] Click the magic link in email and land back in the app.
 - [ ] Enter the OTP code instead of using the link.
-- [ ] Rename account.
+- [x] Rename account.
 - [ ] Sign out and confirm a fresh anonymous username appears.
 - [ ] Sign back in and confirm progress returns.
 - [ ] Try the same account on a second browser/device and confirm progress union.

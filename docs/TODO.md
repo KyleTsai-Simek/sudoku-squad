@@ -137,7 +137,7 @@ Optional email sign-in: portable progress + renameable usernames, anonymous stay
 ### Backend — schema + config
 - [x] Migration `0018` — mutable username table. Adds `base` + `discriminator` (int, nullable, `>= 1000` check) to `issued_usernames`; backfills `base` = old username; drops the old `unique(username)`; makes `username` a **generated** display column; unique index on `(lower(base), coalesce(discriminator, 0))`. **Live on the linked project.**
 - [x] Migration `0019` — `get_completion_stats()` RPC (SECURITY DEFINER) returning the caller's per-difficulty solved counts. **Live on the linked project.**
-- [~] **Supabase project config:** email provider enabled with Supabase's default **6-digit** OTP. Still needs dashboard cleanup: email templates must use token-hash callback links (`{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=...`) instead of `{{ .ConfirmationURL }}` to avoid PKCE verifier storage errors, and the redirect allow-list must include local, preview, and production `/auth/callback` URLs. `supabase/config.toml` intentionally stays function-focused because the project runs against Supabase Cloud, not a local auth stack.
+- [~] **Supabase project config:** email provider enabled with Supabase's default **6-digit** OTP. Production magic-link sign-in is manually confirmed with token-hash callbacks; still explicitly confirm the Change email address template plus local/preview redirect allow-list. `supabase/config.toml` intentionally stays function-focused because the project runs against Supabase Cloud, not a local auth stack.
 
 ### Backend — Edge Functions
 - [x] `set-username({ username })` — signed-in only (anon → `forbidden`). Validates base (3–20, `[A-Za-z0-9 _-]`); reads current holders, picks a bare base if free else a random discriminator from the smallest non-full width (`pickDiscriminator`); upserts the caller's row (frees the old tuple); retries on 23505. **Deployed.**
@@ -148,7 +148,7 @@ Optional email sign-in: portable progress + renameable usernames, anonymous stay
 ### Client — auth
 - [x] `lib/auth-store.ts` (Zustand) — `init`, `startEmailAuth` (link-in-place → fallback `signInWithOtp`, stashes anon token), `verifyCode` (type `email_change`/`email` + merge on existing-account path), `completeMagicLink`, `signOut` (re-anonymizes), `refreshUsername`. State: `userId`/`isAnonymous`/`email`/`username`/`awaitingCode`.
 - [x] `lib/supabase.ts` — PKCE flow + `detectSessionInUrl: false` for manual callback handling.
-- [x] `/auth/callback` route — exchanges `?code` (PKCE) or `?token_hash&type`, runs merge from localStorage-mirrored pending state, redirects home. Supabase templates should prefer `token_hash&type` links because `?code` PKCE links fail if opened without the initiating browser's code verifier.
+- [x] `/auth/callback` route — exchanges `?code` (PKCE) or supported `?token_hash&type` links (`email`, `email_change`, `signup`, `magiclink`), runs merge from localStorage-mirrored pending state, redirects home. Supabase templates should prefer `token_hash&type` links because `?code` PKCE links fail if opened without the initiating browser's code verifier.
 
 ### Client — username
 - [x] `lib/username.ts` — `setUsername(base)` (calls `set-username`, parses Edge error body), `clearCachedUsername()`. Removed the dead `setLocalUsernameOverride`. Display string comes straight from the server's generated `username`.
@@ -163,7 +163,8 @@ Optional email sign-in: portable progress + renameable usernames, anonymous stay
 
 ### Testing
 - [x] Unit: discriminator allocation (random, never-reuses, width-grows) + base validation + display string. Pure logic extracted to `packages/core/src/username/discriminator.ts` (10 tests, incl. a property test; core 72→82) and imported directly by the `set-username` Edge Function — single source of truth, no drift. The cross-boundary import bundles cleanly on `supabase functions deploy`.
-- [~] Edge Function checks (post-deploy): `verify:accounts` covers Phase 5 columns, `get_completion_stats`, fresh anonymous sign-in, `claim-username`, anonymous `set-username` rejection, generated saved-account sessions, signed-in rename, collision → discriminator, rename frees old tuple, invalid merge rejection, and `merge-progress` union of anonymous completions. Still verify permanent-source token rejection plus real email/callback behavior.
+- [x] Edge Function checks (post-deploy): `verify:accounts` covers Phase 5 columns, `get_completion_stats`, fresh anonymous sign-in, `claim-username`, anonymous `set-username` rejection, generated saved-account sessions, signed-in rename, collision → discriminator, rename frees old tuple, invalid/permanent-source merge rejection, and `merge-progress` union of anonymous completions.
+- [~] Manual product checks: production token-hash magic-link sign-in and username change are confirmed. Still verify OTP-code entry, sign-out → fresh anon → sign back in, and cross-device progress union.
 - [ ] E2E (local, needs Supabase + deploy + email OTP enabled + token-hash email templates): anon solve → sign in (new email) preserves count; second device (fresh anon progress) → sign in (same email) shows the **union**; rename collision; sign-out → fresh anon with account progress intact on re-sign-in.
 - [x] Non-regression: anonymous-only play and local multiplayer smokes are green; `packages/core` purity lint is clean.
 

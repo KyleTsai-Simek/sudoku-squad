@@ -23,6 +23,7 @@ import { clearCachedUsername, getUsername, readCachedUsername } from './username
  */
 
 type PendingMode = 'link' | 'signin';
+type CallbackOtpType = 'email' | 'email_change' | 'signup' | 'magiclink';
 
 interface AuthState {
   ready: boolean;
@@ -76,6 +77,10 @@ function clearPending(): void {
     window.localStorage.removeItem(MODE_KEY);
     window.localStorage.removeItem(SRC_TOKEN_KEY);
   } catch {}
+}
+
+function isCallbackOtpType(type: string): type is CallbackOtpType {
+  return type === 'email' || type === 'email_change' || type === 'signup' || type === 'magiclink';
 }
 
 async function mergeProgress(
@@ -236,9 +241,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const ex = await client.auth.exchangeCodeForSession(code);
       if (ex.error) return { ok: false, error: ex.error.message };
     } else if (tokenHash && linkType) {
+      if (!isCallbackOtpType(linkType)) {
+        return { ok: false, error: `Unsupported sign-in link type: ${linkType}` };
+      }
       const v = await client.auth.verifyOtp({
         token_hash: tokenHash,
-        type: linkType as 'email' | 'email_change' | 'magiclink',
+        type: linkType,
       });
       if (v.error) return { ok: false, error: v.error.message };
     }
