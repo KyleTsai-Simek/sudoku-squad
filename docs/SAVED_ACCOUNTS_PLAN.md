@@ -1,6 +1,6 @@
 # Saved Accounts Plan
 
-**Status:** Phase 5 active. Backend + client scaffolding is landed; full saved-account verification and hardening are in progress.
+**Status:** Phase 5 active. Backend + client scaffolding is landed; automated live backend verification now covers anonymous accounts, generated saved-account sessions, username collision/freeing behavior, and completion merges. Real email delivery and cross-device product testing remain.
 
 This is the implementation and verification tracker for functional saved accounts. Keep it updated as each milestone lands. Summary state belongs in [STATUS.md](STATUS.md); granular task checkboxes live here and in [TODO.md](TODO.md).
 
@@ -134,23 +134,24 @@ Add `@supabase/ssr` later only if we introduce protected server-rendered account
 ### M2 — Automated Backend Verification
 
 - [x] Add an account verification script under `scripts/ingest` (`pnpm --filter @sudoku-squad/ingest verify:accounts`).
-- [ ] Verify schema:
+- [x] Verify schema:
   - [x] `issued_usernames.base`
   - [x] `issued_usernames.discriminator`
   - [x] generated `issued_usernames.username`
   - [x] `get_completion_stats()`
-- [ ] Verify anonymous behavior:
+- [x] Verify anonymous behavior:
   - [x] fresh anonymous sign-in works
   - [x] `claim-username` issues a name
   - [x] `set-username` rejects anonymous callers
-- [ ] Verify signed-in behavior without relying on a human inbox if feasible:
-  - [ ] create or obtain a test saved account session
-  - [ ] rename to a free base
-  - [ ] collision assigns discriminator
-  - [ ] changing away frees the old tuple
-  - [ ] `merge-progress` unions completions
-  - [ ] `merge-progress` rejects invalid/permanent-source tokens
-- [ ] If full automation is blocked by email/session constraints, document the exact manual step and keep partial automation.
+- [x] Verify signed-in behavior without relying on a human inbox:
+  - [x] create generated test saved-account sessions via Supabase admin magic links
+  - [x] rename to a free base
+  - [x] collision assigns discriminator
+  - [x] changing away frees the old tuple
+  - [x] `merge-progress` unions completions
+  - [x] `merge-progress` rejects invalid source tokens
+  - [ ] `merge-progress` rejects permanent-source tokens
+- [x] Document email/session constraints: generated sessions cover backend behavior; real email delivery, redirect allow-list, and callback UX remain manual/e2e checks.
 
 ### M3 — Client Flow Hardening
 
