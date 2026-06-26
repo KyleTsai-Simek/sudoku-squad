@@ -22,6 +22,7 @@ import {
 } from '@/lib/rooms';
 import type { Difficulty } from '@sudoku-squad/core';
 import { getUsername } from '@/lib/username';
+import { AppHeader } from '@/components/app-header';
 import { LobbySettingsPanel } from '@/components/lobby-settings-panel';
 import { DEFAULT_ROOM_SETTINGS } from '@/lib/rooms';
 import { BattleGame } from './battle-game';
@@ -334,15 +335,19 @@ export function LobbyClient({ code }: { code: string }) {
   const otherHost = players.find((p) => p.is_host && p.player_id !== room.own_player_id);
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center gap-8 px-6 py-10">
-      <header className="flex w-full items-center justify-between">
-        <Link href="/" className="text-sm font-medium text-stone-600 hover:text-stone-900">
-          ← Menu
-        </Link>
-        <span className="text-xs font-medium uppercase tracking-widest text-stone-500">
-          {liveMode === 'coop' ? 'co-op' : liveMode} · lobby
-        </span>
-      </header>
+    <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center gap-8 px-6 py-4">
+      <AppHeader
+        left={
+          <Link href="/" className="text-sm font-medium text-stone-600 hover:text-stone-900">
+            ← Menu
+          </Link>
+        }
+        center={
+          <span className="text-xs font-medium uppercase tracking-widest text-stone-500">
+            {liveMode === 'coop' ? 'co-op' : liveMode} · lobby
+          </span>
+        }
+      />
 
       <section className="flex w-full flex-col items-center gap-3 text-center">
         <p className="text-xs font-medium uppercase tracking-widest text-stone-500">

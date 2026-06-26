@@ -160,6 +160,7 @@ Optional email sign-in: portable progress + renameable usernames, anonymous stay
 - [x] `UsernameSheet` — base input, `name#1234` hint, shows the assigned full name on success.
 - [x] Home "you're …" line now reads username from the auth store; solved count refetches on identity change.
 - [x] Verified in preview: hamburger renders + opens, Account/Sign-in shows, auth sheet renders, no console errors, prod build clean (incl. `/auth/callback`).
+- [x] Mobile header consolidation 2026-06-26: replaced the fixed top-corner hamburger with an in-flow `AppHeader` row on home, single-player, lobby, battle, and coop screens. Page header actions (Back/Menu, settings, keyboard shortcuts, account menu) now share one navigation bar; in-game elapsed time sits below the nav row.
 
 ### Testing
 - [x] Unit: discriminator allocation (random, never-reuses, width-grows) + base validation + display string. Pure logic extracted to `packages/core/src/username/discriminator.ts` (10 tests, incl. a property test; core 72→82) and imported directly by the `set-username` Edge Function — single source of truth, no drift. The cross-boundary import bundles cleanly on `supabase functions deploy`.

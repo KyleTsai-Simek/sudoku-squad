@@ -14,6 +14,7 @@ import {
 import { CoopBoard } from '@/components/coop-board';
 import { CoopNumberPad } from '@/components/coop-number-pad';
 import { CoopKeyboardController } from '@/components/coop-keyboard';
+import { AppHeader } from '@/components/app-header';
 import { CoopWinOverlay } from '@/components/coop-win-overlay';
 import {
   KeyboardShortcutsButton,
@@ -144,18 +145,23 @@ export function CoopGame({ room, players, settings, serverStartedAt, finished }:
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center gap-4 px-3 py-4">
-      <header className="flex w-full items-center justify-between gap-3">
-        <Link href="/" className="text-sm font-medium text-stone-600 hover:text-stone-900">
-          ← Menu
-        </Link>
-        <span aria-label="Elapsed time" className="font-mono tabular-nums text-stone-700">
-          {formatElapsed(elapsed)}
-        </span>
-        <div className="flex items-center gap-2">
+      <AppHeader
+        left={
+          <Link href="/" className="text-sm font-medium text-stone-600 hover:text-stone-900">
+            ← Menu
+          </Link>
+        }
+        center={
           <span className="text-xs uppercase tracking-widest text-stone-500">co-op</span>
+        }
+        actions={
           <KeyboardShortcutsButton />
-        </div>
-      </header>
+        }
+      />
+
+      <span aria-label="Elapsed time" className="font-mono tabular-nums text-stone-700">
+        {formatElapsed(elapsed)}
+      </span>
 
       <div className="flex w-full max-w-[min(92vw,560px)] flex-col gap-2">
         <CoopPlayerNames players={players} cellOwnership={cellOwnership} />

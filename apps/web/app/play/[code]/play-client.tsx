@@ -8,6 +8,7 @@ import { installSpAutosave, resumeSavedGame } from '@/lib/sp-persistence';
 import { SudokuBoard } from '@/components/sudoku-board';
 import { NumberPad } from '@/components/number-pad';
 import { KeyboardController } from '@/components/keyboard-controller';
+import { AppHeader } from '@/components/app-header';
 import { Timer } from '@/components/timer';
 import { SettingsSheet } from '@/components/settings-sheet';
 import { CompletionOverlay } from '@/components/completion-overlay';
@@ -75,22 +76,26 @@ export function PlayClient({ code }: { code: string }) {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center gap-4 px-3 py-4">
-      <header className="flex w-full items-center justify-between gap-3">
-        <Link
-          href="/"
-          className="text-sm font-medium text-stone-600 hover:text-stone-900"
-        >
-          ← Menu
-        </Link>
-        <Timer />
-        <div className="flex items-center gap-2">
-          <span className="hidden text-xs uppercase tracking-widest text-stone-500 sm:inline">
+      <AppHeader
+        left={
+          <Link href="/" className="text-sm font-medium text-stone-600 hover:text-stone-900">
+            ← Menu
+          </Link>
+        }
+        center={
+          <span className="text-xs uppercase tracking-widest text-stone-500">
             {puzzle?.difficulty ?? ''}
           </span>
-          <KeyboardShortcutsButton />
-          <SettingsSheet />
-        </div>
-      </header>
+        }
+        actions={
+          <>
+            <KeyboardShortcutsButton />
+            <SettingsSheet />
+          </>
+        }
+      />
+
+      <Timer />
 
       {status === 'loading' ? (
         <div className="flex h-[60vh] items-center justify-center text-stone-500">Loading…</div>
