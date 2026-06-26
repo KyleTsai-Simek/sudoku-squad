@@ -248,6 +248,15 @@ async function main(): Promise<void> {
     }
     const sourceUserId = sourceSignIn.data.user.id;
     tempUserIds.push(sourceUserId);
+    const sourceAnonBase = `merge-${Date.now().toString(36)}`.slice(0, 20);
+    const sourceName = await admin
+      .from('issued_usernames')
+      .insert({ player_id: sourceUserId, base: sourceAnonBase })
+      .select('username')
+      .single();
+    if (sourceName.error) {
+      fail(`could not seed source anonymous username for merge test: ${sourceName.error.message}`);
+    }
 
     const inserted = await admin.from('player_completions').insert([
       { player_id: accountB.userId, puzzle_code: destPuzzle, mode: 'single' },
@@ -277,7 +286,14 @@ async function main(): Promise<void> {
     if (sourceRows.error || (sourceRows.data?.length ?? 0) !== 0) {
       fail(`merge-progress did not clear source completions: ${sourceRows.error?.message ?? JSON.stringify(sourceRows.data)}`);
     }
-    ok('merge-progress unions anonymous completions into a saved account');
+    const sourceNames = await admin
+      .from('issued_usernames')
+      .select('username')
+      .eq('player_id', sourceUserId);
+    if (sourceNames.error || (sourceNames.data?.length ?? 0) !== 0) {
+      fail(`merge-progress did not clear source anonymous username: ${sourceNames.error?.message ?? JSON.stringify(sourceNames.data)}`);
+    }
+    ok('merge-progress unions anonymous completions into a saved account and removes the source username');
 
     const permanentSourceToken = await getAccessToken(accountC.client, 'permanent source account');
     const permanentSourceMerge = await accountB.client.functions.invoke('merge-progress', {

@@ -88,7 +88,7 @@ sudoku-squad/
                           # preflight-3m (source scan), audit-difficulty
                           # (live DB audit), check-connectivity
   supabase/
-    migrations/           # 0001..0023 applied to live project
+    migrations/           # 0001..0024 applied to live project
     functions/            # Edge Functions: create-room, join-room, start-game,
                           # submit-move, change-difficulty, change-mode,
                           # claim-username, kick-player, update-room-settings,
@@ -211,7 +211,7 @@ One row per (player, puzzle) the player has ever completed. Source of truth for 
 Inserted by `submit-move` on first multiplayer win and by the RPC `record_single_player_completion(...)` for single-player. Re-solves do not duplicate rows or re-stamp `completed_at`; single-player can fill a missing `solve_time_ms` on an existing row. `get_completion_stats()` (migration 0019, Phase 5) aggregates the caller's rows per difficulty (join to `puzzles.difficulty`) — backend capture for the accounts feature. The `merge-progress` Edge Function moves rows `source_player → dest_player` (`on conflict do nothing`) when an anon identity is merged into an account ([#0043](DECISIONS.md)).
 
 #### `get_completion_leaderboard(p_limit, p_offset, p_leaderboard_key)` (RPC)
-Added in migration 0023 ([DECISIONS #0048](DECISIONS.md)). SECURITY DEFINER read model for leaderboards. Today it supports only `p_leaderboard_key = 'total_completions'`, ranks every player with at least one row in `player_completions`, joins the current display name from `issued_usernames`, and returns a paged slice capped at 100 rows. It also includes the caller's own ranked row when the caller is outside the requested page, allowing the home page to show "top 25" plus "you are #N" without loading hundreds of users. Future leaderboard variants should extend this keyed read-model pattern or swap in a materialized table behind the same RPC boundary.
+Added in migration 0023 and updated in 0024 ([DECISIONS #0048](DECISIONS.md)). SECURITY DEFINER read model for leaderboards. Today it supports only `p_leaderboard_key = 'total_completions'`, ranks every player with at least one row in `player_completions`, joins the current display name from `issued_usernames`, and returns a paged slice capped at 100 rows. The default page size is 15. It also includes the caller's own ranked row when the caller is outside the requested page, allowing the home page to show "top 15" plus "you are #N" without loading hundreds of users. Future leaderboard variants should extend this keyed read-model pattern or swap in a materialized table behind the same RPC boundary.
 
 ### `player_daily_completions`
 Daily-specific completion rows, added in migration 0020. These are separate from `player_completions` because a puzzle may have been solved before it later appears as a daily.

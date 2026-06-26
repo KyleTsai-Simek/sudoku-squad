@@ -2,7 +2,7 @@
 
 import { ensureAuthClient } from './supabase';
 
-export const DEFAULT_LEADERBOARD_LIMIT = 25;
+export const DEFAULT_LEADERBOARD_LIMIT = 15;
 
 export type LeaderboardKey = 'total_completions';
 

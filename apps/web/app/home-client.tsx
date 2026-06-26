@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Difficulty } from '@sudoku-squad/core';
 import { getTierCounts, pickRandomUnsolved } from '@/lib/pick-puzzle';
@@ -22,6 +22,13 @@ import { createRoom, joinRoom, type RoomMode } from '@/lib/rooms';
 import { getUsername } from '@/lib/username';
 import { useAuthStore } from '@/lib/auth-store';
 import { AppHeader } from '@/components/app-header';
+import {
+  CalendarIcon,
+  JoinIcon,
+  PlayIcon,
+  TrophyIcon,
+  type IconProps,
+} from '@/components/material-icons';
 import { PublicLobbyList } from '@/components/public-lobby-list';
 
 interface TierState {
@@ -195,9 +202,7 @@ export function HomeClient() {
       {view.kind === 'home' && (
         <>
           <div className="flex w-full flex-col gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-              {dailyHeading}
-            </h2>
+            <SectionHeader icon={CalendarIcon} title={dailyHeading} />
             <div className="grid w-full grid-cols-3 gap-2">
               {DAILY_DIFFICULTIES.map((difficulty) => {
                 const puzzle = dailyByDifficulty[difficulty];
@@ -216,9 +221,7 @@ export function HomeClient() {
           </div>
 
           <div className="flex w-full flex-col gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-              Quick Play
-            </h2>
+            <SectionHeader icon={PlayIcon} title="Quick Play" />
             <button
               type="button"
               onClick={() => setView({ kind: 'quickplay' })}
@@ -237,9 +240,10 @@ export function HomeClient() {
           <form onSubmit={onJoin} className="flex w-full flex-col gap-2">
             <label
               htmlFor="join-code"
-              className="text-xs font-semibold uppercase tracking-widest text-muted"
+              className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted"
             >
-              Have a code?
+              <JoinIcon size={16} className="shrink-0" />
+              <span>Have a code?</span>
             </label>
             <div className="flex gap-2">
               <input
@@ -342,29 +346,24 @@ function CompletionLeaderboard({
 }: {
   entries: LeaderboardEntry[] | null | undefined;
 }) {
-  const topRows = entries
-    ? entries.filter((entry) => entry.rank <= DEFAULT_LEADERBOARD_LIMIT)
-    : null;
+  const topRows = entries?.filter((entry) => entry.rank <= DEFAULT_LEADERBOARD_LIMIT) ?? [];
   const currentUserRow = entries?.find((entry) => entry.isCurrentUser) ?? null;
   const currentUserIsOutsideTop =
     currentUserRow !== null && currentUserRow.rank > DEFAULT_LEADERBOARD_LIMIT;
-  const totalRankedPlayers = entries?.[0]?.totalRankedPlayers ?? 0;
+  const displayedRows =
+    entries && currentUserIsOutsideTop && currentUserRow
+      ? [currentUserRow, ...topRows]
+      : entries
+        ? topRows
+        : null;
 
   return (
     <section className="flex w-full flex-col gap-3 pb-8">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-            Leaderboard
-          </h2>
-          <p className="mt-1 text-sm font-medium text-foreground">Most puzzles solved</p>
-        </div>
-        {totalRankedPlayers > 0 ? (
-          <span className="text-xs text-muted">
-            {totalRankedPlayers} ranked
-          </span>
-        ) : null}
-      </div>
+      <SectionHeader
+        icon={TrophyIcon}
+        title="Leaderboard"
+        aside="Most puzzles solved"
+      />
 
       <div className="overflow-hidden rounded-xl border border-border bg-surface">
         {entries === undefined ? (
@@ -373,17 +372,11 @@ function CompletionLeaderboard({
           <div className="px-4 py-5 text-sm text-muted">
             Leaderboard is unavailable right now.
           </div>
-        ) : topRows && topRows.length > 0 ? (
+        ) : displayedRows && displayedRows.length > 0 ? (
           <div className="divide-y divide-border">
-            {topRows.map((entry) => (
+            {displayedRows.map((entry) => (
               <LeaderboardRow key={entry.playerId} entry={entry} />
             ))}
-            {currentUserIsOutsideTop ? (
-              <>
-                <div className="px-4 py-2 text-center text-xs text-muted">…</div>
-                <LeaderboardRow entry={currentUserRow} />
-              </>
-            ) : null}
           </div>
         ) : (
           <div className="px-4 py-5 text-sm text-muted">
@@ -395,23 +388,45 @@ function CompletionLeaderboard({
   );
 }
 
+function SectionHeader({
+  icon: Icon,
+  title,
+  aside,
+}: {
+  icon: (props: IconProps) => ReactElement;
+  title: string;
+  aside?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-widest text-muted">
+      <h2 className="inline-flex min-w-0 items-center gap-2">
+        <Icon size={16} className="shrink-0" />
+        <span className="truncate">{title}</span>
+      </h2>
+      {aside ? <span className="shrink-0 text-right">{aside}</span> : null}
+    </div>
+  );
+}
+
 function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
   return (
     <div
       className={
         entry.isCurrentUser
-          ? 'grid grid-cols-[3rem_1fr_auto] items-center gap-3 bg-primary-muted px-4 py-3'
+          ? 'grid grid-cols-[3rem_1fr_auto] items-center gap-3 bg-primary-muted px-4 py-3 font-bold'
           : 'grid grid-cols-[3rem_1fr_auto] items-center gap-3 px-4 py-3'
       }
     >
-      <span className="text-sm font-semibold tabular-nums text-muted">#{entry.rank}</span>
-      <span className="min-w-0 truncate text-sm font-medium text-foreground">
+      <span className={entry.isCurrentUser ? 'text-sm tabular-nums text-foreground' : 'text-sm font-semibold tabular-nums text-muted'}>
+        #{entry.rank}
+      </span>
+      <span className="min-w-0 truncate text-sm text-foreground">
         {entry.username}
         {entry.isCurrentUser ? (
-          <span className="ml-2 text-xs font-normal text-muted">you</span>
+          <span className="ml-2 text-xs font-semibold text-muted">you</span>
         ) : null}
       </span>
-      <span className="text-sm font-semibold tabular-nums text-foreground">
+      <span className="text-sm tabular-nums text-foreground">
         {entry.completedCount}
       </span>
     </div>
