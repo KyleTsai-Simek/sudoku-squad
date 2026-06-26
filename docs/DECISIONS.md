@@ -17,6 +17,28 @@ Format:
 
 ---
 
+## 0048 — Completion leaderboard read model
+**Date:** 2026-06-26
+**Status:** Accepted and deployed.
+
+**Context.** The home page should show a leaderboard for the player who has completed the most puzzles, including both anonymous and email-authenticated users. Usernames are mutable for signed-in users, so leaderboard rows must reflect the current `issued_usernames` display string rather than a snapshot. The design also needs to scale beyond the current small user count: clients should be able to show the top page and the current player's own place without loading every ranked row.
+
+**Decision.** Add migration `0023_completion_leaderboard.sql` with a SECURITY DEFINER RPC, `get_completion_leaderboard(p_limit, p_offset, p_leaderboard_key)`. The only supported key today is `total_completions`. It aggregates `player_completions` by `player_id`, ranks players by unique completed puzzles, joins the current username from `issued_usernames`, returns a paged top slice capped at 100 rows, and also includes the caller's own ranked row when it sits outside that slice. Users with zero completions do not appear.
+
+The web home page now renders a compact "Most puzzles solved" leaderboard under public lobbies. It requests the top 25 and highlights the current user if present; if the current user is outside the top 25, the returned own row is shown after an ellipsis.
+
+**Alternatives considered.**
+- Query `player_completions` directly from the client. Rejected because RLS intentionally exposes only the caller's own rows, and the leaderboard should be a stable backend read model rather than a cross-user table leak.
+- Create a materialized table immediately. Rejected at current scale; a grouped query over the completion log is simpler. The RPC boundary lets us swap to a materialized leaderboard later without changing the client contract.
+- Store usernames on leaderboard rows. Rejected because renames should appear everywhere immediately; joining `issued_usernames` at read time is correct for the current product.
+
+**Consequences.**
+- Future leaderboards should extend the keyed RPC/read-model pattern, e.g. `difficulty:hard`, daily solve time, or battle wins, instead of adding raw client-side aggregate queries.
+- If the completion table grows large, the next step is a maintained leaderboard table or materialized view behind the same function signature.
+- Migration `0023` is live; no Edge Function deploy is required.
+
+---
+
 ## 0047 — Shift visible difficulty labels to Easy through Extreme
 **Date:** 2026-06-26
 **Status:** Accepted and implemented locally; migration/function deploy still required.

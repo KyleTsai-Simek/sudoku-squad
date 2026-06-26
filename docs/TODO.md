@@ -191,6 +191,19 @@ Same Easy / Medium / Hard puzzle for every player each Pacific day, with daily s
 
 ---
 
+## Leaderboards 🔄 First completion board deployed
+
+Global completion leaderboard for "most puzzles solved" across anonymous and signed-in users. See [DECISIONS #0048](DECISIONS.md).
+
+- [x] Migration `0023` — `get_completion_leaderboard(p_limit, p_offset, p_leaderboard_key)` ranks players with at least one `player_completions` row, joins current `issued_usernames.username`, supports top-page pagination, and includes the caller's own row when outside the requested page.
+- [x] Home page bottom section renders the top 25 "Most puzzles solved" rows and highlights the current player if ranked.
+- [x] Apply migration `0023` to the linked Supabase project.
+- [x] Smoke-check `get_completion_leaderboard` against live Supabase; it returned 10 ranked rows.
+- [ ] Manual web check after deploy: solve as anonymous, rename a signed-in user, and confirm the leaderboard reflects the updated username without a completion rewrite.
+- [ ] Future: add keyed variants for per-difficulty completions, daily solve time, and battle wins without exposing raw cross-user completion rows.
+
+---
+
 ## Sync resilience hardening (from the 2026-05-29 architecture audit)
 
 Findings from a full review of the SP / battle / coop sync paths benchmarked against comparable real-time games (downforacross, boardgame.io, Colyseus) and the Supabase Realtime delivery model, **plus the move-log consolidation discussion (2026-05-29).** Ordered by impact / cost. None require schema changes except where noted. See the audit writeup in this session and the prose in [STATUS.md](STATUS.md) gotchas.

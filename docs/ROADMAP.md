@@ -11,6 +11,7 @@ Four phases, each with an explicit **exit criterion** — we don't move on until
 | Phase 2 — Battle mode | 🔄 Playable end-to-end; race-to-completion stress remains |
 | Phase 3 — Coop mode | 🔄 MVP landed (shared board, server-overlay sync, shared win, local two-context smoke) |
 | Phase 5 — Authenticated accounts | 🔄 Built/deployed; full email/merge/rename e2e verification remains |
+| Cross-cutting — Completion leaderboard | 🔄 Implemented; migration 0023 live, manual rename verification remains |
 | Cross-cutting — Theme refresh + dark mode | ✅ Complete |
 | Phase 4 — iOS (React Native) | Pending |
 
@@ -142,8 +143,8 @@ Detailed implementation/testing tracker: [SAVED_ACCOUNTS_PLAN.md](SAVED_ACCOUNTS
 After Phase 4 lands, the natural next moves are:
 
 1. **A real "evil" / 7+ tier** once we have a richer high-difficulty source (the 3M dataset has only ~100 rows above rating 7.0 — not enough to seed a 2,500-row sample). Six tiers (easy/medium/hard/expert/extreme + hidden killer) already shipped in V1.
-2. **Daily puzzle leaderboard** — the shared daily puzzle set and daily completion capture are implemented in the daily-puzzles branch ([DECISIONS #0046](DECISIONS.md)); ranking/history UI is still future work.
-3. ~~**Persistent accounts** (Sign in with Apple + magic link) → profiles, history, stats.~~ *Pulled forward as Phase 5* — email OTP accounts landing now ([DECISIONS #0043](DECISIONS.md)). Sign in with Apple, profiles/history UI, and leaderboards remain V2.
+2. **Leaderboards beyond total completions** — the first global completion leaderboard is live ([DECISIONS #0048](DECISIONS.md)). Daily puzzle ranking/history can build on `player_daily_completions` ([#0046](DECISIONS.md)); per-difficulty and battle-win boards should extend the keyed read-model pattern.
+3. ~~**Persistent accounts** (Sign in with Apple + magic link) → profiles, history, stats.~~ *Pulled forward as Phase 5* — email OTP accounts landing now ([DECISIONS #0043](DECISIONS.md)). Sign in with Apple, profiles/history UI, and richer leaderboard variants remain V2.
 4. **Match history & replays.**
 5. **Friends list & private invites.**
 6. **Android** (only if the iOS app gets traction).

@@ -22,7 +22,7 @@ The bar for V1 is **a playable demo we can send to a friend over a link and have
 - **Single-player web** across six difficulty tiers (easy / medium / hard / expert / extreme visible, plus a hidden killer), 15,000 puzzles total. *(Originally scoped to a single tier; expanded during Phase 1.)*
 - **Battle mode** on web: create room → share link → both players join, pick a username, click Start. First to legally complete the puzzle wins.
 - **Coop mode** on web: create room → share link → both players join, pick a username. Both can input numbers simultaneously, with last-write-wins per cell (see [GAME_DESIGN.md](GAME_DESIGN.md) for conflict handling).
-- **Anonymous usernames** only for V1. No friends list, no history. *(Update: optional email accounts are landing post-V1 as [Phase 5](ROADMAP.md) — anonymous stays the default; accounts add portable progress + renames. Friends list and history remain out. See [DECISIONS #0043](DECISIONS.md).)*
+- **Anonymous usernames** only for V1. No friends list, no history. *(Update: optional email accounts are landing post-V1 as [Phase 5](ROADMAP.md) — anonymous stays the default; accounts add portable progress + renames. A first global completion leaderboard is also landing as [DECISIONS #0048](DECISIONS.md). Friends list and history remain out.)*
 - **Core settings:** notes mode, undo, clear cell, restart. Reveal/check is configurable but defaulted off (see GAME_DESIGN).
 - **Realtime presence:** see other players' cursors/selected cells in coop, see other players' progress bar in battle.
 - **Mobile-responsive web** so it works on phones in a browser. Native iOS comes in Phase 4.
@@ -32,7 +32,7 @@ The bar for V1 is **a playable demo we can send to a friend over a link and have
 These are good ideas, deliberately deferred:
 
 - **iOS / Android native apps.** Planned for Phase 4, after web is solid.
-- **Persistent accounts, profiles, friend lists, leaderboards.** Anonymous-only for V1. *(Update: optional email accounts pulled forward as [Phase 5](ROADMAP.md) — [DECISIONS #0043](DECISIONS.md). Profiles/stats UI, friend lists, and leaderboards are still deferred.)*
+- **Persistent accounts, profiles, friend lists, broad leaderboard suite.** Anonymous-only for V1. *(Update: optional email accounts pulled forward as [Phase 5](ROADMAP.md) — [DECISIONS #0043](DECISIONS.md). The first "most puzzles solved" leaderboard is pulled forward in [#0048](DECISIONS.md). Profiles/stats UI, friend lists, daily boards, and battle-rating leaderboards remain deferred.)*
 - ~~**Multiple difficulty tiers.**~~ *Shipped early* — six tiers landed in Phase 1 (see In scope).
 - **Custom puzzle creation / submission.** Use pre-generated or open-source puzzle packs.
 - ~~**More than 4 players per room.**~~ *Raised to 8* — rooms cap at 8 players (`MAX_PLAYERS` in `join-room`).
@@ -63,7 +63,7 @@ Both personas value: low friction to start, no signup, works on whatever device 
 
 Not committing to these yet — listed so we know what we're optimizing toward:
 - Native iOS app via React Native.
-- Daily puzzle leaderboards and richer daily stats.
+- Daily puzzle leaderboards, battle leaderboards, and richer stats.
 - Persistent accounts (magic link or Sign in with Apple) → stats, history, friends.
 - Leaderboards / ELO for battle mode.
 - Spectator + replays.

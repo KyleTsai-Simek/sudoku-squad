@@ -7,6 +7,11 @@ import { getTierCounts, pickRandomUnsolved } from '@/lib/pick-puzzle';
 import { getCompletionCount } from '@/lib/completions';
 import { DIFFICULTY_LABEL, VISIBLE_DIFFICULTIES } from '@/lib/difficulty-labels';
 import {
+  DEFAULT_LEADERBOARD_LIMIT,
+  getCompletionLeaderboard,
+  type LeaderboardEntry,
+} from '@/lib/leaderboard';
+import {
   getDailyCompletions,
   getDailyPuzzles,
   type DailyCompletion,
@@ -47,6 +52,9 @@ export function HomeClient() {
   const [dailyCompletions, setDailyCompletions] = useState<
     Partial<Record<DailyDifficulty, DailyCompletion>>
   >({});
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[] | null | undefined>(
+    undefined,
+  );
   // Username display is owned by the auth store (kept fresh across sign-in /
   // rename / sign-out). The AppHeader boots the store; we just read it here.
   const username = useAuthStore((s) => s.username);
@@ -75,6 +83,17 @@ export function HomeClient() {
       cancelled = true;
     };
   }, [userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const rows = await getCompletionLeaderboard();
+      if (!cancelled) setLeaderboard(rows);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, completed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -248,6 +267,8 @@ export function HomeClient() {
           </form>
 
           <PublicLobbyList />
+
+          <CompletionLeaderboard entries={leaderboard} />
         </>
       )}
 
@@ -313,6 +334,87 @@ export function HomeClient() {
         </div>
       )}
     </main>
+  );
+}
+
+function CompletionLeaderboard({
+  entries,
+}: {
+  entries: LeaderboardEntry[] | null | undefined;
+}) {
+  const topRows = entries
+    ? entries.filter((entry) => entry.rank <= DEFAULT_LEADERBOARD_LIMIT)
+    : null;
+  const currentUserRow = entries?.find((entry) => entry.isCurrentUser) ?? null;
+  const currentUserIsOutsideTop =
+    currentUserRow !== null && currentUserRow.rank > DEFAULT_LEADERBOARD_LIMIT;
+  const totalRankedPlayers = entries?.[0]?.totalRankedPlayers ?? 0;
+
+  return (
+    <section className="flex w-full flex-col gap-3 pb-8">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
+            Leaderboard
+          </h2>
+          <p className="mt-1 text-sm font-medium text-foreground">Most puzzles solved</p>
+        </div>
+        {totalRankedPlayers > 0 ? (
+          <span className="text-xs text-muted">
+            {totalRankedPlayers} ranked
+          </span>
+        ) : null}
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-border bg-surface">
+        {entries === undefined ? (
+          <div className="px-4 py-5 text-sm text-muted">Loading leaderboard…</div>
+        ) : entries === null ? (
+          <div className="px-4 py-5 text-sm text-muted">
+            Leaderboard is unavailable right now.
+          </div>
+        ) : topRows && topRows.length > 0 ? (
+          <div className="divide-y divide-border">
+            {topRows.map((entry) => (
+              <LeaderboardRow key={entry.playerId} entry={entry} />
+            ))}
+            {currentUserIsOutsideTop ? (
+              <>
+                <div className="px-4 py-2 text-center text-xs text-muted">…</div>
+                <LeaderboardRow entry={currentUserRow} />
+              </>
+            ) : null}
+          </div>
+        ) : (
+          <div className="px-4 py-5 text-sm text-muted">
+            No completed puzzles yet. Finish one to enter the board.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
+  return (
+    <div
+      className={
+        entry.isCurrentUser
+          ? 'grid grid-cols-[3rem_1fr_auto] items-center gap-3 bg-primary-muted px-4 py-3'
+          : 'grid grid-cols-[3rem_1fr_auto] items-center gap-3 px-4 py-3'
+      }
+    >
+      <span className="text-sm font-semibold tabular-nums text-muted">#{entry.rank}</span>
+      <span className="min-w-0 truncate text-sm font-medium text-foreground">
+        {entry.username}
+        {entry.isCurrentUser ? (
+          <span className="ml-2 text-xs font-normal text-muted">you</span>
+        ) : null}
+      </span>
+      <span className="text-sm font-semibold tabular-nums text-foreground">
+        {entry.completedCount}
+      </span>
+    </div>
   );
 }
 
