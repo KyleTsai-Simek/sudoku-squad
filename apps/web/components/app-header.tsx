@@ -35,6 +35,7 @@ export function AppHeader({ left, center, actions, className = '' }: AppHeaderPr
   }, [init]);
 
   const signedIn = !isAnonymous;
+  const accountLabel = username ?? 'Account';
 
   return (
     <>
@@ -68,56 +69,14 @@ export function AppHeader({ left, center, actions, className = '' }: AppHeaderPr
                 <div className="flex items-center gap-2 px-3 py-2 text-muted">
                   <AccountIcon size={20} className="shrink-0 text-muted" />
                   <div className="min-w-0">
-                    {signedIn ? (
-                      <>
-                        <div className="truncate text-sm font-medium text-foreground">
-                          {username ?? 'Account'}
-                        </div>
-                        {email ? (
-                          <div className="truncate text-xs text-muted">{email}</div>
-                        ) : null}
-                      </>
-                    ) : (
-                      <div className="text-sm font-medium text-foreground">Account</div>
-                    )}
+                    <div className="truncate text-sm font-medium text-foreground">
+                      {accountLabel}
+                    </div>
+                    {signedIn && email ? (
+                      <div className="truncate text-xs text-muted">{email}</div>
+                    ) : null}
                   </div>
                 </div>
-
-                <div className="my-1 h-px bg-border/70" />
-
-                <div className="px-3 py-2">
-                  <div className="mb-1.5 text-xs font-medium uppercase tracking-widest text-muted">
-                    Appearance
-                  </div>
-                  <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-border bg-surface-muted p-0.5">
-                    {getThemeOptions().map((option) => (
-                      <ThemeOption
-                        key={option}
-                        option={option}
-                        selected={themePreference === option}
-                        onSelect={setThemePreference}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {mergeError ? (
-                  <div className="border-y border-warning-border/40 bg-warning-soft px-3 py-2">
-                    <p className="mb-2 text-xs text-foreground">{mergeError}</p>
-                    <button
-                      type="button"
-                      disabled={retryingMerge}
-                      onClick={async () => {
-                        setRetryingMerge(true);
-                        await retryProgressMerge();
-                        setRetryingMerge(false);
-                      }}
-                      className="text-xs font-medium text-foreground hover:text-primary disabled:opacity-60"
-                    >
-                      {retryingMerge ? 'Retrying...' : 'Retry progress merge'}
-                    </button>
-                  </div>
-                ) : null}
 
                 {signedIn ? (
                   <>
@@ -145,6 +104,42 @@ export function AppHeader({ left, center, actions, className = '' }: AppHeaderPr
                     }}
                   />
                 )}
+
+                {mergeError ? (
+                  <div className="border-y border-warning-border/40 bg-warning-soft px-3 py-2">
+                    <p className="mb-2 text-xs text-foreground">{mergeError}</p>
+                    <button
+                      type="button"
+                      disabled={retryingMerge}
+                      onClick={async () => {
+                        setRetryingMerge(true);
+                        await retryProgressMerge();
+                        setRetryingMerge(false);
+                      }}
+                      className="text-xs font-medium text-foreground hover:text-primary disabled:opacity-60"
+                    >
+                      {retryingMerge ? 'Retrying...' : 'Retry progress merge'}
+                    </button>
+                  </div>
+                ) : null}
+
+                <div className="my-1 h-px bg-border/70" />
+
+                <div className="px-3 py-2">
+                  <div className="mb-1.5 text-xs font-medium uppercase tracking-widest text-muted">
+                    Appearance
+                  </div>
+                  <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-border bg-surface-muted p-0.5">
+                    {getThemeOptions().map((option) => (
+                      <ThemeOption
+                        key={option}
+                        option={option}
+                        selected={themePreference === option}
+                        onSelect={setThemePreference}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             </>
           ) : null}
