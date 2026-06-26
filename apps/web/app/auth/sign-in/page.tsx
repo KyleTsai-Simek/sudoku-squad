@@ -44,8 +44,10 @@ export default function SignInPage() {
           >
             ←
           </button>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Sign in</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Back</h2>
         </div>
+
+        <h2 className="text-2xl font-semibold tracking-normal text-foreground">Sign in</h2>
 
         <AuthForm onComplete={() => router.push(nextPath)} />
       </section>

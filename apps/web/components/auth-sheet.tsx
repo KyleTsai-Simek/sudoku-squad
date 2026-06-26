@@ -61,13 +61,19 @@ export function AuthForm({ onComplete }: { onComplete: () => void }) {
           <p className="text-sm text-muted">
             Sign in to save your progress across devices and pick your own username.
           </p>
+          <label htmlFor="auth-email" className="sr-only">
+            Email address
+          </label>
           <input
+            id="auth-email"
+            name="email"
             type="email"
             inputMode="email"
             autoComplete="email"
             autoCapitalize="off"
             spellCheck={false}
             required
+            enterKeyHint="send"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
