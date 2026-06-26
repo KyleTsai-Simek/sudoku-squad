@@ -27,6 +27,7 @@ Inspired by Down for a Cross (multiplayer crosswords), Words With Friends, and t
 | [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) | Game modes, settings, UX decisions. |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phased plan from single player → battle → coop → iOS. |
 | [docs/TODO.md](docs/TODO.md) | Active task list, broken out by phase. |
+| [docs/SAVED_ACCOUNTS_PLAN.md](docs/SAVED_ACCOUNTS_PLAN.md) | Phase 5 saved-accounts implementation and verification tracker. |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | ADR log + open questions. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to set up, the rules to follow, how to verify and ship. |
 | [AGENTS.md](AGENTS.md) | Current repo instructions for AI coding agents. |

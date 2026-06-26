@@ -2,7 +2,7 @@
 
 Four phases, each with an explicit **exit criterion** — we don't move on until it's met. Single player first, then battle, then coop, then iOS. This sequencing exists for a reason: each phase de-risks the next.
 
-**Current position:** Phase 2 battle mode is playable end-to-end and live, with local two-context Playwright coverage plus loser-keeps-solving and reload-resume fixes. Phase 3 coop has an MVP landed (shared board, server-overlay sync, shared win) with a local two-context notes-sync smoke. **Phase 5 (authenticated accounts) is built/deployed at the backend + client level and needs full email/merge/rename e2e verification before it is called complete** — see [DECISIONS #0043](DECISIONS.md). See [STATUS.md](STATUS.md) for the live snapshot.
+**Current position:** Phase 2 battle mode is playable end-to-end and live, with local two-context Playwright coverage plus loser-keeps-solving and reload-resume fixes. Phase 3 coop has an MVP landed (shared board, server-overlay sync, shared win) with a local two-context notes-sync smoke. **Phase 5 (authenticated accounts) is built/deployed at the backend + client level and needs full email/merge/rename e2e verification before it is called complete** — see [DECISIONS #0043](DECISIONS.md) and [SAVED_ACCOUNTS_PLAN.md](SAVED_ACCOUNTS_PLAN.md). See [STATUS.md](STATUS.md) for the live snapshot.
 
 | Phase | Status |
 |---|---|
@@ -110,6 +110,8 @@ These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 wor
 - No regression to anonymous-only play (the default path), and `packages/core` stays platform-agnostic.
 
 **Estimate:** implementation is in place; budget remaining time for live e2e verification and fixes found there.
+
+Detailed implementation/testing tracker: [SAVED_ACCOUNTS_PLAN.md](SAVED_ACCOUNTS_PLAN.md).
 
 ---
 

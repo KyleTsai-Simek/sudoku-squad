@@ -128,7 +128,11 @@ The coop MVP is live: shared board, server-overlay sync (LWW by `seq` + local pe
 
 ## Phase 5 — Authenticated accounts 🔄 Built/deployed, e2e verification remaining
 
-Optional email sign-in: portable progress + renameable usernames, anonymous stays the default. Full design in [DECISIONS #0043](DECISIONS.md), scope in [ROADMAP Phase 5](ROADMAP.md). Ordered roughly by dependency.
+Optional email sign-in: portable progress + renameable usernames, anonymous stays the default. Full design in [DECISIONS #0043](DECISIONS.md), scope in [ROADMAP Phase 5](ROADMAP.md), detailed tracker in [SAVED_ACCOUNTS_PLAN.md](SAVED_ACCOUNTS_PLAN.md). Ordered roughly by dependency.
+
+### Plan + tracking
+- [x] Capture the saved-accounts implementation/testing plan in [SAVED_ACCOUNTS_PLAN.md](SAVED_ACCOUNTS_PLAN.md).
+- [ ] Keep [SAVED_ACCOUNTS_PLAN.md](SAVED_ACCOUNTS_PLAN.md), this TODO, and [STATUS.md](STATUS.md) updated as milestones land.
 
 ### Backend — schema + config
 - [x] Migration `0018` — mutable username table. Adds `base` + `discriminator` (int, nullable, `>= 1000` check) to `issued_usernames`; backfills `base` = old username; drops the old `unique(username)`; makes `username` a **generated** display column; unique index on `(lower(base), coalesce(discriminator, 0))`. **Live on the linked project.**
