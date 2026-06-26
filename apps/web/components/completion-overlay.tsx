@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useGameStore } from '@/lib/game-store';
 import { pickRandomUnsolved } from '@/lib/pick-puzzle';
 import { fireWinConfetti } from '@/lib/confetti';
+import { difficultyLabel } from '@/lib/difficulty-labels';
 
 function formatElapsed(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -62,7 +63,9 @@ export function CompletionOverlay() {
             disabled={loadingNext}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
           >
-            {loadingNext ? 'Loading…' : `Play another ${puzzle?.difficulty ?? ''}`}
+            {loadingNext
+              ? 'Loading…'
+              : `Play another ${puzzle ? difficultyLabel(puzzle.difficulty) : ''}`}
           </button>
           <button
             type="button"

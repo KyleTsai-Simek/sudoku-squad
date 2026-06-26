@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { Difficulty } from '@sudoku-squad/core';
 import { getTierCounts, pickRandomUnsolved } from '@/lib/pick-puzzle';
 import { getCompletionCount } from '@/lib/completions';
+import { DIFFICULTY_LABEL, VISIBLE_DIFFICULTIES } from '@/lib/difficulty-labels';
 import {
   getDailyCompletions,
   getDailyPuzzles,
@@ -22,21 +23,6 @@ interface TierState {
   total: number;
   unsolved: number;
 }
-
-/**
- * Visible tiers for the solo picker and the in-lobby host toggle. `killer`
- * is the hidden top tier (in DB but never surfaced in pickers).
- */
-const TIERS: Difficulty[] = ['easy', 'medium', 'hard', 'expert', 'extreme'];
-
-const TIER_LABEL: Record<Difficulty, string> = {
-  easy: 'Easy',
-  medium: 'Medium',
-  hard: 'Hard',
-  expert: 'Expert',
-  extreme: 'Extreme',
-  killer: 'Killer',
-};
 
 const TIER_BLURB: Record<Difficulty, string> = {
   easy: 'Almost done already.',
@@ -302,7 +288,7 @@ export function HomeClient() {
       {view.kind === 'sp' && (
         <div className="flex w-full flex-col gap-3">
           <BackRow onBack={() => setView({ kind: 'quickplay' })} label="Single-player" />
-          {TIERS.map((tier) => {
+          {VISIBLE_DIFFICULTIES.map((tier) => {
             const t = counts?.[tier];
             const total = t?.total ?? 0;
             const unsolved = t?.unsolved ?? 0;
@@ -323,7 +309,7 @@ export function HomeClient() {
                 }
               >
                 <span className="text-xs font-medium uppercase tracking-widest">
-                  {TIER_LABEL[tier]}
+                  {DIFFICULTY_LABEL[tier]}
                 </span>
                 <span className="text-lg font-semibold">
                   {empty
@@ -391,7 +377,7 @@ function DailyButton({
   const href = puzzle
     ? `/play/${puzzle.code}?daily=${puzzle.date}&dailyDifficulty=${puzzle.difficulty}`
     : '/daily';
-  const label = TIER_LABEL[difficulty];
+  const label = DIFFICULTY_LABEL[difficulty];
   const content = (
     <>
       {completion ? (

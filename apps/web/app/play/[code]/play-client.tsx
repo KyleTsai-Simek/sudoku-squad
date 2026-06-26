@@ -16,6 +16,7 @@ import {
   KeyboardShortcutsButton,
   KeyboardShortcutsOverlay,
 } from '@/components/keyboard-shortcuts-overlay';
+import { difficultyLabel } from '@/lib/difficulty-labels';
 
 type Status = 'loading' | 'ready' | 'not-found';
 
@@ -103,7 +104,7 @@ export function PlayClient({
         }
         center={
           <span className="text-xs uppercase tracking-widest text-muted">
-            {puzzle?.difficulty ?? ''}
+            {puzzle ? difficultyLabel(puzzle.difficulty) : ''}
             {puzzle?.daily ? ' daily' : ''}
           </span>
         }

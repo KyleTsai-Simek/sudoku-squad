@@ -4,12 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AppHeader } from '@/components/app-header';
 import { getDailyPuzzles, type DailyPuzzle } from '@/lib/daily-puzzles';
-
-const LABEL: Record<DailyPuzzle['difficulty'], string> = {
-  easy: 'Easy',
-  medium: 'Medium',
-  hard: 'Hard',
-};
+import { DIFFICULTY_LABEL } from '@/lib/difficulty-labels';
 
 export default function DailyPage() {
   const [puzzles, setPuzzles] = useState<DailyPuzzle[] | null>(null);
@@ -62,7 +57,7 @@ export default function DailyPage() {
               className="group flex flex-col items-start gap-1 rounded-xl border border-primary bg-primary px-5 py-4 text-left text-primary-foreground transition-colors hover:bg-primary-hover"
             >
               <span className="text-xs font-medium uppercase tracking-widest">
-                {LABEL[puzzle.difficulty]}
+                {DIFFICULTY_LABEL[puzzle.difficulty]}
               </span>
               <span className="text-lg font-semibold">Play today&apos;s puzzle</span>
               <span className="font-mono text-xs text-primary-foreground/70 group-hover:text-primary-foreground/80">

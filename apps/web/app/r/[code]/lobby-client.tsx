@@ -26,6 +26,7 @@ import { AppHeader } from '@/components/app-header';
 import { LobbySettingsPanel } from '@/components/lobby-settings-panel';
 import { DEFAULT_ROOM_SETTINGS } from '@/lib/rooms';
 import { playerColorStyle } from '@/lib/player-colors';
+import { difficultyLabel, VISIBLE_DIFFICULTIES } from '@/lib/difficulty-labels';
 import { BattleGame } from './battle-game';
 import { CoopGame } from './coop-game';
 
@@ -445,7 +446,7 @@ export function LobbyClient({ code }: { code: string }) {
           <p className="text-sm text-muted">Loading…</p>
         ) : isHost && status === 'lobby' ? (
           <div className="grid grid-cols-5 gap-2">
-            {(['easy', 'medium', 'hard', 'expert', 'extreme'] as const).map((d) => {
+            {VISIBLE_DIFFICULTIES.map((d) => {
               // Show the optimistic selection if we have one — keeps the
               // button visually in sync with the user's last click even
               // before the server confirms.
@@ -661,10 +662,6 @@ function StartFab({
       </button>
     </div>
   );
-}
-
-function difficultyLabel(difficulty: Difficulty): string {
-  return difficulty[0]!.toUpperCase() + difficulty.slice(1);
 }
 
 function lobbyErrorHeadline(code: RoomError['code']): string {
