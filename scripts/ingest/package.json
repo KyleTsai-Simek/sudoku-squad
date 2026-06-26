@@ -16,6 +16,7 @@
     "audit:difficulty": "tsx -r dotenv/config src/audit-difficulty.ts dotenv_config_path=../../.env.local",
     "check:puzzle": "tsx -r dotenv/config src/check-puzzle.ts dotenv_config_path=../../.env.local",
     "verify:sync": "tsx -r dotenv/config src/verify-sync.ts dotenv_config_path=../../.env.local",
+    "verify:accounts": "tsx -r dotenv/config src/verify-accounts.ts dotenv_config_path=../../.env.local",
     "probe:submit-move": "tsx -r dotenv/config src/probe-submit-move.ts dotenv_config_path=../../.env.local",
     "preflight:3m": "tsx src/preflight-3m.ts",
     "verify:samples": "tsx src/verify-samples.ts",

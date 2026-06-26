@@ -20,11 +20,13 @@ export function AuthSheet({ onClose }: { onClose: () => void }) {
   const [code, setCode] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   async function onSendCode(e: FormEvent) {
     e.preventDefault();
     setPending(true);
     setError(null);
+    setWarning(null);
     const res = await startEmailAuth(email.trim());
     setPending(false);
     if (res.ok) {
@@ -38,10 +40,15 @@ export function AuthSheet({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     setPending(true);
     setError(null);
+    setWarning(null);
     const res = await verifyCode(email.trim(), code.trim());
     setPending(false);
     if (res.ok) {
-      onClose();
+      if (res.warning) {
+        setWarning(res.warning);
+      } else {
+        onClose();
+      }
     } else {
       setError(res.error ?? 'That code didn’t work. Check it and try again.');
     }
@@ -80,6 +87,18 @@ export function AuthSheet({ onClose }: { onClose: () => void }) {
             {pending ? 'Sending…' : 'Send code'}
           </button>
         </form>
+      ) : warning ? (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-stone-600">You’re signed in.</p>
+          <p className="text-xs text-amber-700">{warning}</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+          >
+            Done
+          </button>
+        </div>
       ) : (
         <form onSubmit={onVerify} className="flex flex-col gap-3">
           <p className="text-sm text-stone-600">
@@ -112,6 +131,7 @@ export function AuthSheet({ onClose }: { onClose: () => void }) {
               setStep('email');
               setCode('');
               setError(null);
+              setWarning(null);
             }}
             className="text-xs text-stone-500 hover:text-stone-800"
           >

@@ -163,7 +163,7 @@ Optional email sign-in: portable progress + renameable usernames, anonymous stay
 
 ### Testing
 - [x] Unit: discriminator allocation (random, never-reuses, width-grows) + base validation + display string. Pure logic extracted to `packages/core/src/username/discriminator.ts` (10 tests, incl. a property test; core 72→82) and imported directly by the `set-username` Edge Function — single source of truth, no drift. The cross-boundary import bundles cleanly on `supabase functions deploy`.
-- [~] Edge Function checks (post-deploy): basic anon smoke is green (`claim-username` succeeds; `set-username` rejects anon). Still verify collision → discriminator, rename frees old tuple, and `merge-progress` unions completions + refuses bad inputs.
+- [~] Edge Function checks (post-deploy): `verify:accounts` covers Phase 5 columns, `get_completion_stats`, fresh anonymous sign-in, `claim-username`, anonymous `set-username` rejection, and invalid merge rejection. Still verify signed-in collision → discriminator, rename frees old tuple, and `merge-progress` unions completions.
 - [ ] E2E (local, needs Supabase + deploy + email OTP enabled): anon solve → sign in (new email) preserves count; second device (fresh anon progress) → sign in (same email) shows the **union**; rename collision; sign-out → fresh anon with account progress intact on re-sign-in.
 - [x] Non-regression: anonymous-only play and local multiplayer smokes are green; `packages/core` purity lint is clean.
 

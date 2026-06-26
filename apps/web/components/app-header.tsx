@@ -19,10 +19,13 @@ export function AppHeader() {
   const isAnonymous = useAuthStore((s) => s.isAnonymous);
   const username = useAuthStore((s) => s.username);
   const email = useAuthStore((s) => s.email);
+  const mergeError = useAuthStore((s) => s.mergeError);
+  const retryProgressMerge = useAuthStore((s) => s.retryProgressMerge);
   const signOut = useAuthStore((s) => s.signOut);
 
   const [open, setOpen] = useState(false);
   const [overlay, setOverlay] = useState<Overlay>('none');
+  const [retryingMerge, setRetryingMerge] = useState(false);
 
   useEffect(() => {
     void init();
@@ -71,6 +74,24 @@ export function AppHeader() {
               </div>
 
               <div className="my-1 h-px bg-stone-100" />
+
+              {mergeError ? (
+                <div className="border-b border-amber-100 bg-amber-50 px-3 py-2">
+                  <p className="mb-2 text-xs text-amber-800">{mergeError}</p>
+                  <button
+                    type="button"
+                    disabled={retryingMerge}
+                    onClick={async () => {
+                      setRetryingMerge(true);
+                      await retryProgressMerge();
+                      setRetryingMerge(false);
+                    }}
+                    className="text-xs font-medium text-amber-900 hover:text-amber-700 disabled:opacity-60"
+                  >
+                    {retryingMerge ? 'Retrying…' : 'Retry progress merge'}
+                  </button>
+                </div>
+              ) : null}
 
               {signedIn ? (
                 <>

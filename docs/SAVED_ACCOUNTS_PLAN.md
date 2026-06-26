@@ -133,16 +133,16 @@ Add `@supabase/ssr` later only if we introduce protected server-rendered account
 
 ### M2 — Automated Backend Verification
 
-- [ ] Add an account verification script under `scripts/ingest`.
+- [x] Add an account verification script under `scripts/ingest` (`pnpm --filter @sudoku-squad/ingest verify:accounts`).
 - [ ] Verify schema:
-  - [ ] `issued_usernames.base`
-  - [ ] `issued_usernames.discriminator`
-  - [ ] generated `issued_usernames.username`
-  - [ ] `get_completion_stats()`
+  - [x] `issued_usernames.base`
+  - [x] `issued_usernames.discriminator`
+  - [x] generated `issued_usernames.username`
+  - [x] `get_completion_stats()`
 - [ ] Verify anonymous behavior:
-  - [ ] fresh anonymous sign-in works
-  - [ ] `claim-username` issues a name
-  - [ ] `set-username` rejects anonymous callers
+  - [x] fresh anonymous sign-in works
+  - [x] `claim-username` issues a name
+  - [x] `set-username` rejects anonymous callers
 - [ ] Verify signed-in behavior without relying on a human inbox if feasible:
   - [ ] create or obtain a test saved account session
   - [ ] rename to a free base
@@ -156,10 +156,10 @@ Add `@supabase/ssr` later only if we introduce protected server-rendered account
 
 - [ ] Make auth errors user-actionable.
 - [ ] Ensure pending magic-link state survives reload.
-- [ ] Ensure merge failure is visible/retryable instead of silently swallowed.
+- [x] Ensure merge failure is visible/retryable instead of silently swallowed.
 - [ ] Ensure username and solved-count refresh after:
   - [ ] new-email link
-  - [ ] existing-account sign-in
+  - [~] existing-account sign-in
   - [ ] rename
   - [ ] sign-out
 - [ ] Ensure anonymous-only play still works when Supabase email config is unavailable.

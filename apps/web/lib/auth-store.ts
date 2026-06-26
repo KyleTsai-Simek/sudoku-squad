@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { invalidateCompletionsCache } from './completions';
 import { ensureAuthClient, getSupabase } from './supabase';
 import { clearCachedUsername, getUsername, readCachedUsername } from './username';
 
@@ -31,14 +32,20 @@ interface AuthState {
   username: string | null;
   /** True once an email OTP/link has been requested and we're awaiting a code. */
   awaitingCode: boolean;
+  /** Recoverable warning when an existing-account progress merge fails. */
+  mergeError: string | null;
 
   init: () => Promise<void>;
   refreshUsername: () => Promise<void>;
   startEmailAuth: (email: string) => Promise<{ ok: boolean; error?: string }>;
-  verifyCode: (email: string, token: string) => Promise<{ ok: boolean; error?: string }>;
+  verifyCode: (
+    email: string,
+    token: string,
+  ) => Promise<{ ok: boolean; error?: string; warning?: string }>;
   cancelEmailAuth: () => void;
   /** Finish a magic-link sign-in after the redirect to /auth/callback. */
-  completeMagicLink: () => Promise<{ ok: boolean; error?: string }>;
+  completeMagicLink: () => Promise<{ ok: boolean; error?: string; warning?: string }>;
+  retryProgressMerge: () => Promise<{ ok: boolean; error?: string }>;
   signOut: () => Promise<void>;
   applyUsername: (username: string) => void;
 }
@@ -71,6 +78,34 @@ function clearPending(): void {
   } catch {}
 }
 
+async function mergeProgress(
+  client: NonNullable<ReturnType<typeof getSupabase>>,
+  sourceToken: string,
+): Promise<string | null> {
+  const res = await client.functions.invoke('merge-progress', {
+    body: { source_token: sourceToken },
+  });
+  if (res.error) return res.error.message;
+  return null;
+}
+
+async function refreshLandedIdentity(
+  client: NonNullable<ReturnType<typeof getSupabase>>,
+  set: (partial: Partial<AuthState>) => void,
+  refreshUsername: () => Promise<void>,
+): Promise<void> {
+  const { data } = await client.auth.getUser();
+  invalidateCompletionsCache();
+  clearCachedUsername();
+  set({
+    awaitingCode: false,
+    userId: data.user?.id ?? null,
+    isAnonymous: data.user?.is_anonymous ?? false,
+    email: data.user?.email ?? null,
+  });
+  await refreshUsername();
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   ready: false,
   userId: null,
@@ -78,6 +113,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   email: null,
   username: typeof window !== 'undefined' ? readCachedUsername() : null,
   awaitingCode: false,
+  mergeError: null,
 
   init: async () => {
     if (get().ready) return;
@@ -97,6 +133,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!listenerBound) {
       listenerBound = true;
       client.auth.onAuthStateChange((_event, session) => {
+        invalidateCompletionsCache();
         set({
           userId: session?.user?.id ?? null,
           isAnonymous: session?.user?.is_anonymous ?? false,
@@ -161,28 +198,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     // Existing-account path: union the abandoned anon identity's progress.
     if (pendingMode === 'signin' && stashedAnonToken) {
-      try {
-        await client.functions.invoke('merge-progress', {
-          body: { source_token: stashedAnonToken },
-        });
-      } catch {
-        // Non-fatal: sign-in still succeeded; progress merge can be retried.
+      const mergeError = await mergeProgress(client, stashedAnonToken);
+      await refreshLandedIdentity(client, set, get().refreshUsername);
+      if (mergeError) {
+        const warning =
+          'You are signed in, but anonymous progress did not finish merging. You can retry from the Account menu.';
+        set({ mergeError: warning });
+        return { ok: true, warning };
       }
+      clearPending();
+      set({ mergeError: null });
+      return { ok: true };
     }
 
     clearPending();
-
-    const { data } = await client.auth.getUser();
-    set({
-      awaitingCode: false,
-      userId: data.user?.id ?? null,
-      isAnonymous: data.user?.is_anonymous ?? false,
-      email: data.user?.email ?? null,
-    });
-    // Re-read the name for whatever identity we landed on (kept for a fresh
-    // link; the account's own name for an existing-account sign-in).
-    clearCachedUsername();
-    await get().refreshUsername();
+    set({ mergeError: null });
+    await refreshLandedIdentity(client, set, get().refreshUsername);
     return { ok: true };
   },
 
@@ -221,23 +252,48 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {}
 
     if (mode === 'signin' && srcToken) {
-      try {
-        await client.functions.invoke('merge-progress', { body: { source_token: srcToken } });
-      } catch {
-        // Non-fatal.
+      const mergeError = await mergeProgress(client, srcToken);
+      await refreshLandedIdentity(client, set, get().refreshUsername);
+      if (mergeError) {
+        const warning =
+          'You are signed in, but anonymous progress did not finish merging. You can retry from the Account menu.';
+        set({ mergeError: warning });
+        return { ok: true, warning };
       }
+      clearPending();
+      set({ mergeError: null });
+      return { ok: true };
     }
 
     clearPending();
-    const { data } = await client.auth.getUser();
-    set({
-      awaitingCode: false,
-      userId: data.user?.id ?? null,
-      isAnonymous: data.user?.is_anonymous ?? false,
-      email: data.user?.email ?? null,
-    });
-    clearCachedUsername();
-    await get().refreshUsername();
+    set({ mergeError: null });
+    await refreshLandedIdentity(client, set, get().refreshUsername);
+    return { ok: true };
+  },
+
+  retryProgressMerge: async () => {
+    const client = getSupabase();
+    if (!client) return { ok: false, error: 'Sign-in is unavailable here.' };
+
+    let srcToken: string | null = stashedAnonToken;
+    try {
+      srcToken = window.localStorage.getItem(SRC_TOKEN_KEY) ?? srcToken;
+    } catch {}
+    if (!srcToken) {
+      set({ mergeError: null });
+      return { ok: false, error: 'No pending progress merge was found.' };
+    }
+
+    const mergeError = await mergeProgress(client, srcToken);
+    if (mergeError) {
+      const message = 'Progress merge failed again. Check your connection and try once more.';
+      set({ mergeError: message });
+      return { ok: false, error: message };
+    }
+
+    clearPending();
+    invalidateCompletionsCache();
+    set({ mergeError: null });
     return { ok: true };
   },
 
@@ -245,6 +301,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const client = getSupabase();
     if (!client) return;
     await client.auth.signOut();
+    invalidateCompletionsCache();
     clearCachedUsername();
     // Return to a fresh anonymous identity so play continues seamlessly.
     await client.auth.signInAnonymously();
@@ -254,6 +311,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAnonymous: data.user?.is_anonymous ?? false,
       email: data.user?.email ?? null,
       username: null,
+      mergeError: null,
     });
     await get().refreshUsername();
   },
