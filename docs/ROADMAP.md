@@ -2,7 +2,7 @@
 
 Four phases, each with an explicit **exit criterion** — we don't move on until it's met. Single player first, then battle, then coop, then iOS. This sequencing exists for a reason: each phase de-risks the next.
 
-**Current position:** Phase 2 battle mode is playable end-to-end and live, with local two-context Playwright coverage plus loser-keeps-solving and reload-resume fixes. Phase 3 coop has an MVP landed (shared board, server-overlay sync, shared win) with a local two-context notes-sync smoke. **Phase 5 (authenticated accounts) is built/deployed at the backend + client level and needs full email/merge/rename e2e verification before it is called complete** — see [DECISIONS #0043](DECISIONS.md) and [SAVED_ACCOUNTS_PLAN.md](SAVED_ACCOUNTS_PLAN.md). See [STATUS.md](STATUS.md) for the live snapshot.
+**Current position:** Phase 2 battle mode is playable end-to-end and live, with local two-context Playwright coverage plus loser-keeps-solving and reload-resume fixes. Phase 3 coop has an MVP landed (shared board, server-overlay sync, shared win) with a local two-context notes-sync smoke. **Phase 5 (authenticated accounts) is built/deployed at the backend + client level and needs full email/merge/rename e2e verification before it is called complete** — see [DECISIONS #0043](DECISIONS.md) and [SAVED_ACCOUNTS_PLAN.md](SAVED_ACCOUNTS_PLAN.md). A cross-cutting **theme refresh + dark mode** pass is now planned in [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK_MODE_PLAN.md) / [DECISIONS #0044](DECISIONS.md). See [STATUS.md](STATUS.md) for the live snapshot.
 
 | Phase | Status |
 |---|---|
@@ -11,6 +11,7 @@ Four phases, each with an explicit **exit criterion** — we don't move on until
 | Phase 2 — Battle mode | 🔄 Playable end-to-end; race-to-completion stress remains |
 | Phase 3 — Coop mode | 🔄 MVP landed (shared board, server-overlay sync, shared win, local two-context smoke) |
 | Phase 5 — Authenticated accounts | 🔄 Built/deployed; full email/merge/rename e2e verification remains |
+| Cross-cutting — Theme refresh + dark mode | 🔄 Planning complete; implementation pending |
 | Phase 4 — iOS (React Native) | Pending |
 
 ---
@@ -100,7 +101,7 @@ These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 wor
 - Existing-account sign-in: `merge-progress` Edge Function unions the device's anon progress into the account (Supabase can't merge two user IDs).
 - `set-username` Edge Function: signed-in renames with Discord-style `base#NNNN` discriminators (random, width-growing, freed on change-away). Anonymous users keep the immutable adj-noun handle.
 - Backend stats capture only: `get_completion_stats()` RPC (per-difficulty + total); no stats screen this iteration.
-- Top-corner hamburger menu (Material Symbols) on all screens; Account item → "Sign in" / username → change-username + sign-out.
+- In-flow `AppHeader` navigation on all screens; Account item → "Sign in" / username → change-username + sign-out.
 - ✅ Migrations `0018` (mutable username table: `base`/`discriminator` + uniqueness on `(lower(base), coalesce(discriminator,0))`) and `0019` (stats RPC) are live.
 - ✅ Edge Functions `claim-username`, `set-username`, and `merge-progress` are deployed; basic anon smoke is green.
 - ✅ Supabase project config is set for email OTP using the default 6-digit code, plus `/auth/callback` redirects.

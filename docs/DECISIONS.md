@@ -17,6 +17,29 @@ Format:
 
 ---
 
+## 0044 — Semantic blue theme and local light/dark preference
+**Date:** 2026-06-26
+**Status:** Accepted for planning; implementation pending. Resolves the visual-identity open question enough to start the palette/theme pass, while leaving logo/illustration work separate.
+
+**Context.** The current web UI is visually coherent enough for the V1 demo, but it is built from direct Tailwind utility colors (`stone`, `amber`, `emerald`, `red`, a few direct `blue`/`orange`) rather than a reusable theme. The user wants a friendlier high-contrast blue as the primary color, an extended palette based on it, full-app adoption, and light/dark mode support. The current app also has a shared `AppHeader` / account-menu entry point, making this a good time to add a persisted local appearance preference.
+
+**Decision.** Add a semantic theme layer to `apps/web` before repainting components. Tailwind will use `darkMode: 'class'`, CSS custom properties will define light and dark values, and Tailwind color tokens will map to semantics such as `background`, `surface`, `text`, `muted`, `border`, `primary`, `selected`, `related`, `success`, `warning`, `danger`, and `focus`. The user-facing preference is local-only with three values: `auto`, `light`, and `dark`. `auto` follows `prefers-color-scheme`; manual choices override it and are persisted in `localStorage`.
+
+The implementation plan lives in [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK_MODE_PLAN.md). The final acceptance step is explicit user manual confirmation after the UI has been implemented and verified.
+
+**Alternatives considered.**
+- Keep direct Tailwind palette utilities and only swap colors in place. Rejected because dark mode would become brittle and future iOS/web parity harder.
+- Use an external theming library. Rejected for now; Tailwind + CSS variables is enough and avoids a new dependency.
+- Store the theme preference in the account. Rejected for this pass; the requested behavior is a local override, and anonymous play should remain frictionless.
+
+**Consequences.**
+- `packages/core` is untouched; this is web UI infrastructure only.
+- App code should move toward semantic color tokens instead of raw palette utilities.
+- The sudoku board state lookups must stay explicit so selected/conflict/same-value precedence remains deterministic.
+- Verification must include light/dark desktop and mobile manual checks, plus persistence/reload checks for `auto` / `light` / `dark`.
+
+---
+
 ## 0043 — Authenticated accounts (email OTP), Discord-style renames, durable cross-device progress
 **Date:** 2026-05-29
 **Status:** Accepted. Pulls forward ROADMAP "Stretch #3" and the GOALS_AND_SCOPE V2 "persistent accounts" item into a new **Phase 5**, executed ahead of Phase 4 (iOS). Builds on / extends [#0027](DECISIONS.md) (server-issued usernames) and resolves its consequences note ("future rename Edge Function"). Anonymous auth ([ARCHITECTURE §1](ARCHITECTURE.md)) is **kept** as the default identity, not replaced.
@@ -1093,7 +1116,7 @@ Resolved items get moved into the log above. These are still TBD. Items grouped 
 
 ## Open longer-term
 
-6. **Visual identity** — color palette, typography, logo, completion celebration style. Current interim is Tailwind stone-900 + amber-200 accents (sufficient for V1 demo, not committed to). Needs a design pass before any public-facing push.
+6. **Logo / illustration identity** — palette and app theming are now resolved for implementation by #0044; logo, app icon, Open Graph art, and any richer illustration style still need a separate design pass before a public-facing push.
 7. **Visible tier above expert** — `killer` now exists as a hidden QQWing EXPERT/requires-a-guess tier ([#0042](DECISIONS.md)). Decide whether and how to expose a true "evil" tier before public launch.
 8. **Vercel ↔ Supabase preview environment** — preview deploys currently hit the *production* Supabase project. Fine for V1; revisit before more users.
 

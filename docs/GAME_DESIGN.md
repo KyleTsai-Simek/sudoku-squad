@@ -69,6 +69,7 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 | Auto-clean notes | **Always on** | When you place a number, that digit is removed from the pencil-marks of every peer cell (row/col/box). Universal pattern in major sudoku apps; no toggle. Undo restores. |
 | Hints / Reveal cell | **Removed in V1** (Chunk A). Auto-check is the replacement signal: when on, the moment a wrong digit is placed it's flagged. The `sp_get_puzzle` RPC stays for SP auto-check; the multiplayer `hint` Edge Function was dropped from scope. |
 | Timer visible | **On** | Battle uses it for tiebreaks; coop just for fun. |
+| Appearance | **Auto** | Planned in [DECISIONS #0044](DECISIONS.md): follows the user's system light/dark setting unless manually overridden to Light or Dark. The override is stored locally. |
 
 ### The "reveal answers" cluster — resolved
 
@@ -91,11 +92,19 @@ These all default to per-room settings (host picks in the lobby):
 
 Optional email sign-in, layered on top of anonymous play:
 
-- **Sign in / hamburger menu.** A top-corner hamburger (Google Material Symbols) on every screen has an **Account** item: "Sign in" when signed out, the username when signed in. Sign-in collects an email and accepts either the **magic link** or a **6-digit code** (Supabase OTP).
+- **Sign in / account menu.** The in-flow app header on every screen has an **Account** item: "Sign in" when signed out, the username when signed in. Sign-in collects an email and accepts either the **magic link** or a **6-digit code** (Supabase OTP).
 - **Why sign in.** Progress becomes portable across devices, and you can change your username. First-time sign-in *links* the email to your current anonymous identity (same player ID — nothing is lost). Signing in on another device **merges** that device's anonymous progress into your account (union of solved puzzles).
 - **Renaming (signed-in only).** Pick any base name; if it's already taken, a random `#NNNN` discriminator is appended (`kyle#1234`), Discord-style — many people can be `kyle`. The width grows (5 digits, …) only if a base's number space fills up. Changing away from a name frees it for reuse.
 - **Sign out** drops you to a fresh anonymous identity; your account's progress stays safe and returns on next sign-in.
 - **Stats.** Solved counts per difficulty (and unique solved-puzzle hashes, backend-only) are captured server-side now; a visible stats/profile screen is a later pass.
+
+## Visual Theme
+
+- Planned theme pass: [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK_MODE_PLAN.md), [DECISIONS #0044](DECISIONS.md).
+- Primary app color should be a user-friendly, high-contrast blue, extended into semantic UI tokens instead of direct Tailwind palette utilities.
+- Light mode and dark mode must both be fully supported. Default behavior is `auto`, following the user's native system setting; users can override locally to `light` or `dark` at any time from settings/account UI.
+- Board state colors must remain readable in both modes: givens, entered values, selected cell, related row/column/box, same-value highlights, completed-digit state, conflicts, and incorrect auto-check state.
+- Color cannot be the only signal for important states; existing text, labels, icons, and focus affordances should remain intact.
 
 ---
 
