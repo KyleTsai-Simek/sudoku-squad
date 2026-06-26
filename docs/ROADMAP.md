@@ -11,7 +11,7 @@ Four phases, each with an explicit **exit criterion** — we don't move on until
 | Phase 2 — Battle mode | 🔄 Playable end-to-end; race-to-completion stress remains |
 | Phase 3 — Coop mode | 🔄 MVP landed (shared board, server-overlay sync, shared win, local two-context smoke) |
 | Phase 5 — Authenticated accounts | 🔄 Built/deployed; full email/merge/rename e2e verification remains |
-| Cross-cutting — Completion leaderboard | 🔄 Implemented; migrations 0023/0024 live, manual rename verification remains |
+| Cross-cutting — Completion leaderboard | 🔄 Implemented; migrations 0023/0024/0025 live, manual rename verification remains |
 | Cross-cutting — Theme refresh + dark mode | ✅ Complete |
 | Phase 4 — iOS (React Native) | Pending |
 

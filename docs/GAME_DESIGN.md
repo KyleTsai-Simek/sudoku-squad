@@ -24,10 +24,10 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 - Single-player and multiplayer lobby selectors expose the five visible difficulty labels: Easy / Medium / Hard / Expert / Extreme. Home single-player difficulty buttons are centered one-word labels; the hidden `killer` tier remains unsurfaced.
 
 ### Leaderboards 🔄 first board deployed
-- The home page shows a bottom "Most puzzles solved" leaderboard. It ranks players by unique completed puzzles from `player_completions`, across anonymous and signed-in users.
+- The home page shows a bottom "Puzzles solved" leaderboard. It ranks players by unique completed puzzles from `player_completions`, across anonymous and signed-in users.
 - Users with zero completions are omitted.
 - Display names come from the current `issued_usernames` row, so a signed-in username change is reflected on the leaderboard for everyone.
-- The first UI requests the top 15 and bolds the current player when present. If the current player is outside the top 15, their row is pinned above the ranked list; if they are inside the top 15, they appear in the normal ranked position. The backend RPC returns the current player's row outside the requested page, so large leaderboards can show both the leaders and "your place" without loading every ranked user.
+- The first UI requests the top 15 and bolds the current player when present. If the current player is outside the top 15 or has zero completions, their row is pinned above the ranked list; if they are inside the top 15, they appear in the normal ranked position. The backend RPC returns the current player's row outside the requested page and for zero-completion callers, so large leaderboards can show both the leaders and "your place" without loading every ranked user.
 
 ### Battle ✅ live (Phase 2)
 - 2–8 players, each with their own private copy of the same puzzle.

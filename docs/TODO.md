@@ -197,11 +197,13 @@ Global completion leaderboard for "most puzzles solved" across anonymous and sig
 
 - [x] Migration `0023` — `get_completion_leaderboard(p_limit, p_offset, p_leaderboard_key)` ranks players with at least one `player_completions` row, joins current `issued_usernames.username`, supports top-page pagination, and includes the caller's own row when outside the requested page.
 - [x] Migration `0024` — change the default leaderboard page size to 15.
-- [x] Home page bottom section renders the top 15 "Most puzzles solved" rows and bolds the current player if ranked; current player is pinned above the list when outside the top 15.
+- [x] Migration `0025` — include the caller's row even when they have zero completions.
+- [x] Home page bottom section renders the top 15 "Puzzles solved" rows and bolds the current player if ranked; current player is pinned above the list when outside the top 15 or at zero solves.
 - [x] Apply migration `0023` to the linked Supabase project.
+- [x] Apply migration `0024` to the linked Supabase project.
+- [x] Apply migration `0025` to the linked Supabase project.
 - [x] Smoke-check `get_completion_leaderboard` against live Supabase; it returned 10 ranked rows.
 - [x] Add `verify:accounts` coverage that anonymous → saved-account merge deletes the source anonymous username row, preventing the old auto-assigned name from lingering on the leaderboard.
-- [x] Apply migration `0024` to the linked Supabase project.
 - [ ] Manual web check after deploy: solve as anonymous, rename a signed-in user, and confirm the leaderboard reflects the updated username without a completion rewrite.
 - [ ] Future: add keyed variants for per-difficulty completions, daily solve time, and battle wins without exposing raw cross-user completion rows.
 

@@ -62,9 +62,6 @@ export function HomeClient() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[] | null | undefined>(
     undefined,
   );
-  // Username display is owned by the auth store (kept fresh across sign-in /
-  // rename / sign-out). The AppHeader boots the store; we just read it here.
-  const username = useAuthStore((s) => s.username);
   // Re-read the solved count whenever the identity changes (e.g. a sign-in that
   // merged anonymous progress into an account changes the total).
   const userId = useAuthStore((s) => s.userId);
@@ -178,25 +175,6 @@ export function HomeClient() {
       <AppHeader />
       <div className="text-center">
         <h1 className="text-5xl font-semibold tracking-tight text-foreground">Sudoku Squad</h1>
-        {username || completed !== null ? (
-          <p className="mt-4 inline-flex items-center gap-3 rounded-full border border-border bg-surface px-4 py-1.5 text-xs text-muted">
-            {username ? (
-              <span>
-                <span className="text-muted">you&apos;re</span>{' '}
-                <span className="font-medium text-foreground">{username}</span>
-              </span>
-            ) : null}
-            {username && completed !== null ? <span className="text-muted">·</span> : null}
-            {completed !== null ? (
-              <span>
-                <span className="font-medium text-foreground">{completed}</span>{' '}
-                <span className="text-muted">
-                  puzzle{completed === 1 ? '' : 's'} solved
-                </span>
-              </span>
-            ) : null}
-          </p>
-        ) : null}
       </div>
 
       {view.kind === 'home' && (
@@ -346,12 +324,19 @@ function CompletionLeaderboard({
 }: {
   entries: LeaderboardEntry[] | null | undefined;
 }) {
-  const topRows = entries?.filter((entry) => entry.rank <= DEFAULT_LEADERBOARD_LIMIT) ?? [];
   const currentUserRow = entries?.find((entry) => entry.isCurrentUser) ?? null;
   const currentUserIsOutsideTop =
     currentUserRow !== null && currentUserRow.rank > DEFAULT_LEADERBOARD_LIMIT;
+  const pinCurrentUserFirst =
+    currentUserRow !== null && (currentUserIsOutsideTop || currentUserRow.completedCount === 0);
+  const topRows =
+    entries?.filter(
+      (entry) =>
+        entry.rank <= DEFAULT_LEADERBOARD_LIMIT &&
+        !(pinCurrentUserFirst && entry.isCurrentUser),
+    ) ?? [];
   const displayedRows =
-    entries && currentUserIsOutsideTop && currentUserRow
+    entries && pinCurrentUserFirst && currentUserRow
       ? [currentUserRow, ...topRows]
       : entries
         ? topRows
@@ -362,7 +347,7 @@ function CompletionLeaderboard({
       <SectionHeader
         icon={TrophyIcon}
         title="Leaderboard"
-        aside="Most puzzles solved"
+        aside="Puzzles solved"
       />
 
       <div className="overflow-hidden rounded-xl border border-border bg-surface">
@@ -403,7 +388,11 @@ function SectionHeader({
         <Icon size={16} className="shrink-0" />
         <span className="truncate">{title}</span>
       </h2>
-      {aside ? <span className="shrink-0 text-right">{aside}</span> : null}
+      {aside ? (
+        <span className="shrink-0 text-right text-xs font-normal normal-case tracking-normal text-muted">
+          {aside}
+        </span>
+      ) : null}
     </div>
   );
 }
