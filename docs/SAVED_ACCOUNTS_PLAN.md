@@ -84,6 +84,21 @@ Do not add `@supabase/ssr` solely for the current account menu. The current app 
 
 Add `@supabase/ssr` later only if we introduce protected server-rendered account pages, profile pages, billing, admin surfaces, or server actions that require reading the session from cookies.
 
+### Email Link Decision
+
+Use Supabase token-hash callback links in email templates, not the default `{{ .ConfirmationURL }}`.
+
+The web app uses a browser Supabase client with PKCE enabled. Supabase's default confirmation URL can redirect back with `?code=...`, which requires the original PKCE `code_verifier` from the initiating browser's storage. That fails when a link is opened in a different browser/profile/device or after storage is cleared. The visible symptom is:
+
+`PKCE code verifier not found in storage.`
+
+The reliable link format is:
+
+- Magic link / OTP template: `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email`
+- Change email address template: `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email_change`
+
+The callback route already supports `token_hash` + `type` by calling `verifyOtp`. Keep the 6-digit `{{ .Token }}` code in the email as the primary no-redirect path.
+
 ---
 
 ## Security Rules
@@ -121,7 +136,8 @@ Add `@supabase/ssr` later only if we introduce protected server-rendered account
 - [ ] Confirm Supabase dashboard settings:
   - [ ] Email provider enabled.
   - [ ] OTP length is 6 digits unless the product decision changes.
-  - [ ] Email template references Sudoku Squad and includes both `{{ .ConfirmationURL }}` and `{{ .Token }}`.
+  - [ ] Magic link / OTP template references Sudoku Squad, includes `{{ .Token }}`, and uses `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email`.
+  - [ ] Change email address template references Sudoku Squad, includes `{{ .Token }}`, and uses `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email_change`.
   - [ ] Redirect allow-list includes local, Vercel preview, and production `/auth/callback`.
   - [ ] Rate limits are acceptable for manual testing.
 - [ ] Confirm `0018` and `0019` are live.
@@ -226,11 +242,21 @@ I can verify some live behavior with the configured anon/service-role keys, but 
 4. Confirm Site URL is the production app URL.
 5. Add redirect allow-list entries for:
    - `http://localhost:3000/auth/callback`
+   - `http://localhost:3001/auth/callback`
    - `http://localhost:3100/auth/callback`
    - Vercel preview callback pattern or exact preview URL
    - `https://sudoku-squad-web.vercel.app/auth/callback`
-6. Update the email template to Sudoku Squad branding. It should include both the magic-link button and the token code.
-7. Tell Codex what test email address(es) to use for manual and automated account tests, if any.
+6. Update Authentication → Emails → Magic link or OTP:
+   - Subject: `Sign in to Sudoku Squad`
+   - Include the 6-digit `{{ .Token }}`.
+   - Link button href: `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email`
+   - Do not use `{{ .ConfirmationURL }}` for this app's button.
+7. Update Authentication → Emails → Change email address:
+   - Subject: `Confirm your Sudoku Squad email`
+   - Include the 6-digit `{{ .Token }}`.
+   - Link button href: `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email_change`
+   - Use "confirm this email" copy here, not in the Magic link / OTP template.
+8. Tell Codex what test email address(es) to use for manual and automated account tests, if any.
 
 ---
 
