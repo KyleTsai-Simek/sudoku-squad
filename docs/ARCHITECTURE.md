@@ -21,7 +21,7 @@ This document defines the technical foundation for Sudoku Squad: stack, data mod
 
 ## 1.1 Web theme architecture
 
-The web theme refresh is tracked in [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK_MODE_PLAN.md) and accepted in [DECISIONS #0044](DECISIONS.md).
+The web theme system is accepted in [DECISIONS #0044](DECISIONS.md) and [#0045](DECISIONS.md).
 
 - Theme infrastructure belongs in `apps/web`; `packages/core` remains theme-agnostic.
 - Tailwind uses `darkMode: 'class'`.

@@ -39,13 +39,11 @@ Format:
 
 ## 0044 — Semantic blue theme and local light/dark preference
 **Date:** 2026-06-26
-**Status:** Accepted and implemented in web; verification/user acceptance pending. Resolves the visual-identity open question enough to ship the palette/theme pass, while leaving logo/illustration work separate.
+**Status:** Accepted and implemented in web. Resolves the visual-identity open question enough to ship the palette/theme pass, while leaving logo/illustration work separate.
 
 **Context.** The current web UI is visually coherent enough for the V1 demo, but it is built from direct Tailwind utility colors (`stone`, `amber`, `emerald`, `red`, a few direct `blue`/`orange`) rather than a reusable theme. The user wants a friendlier high-contrast blue as the primary color, an extended palette based on it, full-app adoption, and light/dark mode support. The current app also has a shared `AppHeader` / account-menu entry point, making this a good time to add a persisted local appearance preference.
 
 **Decision.** Add a semantic theme layer to `apps/web` before repainting components. Tailwind uses `darkMode: 'class'`, CSS custom properties define light and dark values, and Tailwind color tokens map to semantics such as `background`, `surface`, `muted`, `border`, `primary`, `selected`, `related`, `success`, `warning`, and `danger`. The primary blue is an implementation-picked accessible default centered on `#1d4ed8` / `#2563eb`. The user-facing preference is local-only with three values: `auto`, `light`, and `dark`. `auto` follows `prefers-color-scheme`; manual choices override it and are persisted in `localStorage`. The selector lives in the account menu. Notes mode keeps its warm amber accent instead of moving fully into the blue palette.
-
-The implementation tracker lives in [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK_MODE_PLAN.md). The final acceptance step is explicit user manual confirmation after verification.
 
 **Alternatives considered.**
 - Keep direct Tailwind palette utilities and only swap colors in place. Rejected because dark mode would become brittle and future iOS/web parity harder.
@@ -56,7 +54,6 @@ The implementation tracker lives in [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK
 - `packages/core` is untouched; this is web UI infrastructure only.
 - App code should move toward semantic color tokens instead of raw palette utilities.
 - The sudoku board state lookups must stay explicit so selected/conflict/same-value precedence remains deterministic.
-- Verification must include light/dark desktop and mobile manual checks, plus persistence/reload checks for `auto` / `light` / `dark`.
 
 ---
 

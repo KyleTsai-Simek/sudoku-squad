@@ -100,7 +100,7 @@ Optional email sign-in, layered on top of anonymous play:
 
 ## Visual Theme
 
-- Theme implementation tracker: [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK_MODE_PLAN.md), [DECISIONS #0044](DECISIONS.md).
+- Theme decisions: [DECISIONS #0044](DECISIONS.md), [#0045](DECISIONS.md).
 - Primary app color is a user-friendly, high-contrast blue, extended into semantic UI tokens instead of direct Tailwind palette utilities.
 - Light mode and dark mode are supported. Default behavior is `auto`, following the user's native system setting; users can override locally to `light` or `dark` from the account menu.
 - Notes mode keeps its warm amber accent.
