@@ -18,10 +18,10 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 - One shared Easy / Medium / Hard puzzle set per Pacific calendar day.
 - Daily assignments rotate at midnight Pacific and are stored in `daily_puzzles`.
 - Assignment prefers puzzles no player has solved yet, falling back to the tier pool only when needed.
-- The home screen shows the Easy / Medium / Hard daily set as a horizontal row under "Daily Puzzles"; `/daily` remains the full daily page. Both launch the existing single-player board with daily metadata attached.
+- The home screen shows the Easy / Medium / Hard daily set as a horizontal row under a Pacific-date header like "June 26 Daily Puzzles"; `/daily` remains the full daily page. Both launch the existing single-player board with daily metadata attached.
 - Home uses a single-primary-CTA hierarchy: unsolved Daily Easy → unsolved Daily Medium → unsolved Daily Hard → Quick Play's "Start a game". Non-primary action buttons use the subtle blue `primary-muted` treatment rather than white. Unsolved home daily buttons only display the centered difficulty label; completed daily buttons use a distinct light-green card treatment with a corner checkmark and completion time.
 - A daily solve is recorded only when the player completes the assigned puzzle on its assigned Pacific day; future leaderboard/history UI will read `player_daily_completions`.
-- Single-player and multiplayer lobby selectors expose the five visible difficulty labels: Easy / Medium / Hard / Expert / Extreme. The hidden `killer` tier remains unsurfaced.
+- Single-player and multiplayer lobby selectors expose the five visible difficulty labels: Easy / Medium / Hard / Expert / Extreme. Home single-player difficulty buttons are centered one-word labels; the hidden `killer` tier remains unsurfaced.
 
 ### Battle ✅ live (Phase 2)
 - 2–8 players, each with their own private copy of the same puzzle.

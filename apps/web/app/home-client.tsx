@@ -24,15 +24,6 @@ interface TierState {
   unsolved: number;
 }
 
-const TIER_BLURB: Record<Difficulty, string> = {
-  easy: 'Almost done already.',
-  medium: 'Gentle introduction.',
-  hard: 'A relaxed solve.',
-  expert: 'Standard puzzle.',
-  extreme: 'Real work.',
-  killer: '—',
-};
-
 /** Default difficulty when creating a multiplayer room — the host changes
  *  it from the lobby after creation. Keeps the old default puzzle strength
  *  after the label shift. */
@@ -152,6 +143,7 @@ export function HomeClient() {
     ? Object.fromEntries(dailyPuzzles.map((puzzle) => [puzzle.difficulty, puzzle])) as
         Partial<Record<DailyDifficulty, DailyPuzzle>>
     : {};
+  const dailyHeading = `${formatPacificMonthDay(dailyPuzzles?.[0]?.date)} Daily Puzzles`;
   const primaryDaily = DAILY_DIFFICULTIES.find((difficulty) => !dailyCompletions[difficulty]);
   const quickPlayPrimary = dailyPuzzles !== null && !primaryDaily;
 
@@ -160,9 +152,6 @@ export function HomeClient() {
       <AppHeader />
       <div className="text-center">
         <h1 className="text-5xl font-semibold tracking-tight text-foreground">Sudoku Squad</h1>
-        <p className="mt-2 text-sm text-muted">
-          Multiplayer sudoku — play together or race to the finish.
-        </p>
         {username || completed !== null ? (
           <p className="mt-4 inline-flex items-center gap-3 rounded-full border border-border bg-surface px-4 py-1.5 text-xs text-muted">
             {username ? (
@@ -188,7 +177,7 @@ export function HomeClient() {
         <>
           <div className="flex w-full flex-col gap-2">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-              Daily Puzzles
+              {dailyHeading}
             </h2>
             <div className="grid w-full grid-cols-3 gap-2">
               {DAILY_DIFFICULTIES.map((difficulty) => {
@@ -295,41 +284,29 @@ export function HomeClient() {
             const empty = total === 0;
             const allDone = total > 0 && unsolved === 0;
             const isLoading = loadingSolo === tier;
+            const label = DIFFICULTY_LABEL[tier];
             return (
               <button
                 key={tier}
                 type="button"
                 onClick={() => startSolo(tier)}
                 disabled={empty || isLoading}
+                aria-label={
+                  empty
+                    ? `${label} puzzles coming soon`
+                    : isLoading
+                      ? `Picking ${label} puzzle`
+                      : allDone
+                        ? `Replay ${label} puzzle`
+                        : `Start ${label} puzzle`
+                }
                 className={
-                  'group flex flex-col items-start gap-1 rounded-xl border px-5 py-4 text-left transition-colors ' +
-                  (empty
-                    ? 'cursor-not-allowed border-dashed border-border text-muted'
-                    : 'border-primary bg-primary text-primary-foreground hover:bg-primary-hover disabled:opacity-60')
+                  empty
+                    ? 'flex min-h-20 cursor-not-allowed items-center justify-center rounded-xl border border-dashed border-border px-3 py-3 text-center text-sm font-semibold uppercase tracking-widest text-muted'
+                    : actionClassName({ primary: true, compact: true })
                 }
               >
-                <span className="text-xs font-medium uppercase tracking-widest">
-                  {DIFFICULTY_LABEL[tier]}
-                </span>
-                <span className="text-lg font-semibold">
-                  {empty
-                    ? 'Coming soon'
-                    : isLoading
-                      ? 'Picking…'
-                      : allDone
-                        ? `Replay (${total})`
-                        : 'New game'}
-                </span>
-                <span
-                  className={
-                    'text-xs ' +
-                    (empty ? 'text-muted' : 'text-primary-foreground/70 group-hover:text-primary-foreground/80')
-                  }
-                >
-                  {empty
-                    ? '—'
-                    : `${unsolved} unsolved · ${total} total · ${TIER_BLURB[tier]}`}
-                </span>
+                {label}
               </button>
             );
           })}
@@ -433,6 +410,22 @@ function formatElapsed(ms: number | null): string {
   const seconds = totalSeconds % 60;
   if (minutes === 0) return `${seconds}s`;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function formatPacificMonthDay(date?: string): string {
+  const parsed = parsePacificDate(date);
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'America/Los_Angeles',
+  }).format(parsed);
+}
+
+function parsePacificDate(date?: string): Date {
+  if (!date) return new Date();
+  const [year, month, day] = date.split('-').map(Number);
+  if (!year || !month || !day) return new Date();
+  return new Date(Date.UTC(year, month - 1, day, 12));
 }
 
 function BackRow({ onBack, label }: { onBack: () => void; label: string }) {
