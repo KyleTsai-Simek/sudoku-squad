@@ -41,6 +41,12 @@ export default function SignInPage() {
         </header>
 
         <section className="flex flex-1 flex-col justify-center py-10">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold tracking-normal text-foreground">
+              Sign in
+            </h2>
+          </div>
+
           <AuthForm onComplete={() => router.push(nextPath)} />
         </section>
       </div>
