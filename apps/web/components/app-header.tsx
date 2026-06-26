@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth-store';
 import { getThemeOptions, type ThemePreference, useThemePreference } from '@/lib/theme-store';
 import { AccountIcon, MenuIcon } from './material-icons';
-import { AuthSheet } from './auth-sheet';
 import { UsernameSheet } from './username-sheet';
 
-type Overlay = 'none' | 'auth' | 'username';
+type Overlay = 'none' | 'username';
 
 interface AppHeaderProps {
   left?: ReactNode;
@@ -25,6 +25,7 @@ export function AppHeader({ left, center, actions, className = '' }: AppHeaderPr
   const retryProgressMerge = useAuthStore((s) => s.retryProgressMerge);
   const signOut = useAuthStore((s) => s.signOut);
   const { preference: themePreference, setPreference: setThemePreference } = useThemePreference();
+  const router = useRouter();
 
   const [open, setOpen] = useState(false);
   const [overlay, setOverlay] = useState<Overlay>('none');
@@ -97,10 +98,11 @@ export function AppHeader({ left, center, actions, className = '' }: AppHeaderPr
                   </>
                 ) : (
                   <MenuItem
-                    label="Sign in"
+                    label="Sign in to save progress"
                     onClick={() => {
                       setOpen(false);
-                      setOverlay('auth');
+                      const currentPath = `${window.location.pathname}${window.location.search}`;
+                      router.push(`/auth/sign-in?next=${encodeURIComponent(currentPath)}`);
                     }}
                   />
                 )}
@@ -146,7 +148,6 @@ export function AppHeader({ left, center, actions, className = '' }: AppHeaderPr
         </div>
       </header>
 
-      {overlay === 'auth' ? <AuthSheet onClose={() => setOverlay('none')} /> : null}
       {overlay === 'username' ? (
         <UsernameSheet current={username} onClose={() => setOverlay('none')} />
       ) : null}

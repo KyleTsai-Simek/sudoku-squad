@@ -1,16 +1,16 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { useAuthStore } from '@/lib/auth-store';
 import { CloseIcon } from './material-icons';
 
 /**
- * Sign-in modal ([DECISIONS #0043]). Email → 6-digit code. The same email also
+ * Sign-in flow ([DECISIONS #0043]). Email → 6-digit code. The same email also
  * carries a magic link (handled by /auth/callback) for people who'd rather tap
  * it. On success the visitor's anonymous progress is linked to (or merged into)
  * the account.
  */
-export function AuthSheet({ onClose }: { onClose: () => void }) {
+export function AuthForm({ onComplete }: { onComplete: () => void }) {
   const startEmailAuth = useAuthStore((s) => s.startEmailAuth);
   const verifyCode = useAuthStore((s) => s.verifyCode);
   const cancelEmailAuth = useAuthStore((s) => s.cancelEmailAuth);
@@ -47,20 +47,15 @@ export function AuthSheet({ onClose }: { onClose: () => void }) {
       if (res.warning) {
         setWarning(res.warning);
       } else {
-        onClose();
+        onComplete();
       }
     } else {
       setError(res.error ?? 'That code didn’t work. Check it and try again.');
     }
   }
 
-  function close() {
-    cancelEmailAuth();
-    onClose();
-  }
-
   return (
-    <Modal onClose={close} title={step === 'email' ? 'Sign in' : 'Enter your code'}>
+    <>
       {step === 'email' ? (
         <form onSubmit={onSendCode} className="flex flex-col gap-3">
           <p className="text-sm text-muted">
@@ -93,7 +88,7 @@ export function AuthSheet({ onClose }: { onClose: () => void }) {
           <p className="text-xs text-foreground">{warning}</p>
           <button
             type="button"
-            onClick={onClose}
+            onClick={onComplete}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
           >
             Done
@@ -139,6 +134,21 @@ export function AuthSheet({ onClose }: { onClose: () => void }) {
           </button>
         </form>
       )}
+    </>
+  );
+}
+
+export function AuthSheet({ onClose }: { onClose: () => void }) {
+  const cancelEmailAuth = useAuthStore((s) => s.cancelEmailAuth);
+
+  function close() {
+    cancelEmailAuth();
+    onClose();
+  }
+
+  return (
+    <Modal onClose={close} title="Sign in">
+      <AuthForm onComplete={onClose} />
     </Modal>
   );
 }
@@ -150,7 +160,7 @@ export function Modal({
 }: {
   title: string;
   onClose: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div
