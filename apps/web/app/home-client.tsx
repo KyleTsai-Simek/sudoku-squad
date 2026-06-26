@@ -179,7 +179,7 @@ export function HomeClient() {
 
       {view.kind === 'home' && (
         <>
-          <div className="flex w-full flex-col gap-2">
+          <div className="flex w-full flex-col gap-2 pt-1">
             <SectionHeader icon={CalendarIcon} title={dailyHeading} />
             <div className="grid w-full grid-cols-3 gap-2">
               {DAILY_DIFFICULTIES.map((difficulty) => {
@@ -198,7 +198,7 @@ export function HomeClient() {
             </div>
           </div>
 
-          <div className="flex w-full flex-col gap-2">
+          <div className="flex w-full flex-col gap-2 pt-1">
             <SectionHeader icon={PlayIcon} title="Quick Play" />
             <button
               type="button"
@@ -215,7 +215,7 @@ export function HomeClient() {
           {/* Compact join-by-code input. Sits below the primary home actions so
               shared-link recipients who only have a 6-char code can still get
               into a room without competing with the main CTA hierarchy. */}
-          <form onSubmit={onJoin} className="flex w-full flex-col gap-2">
+          <form onSubmit={onJoin} className="flex w-full flex-col gap-2 pt-1">
             <label
               htmlFor="join-code"
               className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted"
@@ -343,7 +343,7 @@ function CompletionLeaderboard({
         : null;
 
   return (
-    <section className="flex w-full flex-col gap-3 pb-8">
+    <section className="flex w-full flex-col gap-3 pb-8 pt-1">
       <SectionHeader
         icon={TrophyIcon}
         title="Leaderboard"
