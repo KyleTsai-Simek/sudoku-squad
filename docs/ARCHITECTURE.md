@@ -21,13 +21,13 @@ This document defines the technical foundation for Sudoku Squad: stack, data mod
 
 ## 1.1 Web theme architecture
 
-The web theme refresh is planned in [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK_MODE_PLAN.md) and accepted in [DECISIONS #0044](DECISIONS.md).
+The web theme refresh is tracked in [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK_MODE_PLAN.md) and accepted in [DECISIONS #0044](DECISIONS.md).
 
 - Theme infrastructure belongs in `apps/web`; `packages/core` remains theme-agnostic.
-- Tailwind should use `darkMode: 'class'`.
-- `apps/web/app/globals.css` should define light and dark CSS custom properties for semantic colors.
-- `apps/web/tailwind.config.ts` should expose semantic color tokens that map to those CSS variables.
-- The local appearance preference is `auto` / `light` / `dark`, stored in `localStorage`. `auto` follows `prefers-color-scheme`; manual choices override it immediately.
+- Tailwind uses `darkMode: 'class'`.
+- `apps/web/app/globals.css` defines light and dark CSS custom properties for semantic colors.
+- `apps/web/tailwind.config.ts` exposes semantic color tokens that map to those CSS variables.
+- `apps/web/lib/theme-store.ts` owns the local `auto` / `light` / `dark` appearance preference. It is stored in `localStorage`; `auto` follows `prefers-color-scheme`, and manual choices override it immediately.
 - Board components should keep explicit state-to-class lookups so selected/conflict/same-value precedence stays deterministic.
 
 ---

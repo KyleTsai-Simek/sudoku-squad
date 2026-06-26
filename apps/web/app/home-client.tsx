@@ -129,23 +129,23 @@ export function HomeClient() {
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-6 px-6 py-4">
       <AppHeader />
       <div className="text-center">
-        <h1 className="text-5xl font-semibold tracking-tight text-stone-900">Sudoku Squad</h1>
-        <p className="mt-2 text-sm text-stone-600">
+        <h1 className="text-5xl font-semibold tracking-tight text-foreground">Sudoku Squad</h1>
+        <p className="mt-2 text-sm text-muted">
           Multiplayer sudoku — play together or race to the finish.
         </p>
         {username || completed !== null ? (
-          <p className="mt-4 inline-flex items-center gap-3 rounded-full border border-stone-200 bg-white px-4 py-1.5 text-xs text-stone-600">
+          <p className="mt-4 inline-flex items-center gap-3 rounded-full border border-border bg-surface px-4 py-1.5 text-xs text-muted">
             {username ? (
               <span>
-                <span className="text-stone-400">you&apos;re</span>{' '}
-                <span className="font-medium text-stone-900">{username}</span>
+                <span className="text-muted">you&apos;re</span>{' '}
+                <span className="font-medium text-foreground">{username}</span>
               </span>
             ) : null}
-            {username && completed !== null ? <span className="text-stone-300">·</span> : null}
+            {username && completed !== null ? <span className="text-muted">·</span> : null}
             {completed !== null ? (
               <span>
-                <span className="font-medium text-stone-900">{completed}</span>{' '}
-                <span className="text-stone-400">
+                <span className="font-medium text-foreground">{completed}</span>{' '}
+                <span className="text-muted">
                   puzzle{completed === 1 ? '' : 's'} solved
                 </span>
               </span>
@@ -157,7 +157,7 @@ export function HomeClient() {
       {view.kind === 'mode' && (
         <>
           <div className="flex w-full flex-col gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-stone-500">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
               Start a game
             </h2>
             <div className="flex w-full flex-col gap-3">
@@ -187,7 +187,7 @@ export function HomeClient() {
           <form onSubmit={onJoin} className="flex w-full flex-col gap-2">
             <label
               htmlFor="join-code"
-              className="text-xs font-semibold uppercase tracking-widest text-stone-500"
+              className="text-xs font-semibold uppercase tracking-widest text-muted"
             >
               Have a code?
             </label>
@@ -203,17 +203,17 @@ export function HomeClient() {
                 onChange={(e) => setJoinCode(e.target.value)}
                 placeholder="6-char room code"
                 maxLength={6}
-                className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-mono lowercase tracking-widest text-stone-900 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none"
+                className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono lowercase tracking-widest text-foreground placeholder:text-muted focus:border-primary-border focus:outline-none"
               />
               <button
                 type="submit"
                 disabled={joinPending || joinCode.trim().length === 0}
-                className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
               >
                 {joinPending ? 'Joining…' : 'Join'}
               </button>
             </div>
-            {joinError ? <p className="text-xs text-red-600">{joinError}</p> : null}
+            {joinError ? <p className="text-xs text-danger">{joinError}</p> : null}
           </form>
 
           {/* Public lobbies render below when any exist. The component
@@ -242,8 +242,8 @@ export function HomeClient() {
                 className={
                   'group flex flex-col items-start gap-1 rounded-xl border px-5 py-4 text-left transition-colors ' +
                   (empty
-                    ? 'cursor-not-allowed border-dashed border-stone-300 text-stone-400'
-                    : 'border-stone-900 bg-stone-900 text-white hover:bg-stone-800 disabled:opacity-60')
+                    ? 'cursor-not-allowed border-dashed border-border text-muted'
+                    : 'border-primary bg-primary text-primary-foreground hover:bg-primary-hover disabled:opacity-60')
                 }
               >
                 <span className="text-xs font-medium uppercase tracking-widest">
@@ -261,7 +261,7 @@ export function HomeClient() {
                 <span
                   className={
                     'text-xs ' +
-                    (empty ? 'text-stone-400' : 'text-stone-300 group-hover:text-stone-200')
+                    (empty ? 'text-muted' : 'text-primary-foreground/70 group-hover:text-primary-foreground/80')
                   }
                 >
                   {empty
@@ -293,10 +293,10 @@ function ModeButton({
       type="button"
       onClick={onClick}
       disabled={loading}
-      className="group flex flex-col items-start gap-1 rounded-xl border border-stone-900 bg-stone-900 px-6 py-5 text-left text-white transition-colors hover:bg-stone-800 disabled:opacity-60"
+      className="group flex flex-col items-start gap-1 rounded-xl border border-primary bg-primary px-6 py-5 text-left text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-60"
     >
       <span className="text-lg font-semibold">{loading ? 'Creating…' : label}</span>
-      <span className="text-xs text-stone-300 group-hover:text-stone-200">{description}</span>
+      <span className="text-xs text-primary-foreground/70 group-hover:text-primary-foreground/80">{description}</span>
     </button>
   );
 }
@@ -308,11 +308,11 @@ function BackRow({ onBack, label }: { onBack: () => void; label: string }) {
         type="button"
         onClick={onBack}
         aria-label="Back"
-        className="rounded-md px-2 py-1 text-sm text-stone-500 hover:bg-stone-100"
+        className="rounded-md px-2 py-1 text-sm text-muted hover:bg-surface-muted"
       >
         ←
       </button>
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-stone-500">{label}</h2>
+      <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">{label}</h2>
     </div>
   );
 }

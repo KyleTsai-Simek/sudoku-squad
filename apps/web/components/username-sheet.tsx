@@ -43,13 +43,13 @@ export function UsernameSheet({
     <Modal title="Change username" onClose={onClose}>
       {result ? (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-stone-600">
-            You’re now <span className="font-medium text-stone-900">{result}</span>.
+          <p className="text-sm text-muted">
+            You’re now <span className="font-medium text-foreground">{result}</span>.
           </p>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
           >
             Done
           </button>
@@ -64,17 +64,17 @@ export function UsernameSheet({
             onChange={(e) => setBase(e.target.value)}
             placeholder="Your name"
             maxLength={20}
-            className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none"
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary-border focus:outline-none"
           />
-          <p className="text-xs text-stone-500">
+          <p className="text-xs text-muted">
             3–20 characters. If it’s taken, we’ll add a number like{' '}
             <span className="font-mono">name#1234</span>.
           </p>
-          {error ? <p className="text-xs text-red-600">{error}</p> : null}
+          {error ? <p className="text-xs text-danger">{error}</p> : null}
           <button
             type="submit"
             disabled={pending || base.trim().length < 3}
-            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
           >
             {pending ? 'Saving…' : 'Save'}
           </button>

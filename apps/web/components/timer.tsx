@@ -26,7 +26,7 @@ export function Timer() {
   return (
     <span
       aria-label="Elapsed time"
-      className="tabular-nums font-mono text-base text-stone-700"
+      className="tabular-nums font-mono text-base text-muted"
     >
       {formatElapsed(elapsed)}
     </span>

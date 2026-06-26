@@ -32,20 +32,22 @@ Live at https://sudoku-squad-web.vercel.app/. Engine + UI + ingest + tests + CI 
 
 ---
 
-## Theme refresh + dark mode 🔄 Planning complete
+## Theme refresh + dark mode 🔄 Implemented and verified; user acceptance pending
 
 Cross-cutting web UI project requested 2026-06-26. Working plan: [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK_MODE_PLAN.md). Design decision: [DECISIONS #0044](DECISIONS.md).
 
 - [x] Confirm clean local tree before planning; `main` was even with `origin/main` and had no uncommitted changes.
 - [x] Audit theme surface: hard-coded Tailwind utility colors in app/components, no semantic Tailwind palette, no CSS variables, fixed light body color, board-state color lookups in all three board components.
 - [x] Capture implementation plan and open questions in docs.
-- [ ] Pick exact primary blue and extended semantic palette.
-- [ ] Add Tailwind dark-mode + CSS variable theme infrastructure.
-- [ ] Add local `auto` / `light` / `dark` theme preference storage and system-preference listener.
-- [ ] Add the theme selector to the settings/account UI.
-- [ ] Migrate home, lobby, game, overlays, sheets, controls, progress bars, and board states to semantic tokens.
-- [ ] Verify lint/typecheck/build and affected Playwright smokes.
-- [ ] Manually verify desktop/mobile light and dark modes, focus states, board contrast, settings override persistence, and `auto` system-mode behavior.
+- [x] Pick exact primary blue and extended semantic palette. User chose implementation-picked accessible default; web uses a blue centered on `#1d4ed8` / `#2563eb`.
+- [x] Add Tailwind dark-mode + CSS variable theme infrastructure.
+- [x] Add local `auto` / `light` / `dark` theme preference storage and system-preference listener.
+- [x] Add the theme selector to the account UI.
+- [x] Migrate home, lobby, game, overlays, sheets, controls, progress bars, and board states to semantic tokens.
+- [x] Keep notes mode on a warm amber accent.
+- [x] Verify lint/typecheck/build and affected Playwright smokes.
+- [x] Manually verify desktop/mobile light and dark modes, focus states, board contrast, and settings override persistence.
+- [ ] User manual confirmation should include `auto` behavior against the native system setting.
 - [ ] User manual confirmation that the refreshed design is working and feels right.
 
 ---

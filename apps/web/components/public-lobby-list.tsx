@@ -57,17 +57,17 @@ export function PublicLobbyList({ mode, emptyState }: Props) {
         <li key={r.id}>
           <Link
             href={`/r/${r.code}`}
-            className="flex items-center justify-between rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm hover:border-stone-400"
+            className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm hover:border-primary-border"
           >
             <span className="flex items-center gap-3">
-              <span className="font-mono font-semibold tracking-widest text-stone-900">
+              <span className="font-mono font-semibold tracking-widest text-foreground">
                 {r.code}
               </span>
-              <span className="text-xs uppercase tracking-widest text-stone-500">
+              <span className="text-xs uppercase tracking-widest text-muted">
                 {r.mode} · {r.status}
               </span>
             </span>
-            <span className="text-xs text-stone-400">Join →</span>
+            <span className="text-xs text-muted">Join →</span>
           </Link>
         </li>
       ))}

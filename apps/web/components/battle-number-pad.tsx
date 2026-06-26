@@ -15,22 +15,22 @@ function cn(...parts: Array<string | false | null | undefined>): string {
 }
 
 const BTN =
-  'flex h-12 items-center justify-center gap-1.5 rounded-md border border-stone-300 bg-white px-3 text-sm font-medium text-stone-800 transition-colors active:translate-y-px disabled:opacity-40 hover:bg-stone-50';
+  'flex h-12 items-center justify-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-medium text-foreground transition-colors active:translate-y-px disabled:opacity-40 hover:bg-surface-muted';
 
 /** See sudoku-board.tsx `digitButtonClasses` for the rationale. */
 function digitButtonClasses(isSelectedDigit: boolean, isComplete: boolean): string {
   const base = 'flex h-14 items-center justify-center rounded-md border px-3 text-xl transition-colors active:translate-y-px disabled:opacity-40';
   const weight = isComplete ? 'font-light' : 'font-semibold';
   if (isComplete && isSelectedDigit) {
-    return `${base} ${weight} border-emerald-500 bg-emerald-200 text-emerald-900`;
+    return `${base} ${weight} border-success bg-complete-strong text-success-foreground`;
   }
   if (isComplete) {
-    return `${base} ${weight} border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-200`;
+    return `${base} ${weight} border-success/60 bg-complete text-success-foreground hover:bg-complete-strong`;
   }
   if (isSelectedDigit) {
-    return `${base} ${weight} border-amber-500 bg-amber-100 text-amber-900 hover:bg-amber-200`;
+    return `${base} ${weight} border-primary-border bg-primary-soft text-foreground hover:bg-selected`;
   }
-  return `${base} ${weight} border-stone-300 bg-white text-stone-800 hover:bg-stone-50`;
+  return `${base} ${weight} border-border bg-surface text-foreground hover:bg-surface-muted`;
 }
 
 /**
@@ -88,8 +88,8 @@ export function BattleNumberPad() {
           className={cn(
             'flex h-12 items-center justify-center gap-1.5 rounded-md border px-3 text-sm font-medium transition-colors active:translate-y-px disabled:opacity-40',
             notesMode
-              ? 'border-amber-500 bg-amber-500 text-white shadow-sm hover:bg-amber-600'
-              : 'border-stone-300 bg-white text-stone-800 hover:bg-stone-50',
+              ? 'border-warning-border bg-warning text-warning-foreground shadow-sm hover:bg-warning-hover'
+              : 'border-border bg-surface text-foreground hover:bg-surface-muted',
           )}
         >
           <PencilIcon filled={notesMode} />

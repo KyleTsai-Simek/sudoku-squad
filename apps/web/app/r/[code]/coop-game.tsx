@@ -147,19 +147,19 @@ export function CoopGame({ room, players, settings, serverStartedAt, finished }:
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center gap-4 px-3 py-4">
       <AppHeader
         left={
-          <Link href="/" className="text-sm font-medium text-stone-600 hover:text-stone-900">
+          <Link href="/" className="text-sm font-medium text-muted hover:text-foreground">
             ← Menu
           </Link>
         }
         center={
-          <span className="text-xs uppercase tracking-widest text-stone-500">co-op</span>
+          <span className="text-xs uppercase tracking-widest text-muted">co-op</span>
         }
         actions={
           <KeyboardShortcutsButton />
         }
       />
 
-      <span aria-label="Elapsed time" className="font-mono tabular-nums text-stone-700">
+      <span aria-label="Elapsed time" className="font-mono tabular-nums text-muted">
         {formatElapsed(elapsed)}
       </span>
 
@@ -183,19 +183,19 @@ export function CoopGame({ room, players, settings, serverStartedAt, finished }:
             <div
               role="status"
               aria-live="polite"
-              className="pointer-events-auto absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-white/70 backdrop-blur-sm"
+              className="pointer-events-auto absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-surface/80 backdrop-blur-sm"
             >
-              <p className="text-xs font-medium uppercase tracking-widest text-stone-500">
+              <p className="text-xs font-medium uppercase tracking-widest text-muted">
                 Game starts in
               </p>
-              <p className="text-7xl font-semibold tabular-nums text-stone-900">
+              <p className="text-7xl font-semibold tabular-nums text-foreground">
                 {countdownSeconds}
               </p>
             </div>
           ) : null}
         </div>
       ) : (
-        <div className="flex h-[60vh] items-center justify-center text-stone-500">
+        <div className="flex h-[60vh] items-center justify-center text-muted">
           Loading puzzle…
         </div>
       )}
@@ -247,7 +247,7 @@ function CoopPlayerNames({
               {p.username}
             </span>
             {count > 0 ? (
-              <span className="tabular-nums text-stone-500">· {count}</span>
+              <span className="tabular-nums text-muted">· {count}</span>
             ) : null}
           </li>
         );
@@ -288,14 +288,14 @@ function CoopProgress({
     }))
     .filter((s) => s.count > 0);
   return (
-    <div className="text-xs text-stone-600">
+    <div className="text-xs text-muted">
       <div className="mb-1 flex items-center justify-between">
         <span className="font-medium">
           Team progress · {players.length} player{players.length === 1 ? '' : 's'}
         </span>
         <span className="tabular-nums">{sharedProgressPct}%</span>
       </div>
-      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-stone-200">
+      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-border">
         {segments.map((s) => (
           <span
             key={s.player_id}

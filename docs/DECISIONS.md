@@ -19,13 +19,13 @@ Format:
 
 ## 0044 — Semantic blue theme and local light/dark preference
 **Date:** 2026-06-26
-**Status:** Accepted for planning; implementation pending. Resolves the visual-identity open question enough to start the palette/theme pass, while leaving logo/illustration work separate.
+**Status:** Accepted and implemented in web; verification/user acceptance pending. Resolves the visual-identity open question enough to ship the palette/theme pass, while leaving logo/illustration work separate.
 
 **Context.** The current web UI is visually coherent enough for the V1 demo, but it is built from direct Tailwind utility colors (`stone`, `amber`, `emerald`, `red`, a few direct `blue`/`orange`) rather than a reusable theme. The user wants a friendlier high-contrast blue as the primary color, an extended palette based on it, full-app adoption, and light/dark mode support. The current app also has a shared `AppHeader` / account-menu entry point, making this a good time to add a persisted local appearance preference.
 
-**Decision.** Add a semantic theme layer to `apps/web` before repainting components. Tailwind will use `darkMode: 'class'`, CSS custom properties will define light and dark values, and Tailwind color tokens will map to semantics such as `background`, `surface`, `text`, `muted`, `border`, `primary`, `selected`, `related`, `success`, `warning`, `danger`, and `focus`. The user-facing preference is local-only with three values: `auto`, `light`, and `dark`. `auto` follows `prefers-color-scheme`; manual choices override it and are persisted in `localStorage`.
+**Decision.** Add a semantic theme layer to `apps/web` before repainting components. Tailwind uses `darkMode: 'class'`, CSS custom properties define light and dark values, and Tailwind color tokens map to semantics such as `background`, `surface`, `muted`, `border`, `primary`, `selected`, `related`, `success`, `warning`, and `danger`. The primary blue is an implementation-picked accessible default centered on `#1d4ed8` / `#2563eb`. The user-facing preference is local-only with three values: `auto`, `light`, and `dark`. `auto` follows `prefers-color-scheme`; manual choices override it and are persisted in `localStorage`. The selector lives in the account menu. Notes mode keeps its warm amber accent instead of moving fully into the blue palette.
 
-The implementation plan lives in [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK_MODE_PLAN.md). The final acceptance step is explicit user manual confirmation after the UI has been implemented and verified.
+The implementation tracker lives in [THEME_AND_DARK_MODE_PLAN.md](THEME_AND_DARK_MODE_PLAN.md). The final acceptance step is explicit user manual confirmation after verification.
 
 **Alternatives considered.**
 - Keep direct Tailwind palette utilities and only swap colors in place. Rejected because dark mode would become brittle and future iOS/web parity harder.

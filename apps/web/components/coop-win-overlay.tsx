@@ -41,14 +41,14 @@ export function CoopWinOverlay({ roomId, finished, players, dismissed, onDismiss
       role="dialog"
       aria-modal="true"
       aria-label="Coop finished"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/50 px-4"
     >
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
-        <p className="text-sm font-medium uppercase tracking-widest text-emerald-700">
+      <div className="w-full max-w-sm rounded-2xl bg-surface p-6 text-center shadow-2xl">
+        <p className="text-sm font-medium uppercase tracking-widest text-success">
           Solved together!
         </p>
         <h2 className="mt-2 text-2xl font-semibold">Nice work, team.</h2>
-        <p className="mt-3 text-sm text-stone-600">
+        <p className="mt-3 text-sm text-muted">
           {players.length === 1
             ? 'You finished the puzzle.'
             : `${players.length} players finished the puzzle.`}
@@ -58,14 +58,14 @@ export function CoopWinOverlay({ roomId, finished, players, dismissed, onDismiss
             type="button"
             onClick={onReturn}
             disabled={returning}
-            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
           >
             {returning ? 'Returning…' : 'Return to lobby'}
           </button>
           <button
             type="button"
             onClick={() => router.push('/')}
-            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-surface-muted"
           >
             Back to menu
           </button>

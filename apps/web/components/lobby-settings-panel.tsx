@@ -110,14 +110,14 @@ export function LobbySettingsPanel({
 
   return (
     <section className="w-full">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-500">
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
         Settings {locked ? '(locked — game in progress)' : isHost ? '' : '(host only)'}
       </h2>
       <ul className="flex flex-col gap-2">
-        <li className="flex items-start justify-between gap-4 rounded-lg border border-stone-200 bg-white px-3 py-2">
+        <li className="flex items-start justify-between gap-4 rounded-lg border border-border bg-surface px-3 py-2">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-stone-900">Public lobby</p>
-            <p className="text-xs text-stone-500">
+            <p className="text-sm font-medium text-foreground">Public lobby</p>
+            <p className="text-xs text-muted">
               Anyone on the home page can see and join this room.
             </p>
           </div>
@@ -127,7 +127,7 @@ export function LobbySettingsPanel({
               checked={displayedPublic}
               disabled={disabled}
               onChange={(e) => onTogglePublic(e.target.checked)}
-              className="h-5 w-5 cursor-pointer accent-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="h-5 w-5 cursor-pointer accent-warning disabled:cursor-not-allowed disabled:opacity-40"
             />
           </label>
         </li>
@@ -136,11 +136,11 @@ export function LobbySettingsPanel({
           return (
             <li
               key={t.key}
-              className="flex items-start justify-between gap-4 rounded-lg border border-stone-200 bg-white px-3 py-2"
+              className="flex items-start justify-between gap-4 rounded-lg border border-border bg-surface px-3 py-2"
             >
               <div className="min-w-0">
-                <p className="text-sm font-medium text-stone-900">{t.label}</p>
-                <p className="text-xs text-stone-500">{t.description}</p>
+                <p className="text-sm font-medium text-foreground">{t.label}</p>
+                <p className="text-xs text-muted">{t.description}</p>
               </div>
               <label className="flex shrink-0 cursor-pointer items-center">
                 <input
@@ -148,14 +148,14 @@ export function LobbySettingsPanel({
                   checked={displayed}
                   disabled={disabled}
                   onChange={(e) => onToggle(t.key, e.target.checked)}
-                  className="h-5 w-5 cursor-pointer accent-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="h-5 w-5 cursor-pointer accent-warning disabled:cursor-not-allowed disabled:opacity-40"
                 />
               </label>
             </li>
           );
         })}
       </ul>
-      {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
+      {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
     </section>
   );
 }

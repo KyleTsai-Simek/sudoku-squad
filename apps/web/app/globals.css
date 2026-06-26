@@ -1,3 +1,101 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --color-background: 248 250 252;
+    --color-foreground: 15 23 42;
+    --color-surface: 255 255 255;
+    --color-surface-muted: 241 245 249;
+    --color-surface-raised: 255 255 255;
+    --color-muted: 71 85 105;
+    --color-border: 203 213 225;
+    --color-border-strong: 30 41 59;
+    --color-primary: 29 78 216;
+    --color-primary-hover: 30 64 175;
+    --color-primary-foreground: 255 255 255;
+    --color-primary-soft: 219 234 254;
+    --color-primary-muted: 239 246 255;
+    --color-primary-border: 96 165 250;
+    --color-selected: 191 219 254;
+    --color-related: 239 246 255;
+    --color-same: 219 234 254;
+    --color-complete: 209 250 229;
+    --color-complete-strong: 167 243 208;
+    --color-warning: 180 83 9;
+    --color-warning-hover: 146 64 14;
+    --color-warning-foreground: 255 255 255;
+    --color-warning-soft: 254 243 199;
+    --color-warning-border: 245 158 11;
+    --color-danger: 220 38 38;
+    --color-danger-soft: 254 226 226;
+    --color-danger-strong: 254 202 202;
+    --color-danger-foreground: 127 29 29;
+    --color-success: 5 150 105;
+    --color-success-soft: 209 250 229;
+    --color-success-strong: 167 243 208;
+    --color-success-foreground: 6 78 59;
+    --color-board-line: 148 163 184;
+    --color-board-line-strong: 15 23 42;
+    --color-cell: 255 255 255;
+    --color-cell-given: 248 250 252;
+    --color-cell-entered: 29 78 216;
+    --color-note-text: 100 116 139;
+    --color-overlay: 15 23 42;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --color-background: 7 12 24;
+    --color-foreground: 226 232 240;
+    --color-surface: 15 23 42;
+    --color-surface-muted: 30 41 59;
+    --color-surface-raised: 23 34 57;
+    --color-muted: 148 163 184;
+    --color-border: 71 85 105;
+    --color-border-strong: 203 213 225;
+    --color-primary: 96 165 250;
+    --color-primary-hover: 147 197 253;
+    --color-primary-foreground: 15 23 42;
+    --color-primary-soft: 30 64 175;
+    --color-primary-muted: 23 37 84;
+    --color-primary-border: 96 165 250;
+    --color-selected: 30 64 175;
+    --color-related: 23 37 84;
+    --color-same: 30 64 175;
+    --color-complete: 6 78 59;
+    --color-complete-strong: 5 150 105;
+    --color-warning: 251 191 36;
+    --color-warning-hover: 245 158 11;
+    --color-warning-foreground: 30 41 59;
+    --color-warning-soft: 69 45 11;
+    --color-warning-border: 251 191 36;
+    --color-danger: 248 113 113;
+    --color-danger-soft: 69 10 10;
+    --color-danger-strong: 127 29 29;
+    --color-danger-foreground: 254 202 202;
+    --color-success: 52 211 153;
+    --color-success-soft: 6 78 59;
+    --color-success-strong: 5 150 105;
+    --color-success-foreground: 209 250 229;
+    --color-board-line: 71 85 105;
+    --color-board-line-strong: 226 232 240;
+    --color-cell: 15 23 42;
+    --color-cell-given: 30 41 59;
+    --color-cell-entered: 147 197 253;
+    --color-note-text: 148 163 184;
+    --color-overlay: 2 6 23;
+  }
+
+  html {
+    background: rgb(var(--color-background));
+  }
+
+  body {
+    min-height: 100vh;
+    background: rgb(var(--color-background));
+    color: rgb(var(--color-foreground));
+  }
+}

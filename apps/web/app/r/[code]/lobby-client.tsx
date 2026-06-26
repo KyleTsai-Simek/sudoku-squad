@@ -261,7 +261,7 @@ export function LobbyClient({ code }: { code: string }) {
 
   if (phase.kind === 'joining') {
     return (
-      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 py-12 text-stone-500">
+      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 py-12 text-muted">
         Joining room…
       </main>
     );
@@ -270,14 +270,14 @@ export function LobbyClient({ code }: { code: string }) {
   if (phase.kind === 'error') {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-6 py-12 text-center">
-        <p className="text-sm font-medium uppercase tracking-widest text-red-500">
+        <p className="text-sm font-medium uppercase tracking-widest text-danger">
           {phase.error.code.replace(/_/g, ' ')}
         </p>
         <h1 className="text-2xl font-semibold">{lobbyErrorHeadline(phase.error.code)}</h1>
-        <p className="text-stone-600">{phase.error.message}</p>
+        <p className="text-muted">{phase.error.message}</p>
         <Link
           href="/"
-          className="mt-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+          className="mt-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
         >
           Back to menu
         </Link>
@@ -338,47 +338,47 @@ export function LobbyClient({ code }: { code: string }) {
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center gap-8 px-6 py-4">
       <AppHeader
         left={
-          <Link href="/" className="text-sm font-medium text-stone-600 hover:text-stone-900">
+          <Link href="/" className="text-sm font-medium text-muted hover:text-foreground">
             ← Menu
           </Link>
         }
         center={
-          <span className="text-xs font-medium uppercase tracking-widest text-stone-500">
+          <span className="text-xs font-medium uppercase tracking-widest text-muted">
             {liveMode === 'coop' ? 'co-op' : liveMode} · lobby
           </span>
         }
       />
 
       <section className="flex w-full flex-col items-center gap-3 text-center">
-        <p className="text-xs font-medium uppercase tracking-widest text-stone-500">
+        <p className="text-xs font-medium uppercase tracking-widest text-muted">
           Room code
         </p>
-        <p className="text-4xl font-mono font-semibold tracking-[0.3em] text-stone-900">
+        <p className="text-4xl font-mono font-semibold tracking-[0.3em] text-foreground">
           {room.room_code}
         </p>
         <button
           type="button"
           onClick={onCopyShare}
-          className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-800 hover:bg-stone-50"
+          className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted"
         >
           {shareCopied ? 'Link copied' : 'Copy share link'}
         </button>
       </section>
 
       <section className="w-full">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-stone-500">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
           Players ({players.length}/8)
         </h2>
         <ul className="flex flex-col gap-2">
           {players.length === 0 ? (
-            <li className="text-sm text-stone-500">Loading…</li>
+            <li className="text-sm text-muted">Loading…</li>
           ) : null}
           {players.map((p) => {
             const isYou = p.player_id === room.own_player_id;
             return (
               <li
                 key={p.player_id}
-                className="flex items-center justify-between rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm"
+                className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm"
               >
                 <span
                   className={cn(
@@ -391,14 +391,14 @@ export function LobbyClient({ code }: { code: string }) {
                     className="inline-block h-3 w-3 rounded-full"
                     style={{ backgroundColor: p.color }}
                   />
-                  <span className="font-medium text-stone-900">{p.username}</span>
+                  <span className="font-medium text-foreground">{p.username}</span>
                   {p.is_host ? (
-                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
+                    <span className="rounded bg-warning-soft px-1.5 py-0.5 text-xs font-medium text-foreground">
                       host
                     </span>
                   ) : null}
                   {isYou ? (
-                    <span className="rounded bg-stone-100 px-1.5 py-0.5 text-xs font-medium text-stone-600">
+                    <span className="rounded bg-surface-muted px-1.5 py-0.5 text-xs font-medium text-muted">
                       you
                     </span>
                   ) : null}
@@ -407,9 +407,9 @@ export function LobbyClient({ code }: { code: string }) {
                       aria-label="still in last game"
                       className="inline-flex items-center gap-0.5"
                     >
-                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-stone-400 [animation-delay:-0.3s]" />
-                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-stone-400 [animation-delay:-0.15s]" />
-                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-stone-400" />
+                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-muted [animation-delay:-0.3s]" />
+                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-muted [animation-delay:-0.15s]" />
+                      <span className="inline-block h-1 w-1 animate-bounce rounded-full bg-muted" />
                     </span>
                   ) : null}
                 </span>
@@ -423,7 +423,7 @@ export function LobbyClient({ code }: { code: string }) {
                           player_id: p.player_id,
                         });
                       }}
-                      className="text-xs text-red-600 underline-offset-2 hover:underline"
+                      className="text-xs text-danger underline-offset-2 hover:underline"
                     >
                       kick
                     </button>
@@ -436,12 +436,12 @@ export function LobbyClient({ code }: { code: string }) {
       </section>
 
       <section className="w-full">
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-500">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
           Difficulty
-          {!isHost ? <span className="ml-2 text-stone-400 normal-case tracking-normal">— host chooses</span> : null}
+          {!isHost ? <span className="ml-2 text-muted normal-case tracking-normal">— host chooses</span> : null}
         </h2>
         {currentDifficulty === null ? (
-          <p className="text-sm text-stone-500">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : isHost && status === 'lobby' ? (
           <div className="grid grid-cols-5 gap-2">
             {(['warmup', 'easy', 'medium', 'hard', 'expert'] as const).map((d) => {
@@ -462,8 +462,8 @@ export function LobbyClient({ code }: { code: string }) {
                   className={cn(
                     'rounded-lg border px-2 py-2 text-xs font-medium transition-colors',
                     selected
-                      ? 'border-stone-900 bg-stone-900 text-white'
-                      : 'border-stone-300 bg-white text-stone-700 hover:border-stone-500',
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-surface text-muted hover:border-primary-border',
                   )}
                 >
                   {d === 'warmup' ? 'Warm-up' : d[0]!.toUpperCase() + d.slice(1)}
@@ -472,9 +472,9 @@ export function LobbyClient({ code }: { code: string }) {
             })}
           </div>
         ) : (
-          <div className="inline-flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
-            <span className="text-xs uppercase tracking-widest text-stone-500">selected</span>
-            <span className="font-semibold text-stone-900">
+          <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm">
+            <span className="text-xs uppercase tracking-widest text-muted">selected</span>
+            <span className="font-semibold text-foreground">
               {currentDifficulty === 'warmup'
                 ? 'Warm-up'
                 : currentDifficulty[0]!.toUpperCase() + currentDifficulty.slice(1)}
@@ -484,9 +484,9 @@ export function LobbyClient({ code }: { code: string }) {
       </section>
 
       <section className="w-full">
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-500">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
           Mode
-          {!isHost ? <span className="ml-2 text-stone-400 normal-case tracking-normal">— host chooses</span> : null}
+          {!isHost ? <span className="ml-2 text-muted normal-case tracking-normal">— host chooses</span> : null}
         </h2>
         {isHost && status === 'lobby' ? (
           <div className="grid grid-cols-2 gap-2">
@@ -501,8 +501,8 @@ export function LobbyClient({ code }: { code: string }) {
                   className={cn(
                     'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
                     selected
-                      ? 'border-stone-900 bg-stone-900 text-white'
-                      : 'border-stone-300 bg-white text-stone-700 hover:border-stone-500',
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-surface text-muted hover:border-primary-border',
                   )}
                 >
                   {m === 'coop' ? 'Co-op' : 'Battle'}
@@ -511,9 +511,9 @@ export function LobbyClient({ code }: { code: string }) {
             })}
           </div>
         ) : (
-          <div className="inline-flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
-            <span className="text-xs uppercase tracking-widest text-stone-500">selected</span>
-            <span className="font-semibold text-stone-900">
+          <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm">
+            <span className="text-xs uppercase tracking-widest text-muted">selected</span>
+            <span className="font-semibold text-foreground">
               {liveMode === 'coop' ? 'Co-op' : 'Battle'}
             </span>
           </div>
@@ -540,12 +540,12 @@ export function LobbyClient({ code }: { code: string }) {
             type="button"
             onClick={onStart}
             disabled={startPending || !enoughPlayers || !allReady || pendingSync > 0}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-5 py-4 text-base font-semibold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-4 text-base font-semibold text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {pendingSync > 0 ? (
               <span
                 aria-hidden
-                className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground"
               />
             ) : null}
             <span>
@@ -563,17 +563,17 @@ export function LobbyClient({ code }: { code: string }) {
             </span>
           </button>
           {startError ? (
-            <p className="mt-2 text-xs text-red-600">{startError}</p>
+            <p className="mt-2 text-xs text-danger">{startError}</p>
           ) : null}
         </section>
       ) : (
-        <section className="w-full text-center text-sm text-stone-500">
+        <section className="w-full text-center text-sm text-muted">
           Waiting for the host
           {otherHost ? ` (${otherHost.username})` : ''} to start…
         </section>
       )}
 
-      <p className="text-xs text-stone-400">
+      <p className="text-xs text-muted">
         Share the room code with friends. Game begins when the host clicks Start.
       </p>
 
@@ -635,7 +635,7 @@ function StartFab({
   return (
     <div className="pointer-events-none fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
       {errorText ? (
-        <p className="pointer-events-auto max-w-xs rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm">
+        <p className="pointer-events-auto max-w-xs rounded-lg bg-danger-soft px-3 py-1.5 text-xs font-medium text-danger-foreground shadow-sm">
           {errorText}
         </p>
       ) : null}
@@ -644,12 +644,12 @@ function StartFab({
         onClick={onClick}
         disabled={disabled}
         aria-label={`${stateLabel} (${mode})`}
-        className="pointer-events-auto flex items-center gap-2 rounded-full bg-orange-500 px-6 py-4 text-base font-semibold text-white shadow-lg shadow-orange-500/30 transition-all hover:bg-orange-600 hover:shadow-xl hover:shadow-orange-500/40 active:scale-95 disabled:cursor-not-allowed disabled:bg-stone-400 disabled:shadow-md"
+        className="pointer-events-auto flex items-center gap-2 rounded-full bg-primary px-6 py-4 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition-all hover:bg-primary-hover hover:shadow-xl hover:shadow-primary/40 active:scale-95 disabled:cursor-not-allowed disabled:bg-muted disabled:shadow-md"
       >
         {loading ? (
           <span
             aria-hidden
-            className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+            className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground"
           />
         ) : (
           <svg

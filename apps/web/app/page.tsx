@@ -14,11 +14,11 @@ function HomeFallback() {
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center gap-10 px-6 py-12">
       <div className="text-center">
         <h1 className="text-5xl font-semibold tracking-tight">Sudoku Squad</h1>
-        <p className="mt-3 text-base text-stone-600">
+        <p className="mt-3 text-base text-muted">
           Multiplayer sudoku — play together or race to the finish.
         </p>
       </div>
-      <p className="text-sm text-stone-400">Loading puzzles…</p>
+      <p className="text-sm text-muted">Loading puzzles…</p>
     </main>
   );
 }

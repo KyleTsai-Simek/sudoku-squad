@@ -36,17 +36,17 @@ export default function AuthCallbackPage() {
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
       {error ? (
         <>
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-danger">{error}</p>
           <button
             type="button"
             onClick={() => router.replace('/')}
-            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
           >
             Back to home
           </button>
         </>
       ) : (
-        <p className="text-sm text-stone-600">Signing you in…</p>
+        <p className="text-sm text-muted">Signing you in…</p>
       )}
     </main>
   );

@@ -59,14 +59,14 @@ export function PlayClient({ code }: { code: string }) {
   if (status === 'not-found') {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-6 py-12 text-center">
-        <p className="text-sm uppercase tracking-widest text-stone-500">Not found</p>
+        <p className="text-sm uppercase tracking-widest text-muted">Not found</p>
         <h1 className="text-2xl font-semibold">No puzzle with that code.</h1>
-        <p className="text-stone-600">
+        <p className="text-muted">
           Codes are six lowercase letters/digits. Double-check the URL, or pick a fresh one.
         </p>
         <Link
           href="/"
-          className="mt-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+          className="mt-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
         >
           Back to menu
         </Link>
@@ -78,12 +78,12 @@ export function PlayClient({ code }: { code: string }) {
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center gap-4 px-3 py-4">
       <AppHeader
         left={
-          <Link href="/" className="text-sm font-medium text-stone-600 hover:text-stone-900">
+          <Link href="/" className="text-sm font-medium text-muted hover:text-foreground">
             ← Menu
           </Link>
         }
         center={
-          <span className="text-xs uppercase tracking-widest text-stone-500">
+          <span className="text-xs uppercase tracking-widest text-muted">
             {puzzle?.difficulty ?? ''}
           </span>
         }
@@ -98,7 +98,7 @@ export function PlayClient({ code }: { code: string }) {
       <Timer />
 
       {status === 'loading' ? (
-        <div className="flex h-[60vh] items-center justify-center text-stone-500">Loading…</div>
+        <div className="flex h-[60vh] items-center justify-center text-muted">Loading…</div>
       ) : (
         <>
           <SudokuBoard />

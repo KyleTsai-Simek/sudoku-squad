@@ -63,7 +63,7 @@ export function AuthSheet({ onClose }: { onClose: () => void }) {
     <Modal onClose={close} title={step === 'email' ? 'Sign in' : 'Enter your code'}>
       {step === 'email' ? (
         <form onSubmit={onSendCode} className="flex flex-col gap-3">
-          <p className="text-sm text-stone-600">
+          <p className="text-sm text-muted">
             Sign in to save your progress across devices and pick your own username.
           </p>
           <input
@@ -76,33 +76,33 @@ export function AuthSheet({ onClose }: { onClose: () => void }) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-500 focus:outline-none"
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary-border focus:outline-none"
           />
-          {error ? <p className="text-xs text-red-600">{error}</p> : null}
+          {error ? <p className="text-xs text-danger">{error}</p> : null}
           <button
             type="submit"
             disabled={pending || email.trim().length === 0}
-            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
           >
             {pending ? 'Sending…' : 'Send code'}
           </button>
         </form>
       ) : warning ? (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-stone-600">You’re signed in.</p>
-          <p className="text-xs text-amber-700">{warning}</p>
+          <p className="text-sm text-muted">You’re signed in.</p>
+          <p className="text-xs text-foreground">{warning}</p>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
           >
             Done
           </button>
         </div>
       ) : (
         <form onSubmit={onVerify} className="flex flex-col gap-3">
-          <p className="text-sm text-stone-600">
-            We sent a 6-digit code to <span className="font-medium text-stone-900">{email}</span>.
+          <p className="text-sm text-muted">
+            We sent a 6-digit code to <span className="font-medium text-foreground">{email}</span>.
             Enter it below, or tap the link in the email.
           </p>
           <input
@@ -114,13 +114,13 @@ export function AuthSheet({ onClose }: { onClose: () => void }) {
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
             placeholder="6-digit code"
             maxLength={6}
-            className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-center text-lg font-mono tracking-[0.3em] text-stone-900 placeholder:tracking-normal placeholder:text-stone-400 focus:border-stone-500 focus:outline-none"
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-center text-lg font-mono tracking-[0.3em] text-foreground placeholder:tracking-normal placeholder:text-muted focus:border-primary-border focus:outline-none"
           />
-          {error ? <p className="text-xs text-red-600">{error}</p> : null}
+          {error ? <p className="text-xs text-danger">{error}</p> : null}
           <button
             type="submit"
             disabled={pending || code.trim().length === 0}
-            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
           >
             {pending ? 'Verifying…' : 'Verify'}
           </button>
@@ -133,7 +133,7 @@ export function AuthSheet({ onClose }: { onClose: () => void }) {
               setError(null);
               setWarning(null);
             }}
-            className="text-xs text-stone-500 hover:text-stone-800"
+            className="text-xs text-muted hover:text-foreground"
           >
             Use a different email
           </button>
@@ -154,20 +154,20 @@ export function Modal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/50 px-6"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+        className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-stone-900">{title}</h2>
+          <h2 className="text-base font-semibold text-foreground">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-md p-1 text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+            className="rounded-md p-1 text-muted hover:bg-surface-muted hover:text-foreground"
           >
             <CloseIcon size={20} />
           </button>

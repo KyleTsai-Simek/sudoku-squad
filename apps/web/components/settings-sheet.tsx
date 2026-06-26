@@ -47,7 +47,7 @@ export function SettingsSheet() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open settings"
-        className="flex h-9 w-9 items-center justify-center rounded-md border border-stone-300 bg-white text-stone-700 hover:bg-stone-50"
+        className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-surface text-muted hover:bg-surface-muted"
       >
         {/* gear glyph */}
         <span aria-hidden className="text-lg">⚙</span>
@@ -58,11 +58,11 @@ export function SettingsSheet() {
           role="dialog"
           aria-modal="true"
           aria-label="Settings"
-          className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-overlay/50 sm:items-center"
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl"
+            className="w-full max-w-md rounded-t-2xl bg-surface p-5 shadow-xl sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
@@ -71,7 +71,7 @@ export function SettingsSheet() {
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close settings"
-                className="rounded-md px-2 py-1 text-sm text-stone-500 hover:bg-stone-100"
+                className="rounded-md px-2 py-1 text-sm text-muted hover:bg-surface-muted"
               >
                 Done
               </button>
@@ -80,15 +80,15 @@ export function SettingsSheet() {
               {OPTIONS.map((opt) => (
                 <li key={opt.key} className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-medium text-stone-900">{opt.label}</p>
-                    <p className="text-xs text-stone-500">{opt.description}</p>
+                    <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                    <p className="text-xs text-muted">{opt.description}</p>
                   </div>
                   <label className="flex shrink-0 cursor-pointer items-center">
                     <input
                       type="checkbox"
                       checked={settings[opt.key]}
                       onChange={(e) => setSetting(opt.key, e.target.checked)}
-                      className="h-5 w-5 cursor-pointer accent-amber-500"
+                      className="h-5 w-5 cursor-pointer accent-warning"
                     />
                   </label>
                 </li>

@@ -67,11 +67,11 @@ export function KeyboardShortcutsOverlay() {
       role="dialog"
       aria-modal="true"
       aria-label="Keyboard shortcuts"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/50 px-4"
       onClick={() => setOpen(false)}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+        className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -80,12 +80,12 @@ export function KeyboardShortcutsOverlay() {
             type="button"
             onClick={() => setOpen(false)}
             aria-label="Close"
-            className="rounded-md px-2 py-1 text-sm text-stone-500 hover:bg-stone-100"
+            className="rounded-md px-2 py-1 text-sm text-muted hover:bg-surface-muted"
           >
             Done
           </button>
         </div>
-        <div className="divide-y divide-stone-100 text-sm">
+        <div className="divide-y divide-border text-sm">
           {SHORTCUTS.map((s, i) => (
             <ShortcutRow key={i} keys={s.keys} description={s.description} />
           ))}
@@ -101,7 +101,7 @@ function ShortcutRow({ keys, description }: { keys: string[]; description: strin
       <div className="flex min-w-[8.5rem] flex-wrap items-center gap-1">
         {keys.map((k, i) =>
           k === '+' || k === '/' || k === '–' ? (
-            <span key={i} className="text-stone-400">
+            <span key={i} className="text-muted">
               {k}
             </span>
           ) : (
@@ -109,14 +109,14 @@ function ShortcutRow({ keys, description }: { keys: string[]; description: strin
           ),
         )}
       </div>
-      <div className="text-stone-700">{description}</div>
+      <div className="text-muted">{description}</div>
     </div>
   );
 }
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="inline-flex min-w-[1.6rem] items-center justify-center rounded border border-stone-300 bg-stone-50 px-1.5 py-0.5 font-mono text-xs font-medium text-stone-700 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
+    <kbd className="inline-flex min-w-[1.6rem] items-center justify-center rounded border border-border bg-surface-muted px-1.5 py-0.5 font-mono text-xs font-medium text-muted shadow-[0_1px_0_rgba(0,0,0,0.04)]">
       {children}
     </kbd>
   );
@@ -137,7 +137,7 @@ export function KeyboardShortcutsButton() {
       }
       aria-label="Show keyboard shortcuts"
       title="Keyboard shortcuts (?)"
-      className="hidden h-9 w-9 items-center justify-center rounded-md border border-stone-300 bg-white text-sm font-medium text-stone-700 hover:bg-stone-50 sm:inline-flex"
+      className="hidden h-9 w-9 items-center justify-center rounded-md border border-border bg-surface text-sm font-medium text-muted hover:bg-surface-muted sm:inline-flex"
     >
       ?
     </button>

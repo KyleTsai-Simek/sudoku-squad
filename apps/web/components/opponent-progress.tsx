@@ -38,14 +38,14 @@ export function OpponentProgress({ players, ownPlayerId, ownProgressPct }: Props
             <span
               className={
                 isYou
-                  ? 'min-w-0 flex-1 break-words font-bold text-stone-900'
-                  : 'min-w-0 flex-1 break-words font-medium text-stone-700'
+                  ? 'min-w-0 flex-1 break-words font-bold text-foreground'
+                  : 'min-w-0 flex-1 break-words font-medium text-muted'
               }
             >
               {p.username}
             </span>
             <span className="w-24 shrink-0 sm:w-32">
-              <span className="block h-1.5 overflow-hidden rounded-full bg-stone-200">
+              <span className="block h-1.5 overflow-hidden rounded-full bg-border">
                 <span
                   className="block h-full rounded-full transition-all"
                   style={{
@@ -58,8 +58,8 @@ export function OpponentProgress({ players, ownPlayerId, ownProgressPct }: Props
             <span
               className={
                 isYou
-                  ? 'w-10 shrink-0 text-right font-bold tabular-nums text-stone-900'
-                  : 'w-10 shrink-0 text-right tabular-nums text-stone-500'
+                  ? 'w-10 shrink-0 text-right font-bold tabular-nums text-foreground'
+                  : 'w-10 shrink-0 text-right tabular-nums text-muted'
               }
             >
               {pct}%
