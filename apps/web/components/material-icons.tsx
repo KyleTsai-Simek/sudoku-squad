@@ -1,6 +1,6 @@
 // Google Material Symbols, inlined as SVG so there's no runtime font/CDN
-// dependency ([DECISIONS #0043]). Paths are the official "outlined" weight on
-// the Material Symbols 0 -960 960 960 viewBox. Add more here as the menu grows.
+// dependency ([DECISIONS #0043]). Paths use the Material Symbols 0 -960 960 960
+// viewBox. Add more here as the menu grows.
 
 export interface IconProps {
   className?: string;
@@ -48,7 +48,7 @@ export function CalendarIcon(props: IconProps) {
   return (
     <Icon
       {...props}
-      path="M200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm0 0v-80 80Z"
+      path="M280-320h80v-80h-80v80Zm160 0h80v-80h-80v80Zm160 0h80v-80h-80v80ZM280-480h80v-80h-80v80Zm160 0h80v-80h-80v80Zm160 0h80v-80h-80v80ZM200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Z"
     />
   );
 }
@@ -86,7 +86,7 @@ export function TrophyIcon(props: IconProps) {
   return (
     <Icon
       {...props}
-      path="M280-80v-80h160v-124q-49-11-87.5-41.5T296-400q-83-10-139.5-72T100-620v-100q0-33 23.5-56.5T180-800h100v-80h400v80h100q33 0 56.5 23.5T860-720v100q0 86-56.5 148T664-400q-18 44-56.5 74.5T520-284v124h160v80H280Zm0-408v-232H180v100q0 53 28 91.5t72 40.5Zm200 128q50 0 85-35t35-85v-320H360v320q0 50 35 85t85 35Zm200-128q44-2 72-40.5t28-91.5v-100H680v232Z"
+      path="M280-80v-80h160v-124q-83-14-141.5-72.5T226-500q-54-9-90-50t-36-94v-76q0-33 23.5-56.5T180-800h100v-80h400v80h100q33 0 56.5 23.5T860-720v76q0 53-36 94t-90 50q-14 84-72.5 142.5T520-284v124h160v80H280Zm0-504v-136H180v76q0 33 28.5 58.5T280-584Zm400 0q43-7 71.5-32.5T780-644v-76H680v136Z"
     />
   );
 }
