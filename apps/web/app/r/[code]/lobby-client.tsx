@@ -40,7 +40,7 @@ function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
 }
 
-const lobbySelectorSelectedClassName = 'border-primary-soft bg-primary-soft text-foreground';
+const lobbySelectorSelectedClassName = 'border-selected bg-selected text-foreground';
 const lobbySelectorIdleClassName =
   'border-primary-muted bg-primary-muted text-foreground hover:border-primary-soft hover:bg-primary-soft';
 
