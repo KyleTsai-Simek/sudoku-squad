@@ -35,17 +35,15 @@ export default function SignInPage() {
       </div>
 
       <section className="flex w-full flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={goBack}
-            aria-label="Back"
-            className="rounded-md px-2 py-1 text-sm text-muted hover:bg-surface-muted"
-          >
-            ←
-          </button>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Back</h2>
-        </div>
+        <button
+          type="button"
+          onClick={goBack}
+          aria-label="Back"
+          className="inline-flex w-fit items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-foreground"
+        >
+          <span aria-hidden="true">←</span>
+          <span>Back</span>
+        </button>
 
         <h2 className="text-2xl font-semibold tracking-normal text-foreground">Sign in</h2>
 

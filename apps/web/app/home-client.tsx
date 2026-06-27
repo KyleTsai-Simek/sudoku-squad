@@ -208,7 +208,7 @@ export function HomeClient() {
 
       {view.kind === 'quickplay' && (
         <div className="flex w-full flex-col gap-3">
-          <BackRow onBack={() => setView({ kind: 'home' })} label="Start a game" />
+          <BackRow onBack={() => setView({ kind: 'home' })} title="Start a game" />
           <ModeButton
             label="Single-player"
             description="One puzzle, just you."
@@ -231,7 +231,7 @@ export function HomeClient() {
 
       {view.kind === 'sp' && (
         <div className="flex w-full flex-col gap-2">
-          <BackRow onBack={() => setView({ kind: 'quickplay' })} label="Single-player" />
+          <BackRow onBack={() => setView({ kind: 'quickplay' })} title="Single-player" />
           {VISIBLE_DIFFICULTIES.map((tier) => {
             const t = counts?.[tier];
             const total = t?.total ?? 0;
@@ -421,18 +421,19 @@ function actionClassName({
   return `${layout} border-primary-border bg-primary-muted text-foreground hover:bg-primary-soft`;
 }
 
-function BackRow({ onBack, label }: { onBack: () => void; label: string }) {
+function BackRow({ onBack, title }: { onBack: () => void; title: string }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-col items-start gap-3">
       <button
         type="button"
         onClick={onBack}
         aria-label="Back"
-        className="rounded-md px-2 py-1 text-sm text-muted hover:bg-surface-muted"
+        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-muted transition-colors hover:bg-surface-muted hover:text-foreground"
       >
-        ←
+        <span aria-hidden="true">←</span>
+        <span>Back</span>
       </button>
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">{label}</h2>
+      <h2 className="text-2xl font-semibold tracking-normal text-foreground">{title}</h2>
     </div>
   );
 }
