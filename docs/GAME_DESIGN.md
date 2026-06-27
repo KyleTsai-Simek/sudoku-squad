@@ -32,6 +32,7 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 ### Battle ✅ live (Phase 2)
 - 2–8 players, each with their own private copy of the same puzzle.
 - Each player sees their own board only. We do show a **progress bar per opponent** (% cells correctly filled) — enough social pressure without giving away their answers.
+- Late joiners can enter an already-started battle until the room reaches 8 players. They start from an empty private board, inherit the original game timer, and have to catch up.
 - First player to legally complete the puzzle wins. Server validates.
 - When a winner is declared, every player sees a "{username} won!" overlay. Losers can dismiss the overlay and **keep solving** their own board (the result is already final and recorded). See [DECISIONS.md #0008](DECISIONS.md).
 - If a player gets stuck, they can give up at any time (counts as a loss for them; game continues for others).
@@ -39,6 +40,7 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 
 ### Coop 🔄 MVP landed (Phase 3)
 - 2–8 players, all writing to the same board.
+- Late joiners can enter an already-started co-op room until the room reaches 8 players. They replay the shared move log and can start helping immediately.
 - ✅ Last-write-wins per cell, server-ordered by `seq` (server-overlay reconciliation in `coop-store.ts`).
 - ✅ Game ends when the board is correctly completed. Win celebrated together (shared-win broadcast). Coop-colored shared progress.
 - 🔲 Visible colored cursors show where other players are looking (Supabase Presence).
@@ -173,4 +175,3 @@ Optional email sign-in, layered on top of anonymous play:
 2. **Host migration** acknowledgement — explicit or silent? Leaning silent (transfer to longest-tenured remaining player).
 3. **Mobile lobby / share link UX** — auto-copy on room create? Native share sheet? QR code for in-person play?
 4. **Mobile cursor visualization in coop** — phones have no persistent cursor. Working assumption: ring stays on the last-tapped cell, fades after ~3 seconds of inactivity. Confirm with testing.
-5. **Mid-game join policy** — confirmed working assumption: battle is locked after Start; coop is open anytime.

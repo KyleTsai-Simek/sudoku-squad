@@ -286,7 +286,8 @@ Because `postgres_changes` is not a perfectly reliable delivery channel under lo
 
 - Persistent state (who's in the room, the move log, `next_seq`) is stored in Postgres and read on join.
 - Live updates use the per-table `postgres_changes` subscriptions.
-- On join, a client: (a) **subscribes first** (incoming events buffer into the store's `pendingRemote` until the board is built); (b) fetches `room`, `room_players`, `puzzle.givens`, and replays `moves` to reconstruct state; (c) hands the snapshot to `startCoop`/`startBattle` which drain the buffer in seq order. This subscribe-before-fetch ordering closes a small lost-event window in the original implementation.
+- On join, a client: (a) **subscribes first** (incoming events buffer into the store's `pendingRemote` until the board is built); (b) fetches `room`, `room_players`, `puzzle.givens`, and replays `moves` to reconstruct state; (c) hands the snapshot to `startCoop`/`startBattle` which drain the buffer in seq order. This subscribe-before-fetch ordering closes a small lost-event window in the original implementation. Late battle joiners have no prior private moves, so `startBattle` materializes an empty private board from givens while preserving the room's original `started_at`; late coop joiners replay the full shared log.
+- Room creation is warmed on the web home page by `apps/web/lib/preloaded-rooms.ts` ([#0049](DECISIONS.md)). It starts one private non-public `create-room` call for battle and one for co-op, then the mode button consumes the warmed room if available. The database model remains unchanged; warmed rooms are ordinary private lobby rows.
 
 ---
 
@@ -404,7 +405,7 @@ Per [DECISIONS.md #0023](DECISIONS.md), multiplayer mutations go through TypeScr
 | Function | Input | Output | Status |
 |---|---|---|---|
 | `create-room` | `{mode, difficulty, username, is_public?}` | `{room_id, room_code, player_id, color, mode, puzzle_code}` | ✅ deployed |
-| `join-room` | `{code, username}` | `{room_id, room_code, mode, status, puzzle_code, player_id, color, is_host, rejoined}` | ✅ deployed |
+| `join-room` | `{code, username}` | `{room_id, room_code, mode, status, puzzle_code, player_id, color, is_host, rejoined}` | ✅ deployed — seats lobby and in-progress joiners in both modes up to the 8-player cap; finished rooms reject new joiners ([#0049](DECISIONS.md)) |
 | `start-game` | `{room_id}` | `{status: 'playing', started_at, puzzle_code}` | ✅ deployed — extended to handle next-round reset per [#0030](DECISIONS.md) |
 | `submit-move` | Single: `{room_id, cell, kind, value, client_move_id?}`. Batch (preferred): `{room_id, moves: [...]}`. | Single: `{seq, accepted, progress_pct, won, is_winner, idempotent?, cell_correct?}`. Batch: `{results: [{seq, idempotent?, cell_correct?}], progress_pct, won, is_winner, shared_win?}`. | ✅ rewritten 2026-05-23 per [#0036](DECISIONS.md) + extended for batches per [#0037](DECISIONS.md). Atomic `reserve_room_seq` / `reserve_room_seqs` RPCs, parallel reads, client_move_id idempotency, batch cap 200. `cell_correct` returned only when `settings.autoCheck` is on. |
 | `claim-username` | `{}` | `{username}` | ✅ deployed — idempotent per `auth.uid()`; backed by `issued_usernames` (migration 0008). Phase 5 extends the insert to also populate `base`/`discriminator` (anon default: generated `base`, NULL discriminator). |
@@ -438,7 +439,7 @@ The web client invokes via `supabase.functions.invoke(name, { body })` after `en
 See the live list in [DECISIONS.md](DECISIONS.md) → "Open questions (live)". The biggest ones blocking Phase 2:
 
 - **Edge Function vs. Postgres RPC for `submit_move`** — leaning Edge Function for TS flexibility and to match `create_room`/`join_room`. Decide before the first one lands.
-- **Mid-game join behavior** — working assumption: battle locks at Start, coop is open anytime. Confirm before the lobby UI ships.
+- **Mid-game join behavior** — decided in [#0049](DECISIONS.md): battle and co-op both accept late joiners up to the room cap. Battle late joiners are behind on elapsed time; co-op late joiners replay and help.
 - **Disconnect grace period** — 60 s vs 2 minutes; affects how the lobby renders absent players.
 - **Presence cursor frequency** — throttle to ~10/s to avoid Realtime quota; not a question, a constraint to remember.
 

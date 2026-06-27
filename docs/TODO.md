@@ -29,7 +29,7 @@ Live at https://sudoku-squad-web.vercel.app/. Engine + UI + ingest + tests + CI 
 - [x] **warmup + beginner tiers** shipped 2026-05-22. Generated 5,000 naked-singles-only puzzles via QQWing, augmented to 29-40 clues. Ratings in [-10, 0). Migration 0012 extends `puzzles.difficulty` check constraint. See [DECISIONS #0033](DECISIONS.md).
 - [x] **Shift-rename** 2026-05-22 ([#0034](DECISIONS.md)): beginner → easy → medium → hard → expert → killer. The five-button picker is now Warm-up / Easy / Medium / Hard / Expert; the former-expert tier survives as a hidden `killer` (no UI surface yet). Migration 0013 does the in-place rename + extends the check constraint.
 - [x] **Kaggle → QQWing upper-tier regeneration** shipped 2026-05-29 ([#0042](DECISIONS.md)). Replaced the Kaggle-sourced medium/hard/expert/killer with QQWing technique-graded generation: medium=EASY, hard=INTERMEDIATE-1-technique, expert=INTERMEDIATE-≥2-techniques (both pure-logic), killer=EXPERT/requires-a-guess (revived). QQWing metadata stored as typed columns (migration 0016); migration 0017 cleared the old rows. Tool: `ingest:qqwing-graded`. The whole bank (15,000) is now QQWing-generated; the Kaggle pipeline + 3M dataset are dormant.
-- [x] **Difficulty labels shifted to Easy → Extreme** locally on 2026-06-26 ([#0047](DECISIONS.md)): Warm-up → Easy, Easy → Medium, Medium → Hard, Hard → Expert, Expert → Extreme, with `killer` still hidden. Migration 0022 is present locally; deploy requires `supabase db push --linked` plus `create-room` / `change-difficulty` Edge Function redeploys. Daily puzzles remain Easy / Medium / Hard, now backed by the former warmup/easy/medium pools.
+- [x] **Difficulty labels shifted to Easy → Extreme** 2026-06-26 ([#0047](DECISIONS.md)): Warm-up → Easy, Easy → Medium, Medium → Hard, Hard → Expert, Expert → Extreme, with `killer` still hidden. Migration 0022 is live, and `create-room` / `change-difficulty` are redeployed. Daily puzzles remain Easy / Medium / Hard, now backed by the former warmup/easy/medium pools.
 
 ---
 
@@ -40,7 +40,7 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope. Remaining: two-context race-to-c
 ### Backend
 - [x] Migrations 0005 (`pick_random_puzzle_code`), 0006 (RLS recursion fix via `is_room_member`), 0007 (Realtime publications).
 - [x] Edge Function `create-room({mode, difficulty, username}) → {room_id, room_code, player_id, color, mode, puzzle_code}`.
-- [x] Edge Function `join-room({code, username}) → {room_id, room_code, player_id, color, is_host, rejoined, ...}`. Enforces mid-game-join policy per [DECISIONS #0024](DECISIONS.md). Rejoin is idempotent.
+- [x] Edge Function `join-room({code, username}) → {room_id, room_code, player_id, color, is_host, rejoined, ...}`. Allows late joins in both battle and co-op per [DECISIONS #0049](DECISIONS.md); finished rooms still reject new players. Rejoin is idempotent.
 - [x] Edge Function `start-game({room_id})` — host-only. Transitions room.status `lobby → playing`. Sets `started_at`. Realtime broadcast fires automatically via the rooms publication.
 - [x] Edge Function `submit-move({room_id, cell, kind, value})` — validates, assigns next per-room `seq` (retries on unique-violation), inserts into `moves`, recomputes progress_pct, on progress=100 atomically transitions room → finished with winner. Server-side completion is fully inline; no separate `check-completion`.
 - [x] **Hint removed for V1.** Per the May 22 product changes, the SP Hint button was dropped (Chunk A). The `sp_get_puzzle` RPC stays for auto-check. The multiplayer `hint` Edge Function is no longer planned.
@@ -51,13 +51,15 @@ See [ROADMAP.md Phase 2](ROADMAP.md) for scope. Remaining: two-context race-to-c
 - [ ] Still web-only — when iOS lands, lift the resync + overlay + batching logic into `packages/core/src/sync/` so RN can share it.
 
 ### `apps/web` — battle UI
-- [x] Home page sections: Solo / Battle a friend / Have a code? Battle CTAs call `create-room`, code input calls `join-room`.
+- [x] Home page sections: Solo / Battle a friend / Have a code? Multiplayer CTAs consume a private warmed room when available, falling back to `create-room`; code input calls `join-room`.
 - [x] `lib/supabase.ts` — `ensureAuthClient()` signs in anonymously and persists the session so refreshes preserve `auth.uid()`.
 - [x] `lib/rooms.ts` — `createRoom`, `joinRoom`, `fetchRoomPlayers`, `subscribeToRoomPlayers` with typed errors.
 - [x] `lib/username.ts` — localStorage-backed handle with random `adj-noun-NN` default.
 - [x] `/r/[code]` lobby route: room code display, copy share link button, player list with realtime updates, rename (local), error states (not found / full / over / in progress).
 - [x] Host "Start" button — wires up `start-game`. Disabled when < 2 players in battle.
 - [x] Battle game view: own board (`BattleBoard`) + opponent progress bars (`OpponentProgress`) + own number pad (`BattleNumberPad`, hint omitted) + keyboard controller. Duplicates the SP components rather than refactoring them; revisit in Phase 3.
+- [x] Warm-room preload 2026-06-27 ([#0049](DECISIONS.md)): `apps/web/lib/preloaded-rooms.ts` starts one private battle room and one private co-op room from the home page, so the multiplayer tap usually routes immediately to an already-created room. Unused warmed rooms are private and omitted from public-lobby browsing.
+- [x] Battle late joins 2026-06-27 ([#0049](DECISIONS.md)): new joiners can enter an already-started battle up to the 8-player cap. Their private board starts empty, and the original `started_at` makes them behind on time.
 - [x] Server-broadcast Win overlay (announces winner; dismissible). Losers can dismiss and keep solving their own board; late completions are recorded.
 - [x] Lobby settings panel (host-editable, locks at Start): showConflicts / autoCheck / highlightSameValue + is_public — shipped in Chunk D (`LobbySettingsPanel` + `update-room-settings` Edge Function).
 - [x] Play-again flow — shipped in Chunk H as the return-to-lobby same-room cycle (`return-to-lobby` Edge Function + `start-game` extended to reset + re-pick puzzle). Distinct from "fresh room with same players" but covers the same need.
@@ -86,7 +88,7 @@ ADRs [#0026](DECISIONS.md)–[#0030](DECISIONS.md). Migrations 0008–0011. Edge
 ### Phase 2 testing
 - [x] Two-browser/local two-context smoke: both join, start, sync opponent progress, and recover battle state after a reload.
 - [ ] Race-condition test: both submit a completing move within milliseconds — exactly one wins.
-- [x] Playwright two-context smoke ([DECISIONS #0013](DECISIONS.md)) — `apps/web/e2e/battle.spec.ts` covers create + join + start + lobby→game routing + opponent-progress Realtime subscription, undo/redo progress sync, and mid-battle reload resume. Stops short of race-to-completion because full-board server drain is still slow. Extension tracked as a separate follow-up.
+- [x] Playwright two/three-context smoke ([DECISIONS #0013](DECISIONS.md)) — `apps/web/e2e/battle.spec.ts` covers create + join + start + lobby→game routing + opponent-progress Realtime subscription, undo/redo progress sync, mid-battle reload resume, and a third-player late join into an already-started battle. Stops short of race-to-completion because full-board server drain is still slow. Extension tracked as a separate follow-up.
 
 ---
 
@@ -172,7 +174,7 @@ Optional email sign-in: portable progress + renameable usernames, anonymous stay
 
 ---
 
-## Daily puzzles 🔄 Implemented in branch, deploy/verification remaining
+## Daily puzzles 🔄 Deployed; e2e coverage remaining
 
 Same Easy / Medium / Hard puzzle for every player each Pacific day, with daily solve tracking for future leaderboard/history work. See [DECISIONS #0046](DECISIONS.md).
 
@@ -182,11 +184,11 @@ Same Easy / Medium / Hard puzzle for every player each Pacific day, with daily s
 - [x] Quick Play "Start a game" button routes to the previous Single-player / Co-op / Battle menu.
 - [x] Single-player completion recording includes elapsed time and daily metadata.
 - [x] `merge-progress` unions daily completion rows during anonymous → saved-account merges.
-- [ ] Apply migration `0020` to the linked Supabase project.
-- [ ] Redeploy `merge-progress` after migration `0020`.
-- [ ] Verify `get_daily_puzzles()` creates exactly three rows for today's Pacific date and returns no solutions.
+- [x] Apply migration `0020` to the linked Supabase project.
+- [x] Redeploy `merge-progress` after migration `0020`.
+- [x] Verify `get_daily_puzzles()` creates exactly three rows for today's Pacific date and returns no solutions.
 - [ ] Manual web check: `/daily` → solve one daily puzzle → `player_completions.solve_time_ms` and `player_daily_completions` are recorded.
-- [ ] Add e2e/live verification for daily route once migration 0020 is deployed.
+- [ ] Add e2e/live verification for daily route.
 - [ ] Future: daily leaderboard/history UI using `player_daily_completions`.
 
 ---

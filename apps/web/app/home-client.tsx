@@ -18,7 +18,8 @@ import {
   type DailyDifficulty,
   type DailyPuzzle,
 } from '@/lib/daily-puzzles';
-import { createRoom, joinRoom, type RoomMode } from '@/lib/rooms';
+import { joinRoom, type RoomMode } from '@/lib/rooms';
+import { consumePreloadedRoom, preloadMultiplayerRooms } from '@/lib/preloaded-rooms';
 import { getUsername } from '@/lib/username';
 import { useAuthStore } from '@/lib/auth-store';
 import { AppHeader } from '@/components/app-header';
@@ -78,6 +79,10 @@ export function HomeClient() {
   }, []);
 
   useEffect(() => {
+    preloadMultiplayerRooms(MP_DEFAULT_DIFFICULTY);
+  }, [userId]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       const n = await getCompletionCount();
@@ -132,12 +137,7 @@ export function HomeClient() {
 
   async function startMultiplayer(mode: RoomMode) {
     setLoadingMp(mode);
-    const usernameValue = await getUsername();
-    const res = await createRoom({
-      mode,
-      difficulty: MP_DEFAULT_DIFFICULTY,
-      username: usernameValue,
-    });
+    const res = await consumePreloadedRoom(mode, MP_DEFAULT_DIFFICULTY);
     setLoadingMp(null);
     if (res.ok) {
       router.push(`/r/${res.value.room_code}`);
@@ -556,10 +556,10 @@ function roomErrorMessage(code: string, fallback: string): string {
       return "Couldn't find a room with that code. Double-check it.";
     case 'room_full':
       return 'That room is full.';
-    case 'room_over':
+    case 'room_finished':
       return 'That room is already finished. Ask for a fresh link.';
-    case 'mid_game_join_forbidden':
-      return "That battle has already started — can't join mid-game.";
+    case 'room_in_progress':
+      return "That room can't accept new players right now.";
     default:
       return fallback;
   }

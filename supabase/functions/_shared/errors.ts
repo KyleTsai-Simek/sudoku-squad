@@ -8,9 +8,9 @@ import { corsHeaders } from './cors.ts';
  *   bad_request          - malformed input
  *   forbidden            - caller authenticated but lacks the role for this op
  *   not_found            - referenced row doesn't exist (e.g. unknown puzzle code)
- *   room_in_progress     - join_room: battle already started
+ *   room_in_progress     - legacy join_room/start-game in-progress conflict
  *   room_finished        - join_room: room already over
- *   room_full            - join_room: 4 players already
+ *   room_full            - join_room: 8 players already
  *   too_few_players      - start-game: battle requires >= 2 players
  *   invalid_move         - submit-move: cell range, given cell, value range, etc.
  *   internal             - unexpected failure

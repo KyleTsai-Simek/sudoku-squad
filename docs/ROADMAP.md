@@ -2,7 +2,7 @@
 
 Four phases, each with an explicit **exit criterion** — we don't move on until it's met. Single player first, then battle, then coop, then iOS. This sequencing exists for a reason: each phase de-risks the next.
 
-**Current position:** Phase 2 battle mode is playable end-to-end and live, with local two-context Playwright coverage plus loser-keeps-solving and reload-resume fixes. Phase 3 coop has an MVP landed (shared board, server-overlay sync, shared win) with a local two-context notes-sync smoke. **Phase 5 (authenticated accounts) is built/deployed at the backend + client level and needs full email/merge/rename e2e verification before it is called complete** — see [DECISIONS #0043](DECISIONS.md) and [SAVED_ACCOUNTS_PLAN.md](SAVED_ACCOUNTS_PLAN.md). The cross-cutting theme refresh + dark mode pass is complete. See [STATUS.md](STATUS.md) for the live snapshot.
+**Current position:** Phase 2 battle mode is playable end-to-end and live, with local Playwright coverage for sync, reload resume, and late joins plus loser-keeps-solving. Phase 3 coop has an MVP landed (shared board, server-overlay sync, shared win, late joins) with a local two-context notes-sync smoke. **Phase 5 (authenticated accounts) is built/deployed at the backend + client level and needs full email/merge/rename e2e verification before it is called complete** — see [DECISIONS #0043](DECISIONS.md) and [SAVED_ACCOUNTS_PLAN.md](SAVED_ACCOUNTS_PLAN.md). The cross-cutting theme refresh + dark mode pass is complete. See [STATUS.md](STATUS.md) for the live snapshot.
 
 | Phase | Status |
 |---|---|
@@ -53,9 +53,9 @@ These are tracked in [TODO.md](TODO.md) and can be parallelized with Phase 2 wor
   - Multiplayer `hint` is **not** shipping — Chunk A removed the hint feature.
 - `packages/core/src/sync/`: **deferred for V1.** The web client's `battle-store.ts` does optimistic local apply with the server as authority; move rejection is rare and we just surface an error rather than rolling back. The reconciler module lifts into `packages/core/src/sync/` when iOS lands or coop's LWW forces the issue.
 - `apps/web`:
-  - Home page: Solo / Battle / Public-lobby list / "Have a code?" sections.
+  - Home page: Solo / Battle / Public-lobby list / "Have a code?" sections, with private warmed rooms for Battle and Co-op so a multiplayer tap can route immediately when the background room is ready ([#0049](DECISIONS.md)).
   - Room route `/r/[code]`: lobby (live player list, share link, kick, host-edited settings panel) + battle game view (own board, opponent progress, synced countdown, winner overlay).
-  - Mid-game join handling and the "return to lobby" same-room replay cycle (Chunk H).
+  - Late-join handling and the "return to lobby" same-room replay cycle (Chunk H, extended by [#0049](DECISIONS.md)); battle late joiners start behind on the timer, coop late joiners replay the shared board.
   - Persistent username (Chunk B), public lobbies (Chunk G), persistent completion count (Chunk F).
 
 **Exit criterion**

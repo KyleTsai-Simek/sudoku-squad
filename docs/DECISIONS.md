@@ -17,6 +17,27 @@ Format:
 
 ---
 
+## 0049 — Warm multiplayer rooms and late joins in both modes
+**Date:** 2026-06-27
+**Status:** Accepted and implemented; `join-room` Edge Function deployed.
+
+**Context.** Creating a multiplayer room takes a couple seconds because the client must authenticate, call `create-room`, pick a random puzzle, generate a room code, insert the room, and insert the host's `room_players` row before navigation. The desired product feel is that a room is already ready when a user taps Co-op or Battle. Separately, late joins should be allowed in both multiplayer modes: battle late joiners should enter with the original room timer already running, while coop late joiners should immediately start helping on the shared board.
+
+**Decision.** Use a client-side private warm-room cache for the creation path. `apps/web/lib/preloaded-rooms.ts` starts one non-public `create-room` request per multiplayer mode from the home page, using the default multiplayer difficulty (`hard`) and the current server-issued username. When the user taps Co-op or Battle, the home page consumes the matching warm room if it is ready, waits on it if it is still in flight, and falls back to a fresh `create-room` call if warming failed. Warmed rooms are private (`is_public=false`), so unused preloads do not appear in public lobby browsing.
+
+For late joins, `join-room` now seats new players in any `playing` room up to the 8-player cap. Finished rooms still reject new joiners. Battle late joiners get their own empty private board, fetch the same puzzle givens, and inherit the original `started_at`, so they are naturally behind on elapsed time. Coop late joiners use the existing subscribe-before-fetch + full move-log replay path to materialize the shared board and contribute immediately.
+
+**Alternatives considered.**
+- Add a server-side global pool of anonymous pre-created rooms. Rejected because rooms are user-owned and include a host row; a global pool would need a claim/ownership transfer path and cleanup policy.
+- Create one warm room only after the user opens Quick Play. Rejected because the visible delay is on the first multiplayer tap; warming from home gives the request more idle time while the user reads or chooses.
+- Keep battle locked after Start. Rejected by the requested product behavior; the private-board model makes battle late joins straightforward and fair enough because the timer is already running.
+- Surface a "preparing room" status in the UI. Deferred: the warm cache should be invisible. The existing loading state remains as fallback for first-load or failed-warm cases.
+
+**Consequences.**
+- Unused private lobby rows may be created when users visit the home page and never start multiplayer. They are harmless for public browsing but may eventually warrant a cleanup job for stale private lobbies.
+- The updated `join-room` Edge Function is deployed for live battle late joins. The web warm-room cache ships through Vercel with the normal `main` deploy.
+- The battle Playwright smoke now includes a third-context late-join regression: after a battle starts, a new player navigates to the room, lands on the board, sees all three progress rows, and can begin solving from 0%.
+
 ## 0048 — Completion leaderboard read model
 **Date:** 2026-06-26
 **Status:** Accepted and deployed.
@@ -42,7 +63,7 @@ The web home page now renders a compact "Puzzles solved" leaderboard under publi
 
 ## 0047 — Shift visible difficulty labels to Easy through Extreme
 **Date:** 2026-06-26
-**Status:** Accepted and implemented locally; migration/function deploy still required.
+**Status:** Accepted and deployed.
 
 **Context.** After daily puzzles landed, the product language needed one more difficulty shift: "Warm-up" should become the new Easy, previous Easy becomes Medium, previous Medium becomes Hard, previous Hard becomes Expert, and previous Expert becomes Extreme. The hidden `killer` tier remains internal. Daily puzzles should keep exposing only Easy / Medium / Hard, but those labels now mean the former warmup / easy / medium pools.
 
@@ -58,7 +79,7 @@ Ingest scripts were updated to emit the new names directly: `ingest:qqwing` now 
 - Preserve existing daily assignments through the migration. Rejected because an already-assigned `easy` daily would become Medium-content after the rename. Clearing daily rows lets the same Pacific day rebuild against the new labels.
 
 **Consequences.**
-- Apply migration `0022`, then redeploy `create-room` and `change-difficulty` so remote Edge Functions accept `extreme` and reject the removed `warmup` value.
+- Migration `0022` is live, and `create-room` / `change-difficulty` have been redeployed so remote Edge Functions accept `extreme` and reject the removed `warmup` value.
 - Completion/stat rows reference puzzle codes, so solved history inherits the new labels through joins to `puzzles`.
 - Any external references or scripts that assumed `warmup` must use `easy` after this migration.
 
@@ -66,7 +87,7 @@ Ingest scripts were updated to emit the new names directly: `ingest:qqwing` now 
 
 ## 0046 — Daily puzzles and daily completion tracking
 **Date:** 2026-06-26
-**Status:** Accepted and implemented locally; migration/function deploy still required.
+**Status:** Accepted and deployed.
 
 **Context.** The app already records one ever-solved row per `(player, puzzle)` in `player_completions`, and optional email accounts merge those rows across devices. Daily puzzles need a different surface: everyone should see the same Easy / Medium / Hard puzzle for a Pacific calendar day, the selection should prefer puzzles nobody has solved yet, and we need to remember when a player solved the daily puzzle on the day it was daily. We also want solve duration for future stats/leaderboards.
 
@@ -1216,7 +1237,7 @@ Resolved items get moved into the log above. These are still TBD. Items grouped 
 ## Recently resolved (and where it landed)
 
 - **Edge Function vs SQL RPC for multiplayer endpoints** — resolved in #0023 (TS Edge Functions across the board).
-- **Mid-game join behavior** — resolved in #0024 (battle locks at Start, coop is open anytime, finished refuses).
+- **Mid-game join behavior** — originally resolved in #0024, superseded by #0049 (battle and co-op both accept late joins; finished refuses).
 - **Disconnect grace period** — resolved in #0025 (2 minutes).
 - **Puzzle code format** — resolved in #0019 (6-char lowercase base36, deterministic from givens).
 - **Room code format** — resolved in #0021 (6-char lowercase base36, random, retried on collision).

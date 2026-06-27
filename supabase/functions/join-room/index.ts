@@ -6,10 +6,10 @@
 //      regardless of room status. A mid-battle refresh must land the player
 //      back in their game, not bounce off the in-progress gate. This is what
 //      makes refreshes idempotent and keeps the disconnect-grace flow simple.
-//   4. Otherwise apply the NEW-joiner mid-game policy (per DECISIONS.md #0024):
+//   4. Otherwise apply the NEW-joiner mid-game policy (per DECISIONS.md #0049):
 //        - status=finished → 'room_finished'.
-//        - status=playing AND mode=battle → 'room_in_progress'.
-//        - status=playing AND mode=coop → OK (coop is open anytime).
+//        - status=playing → OK. Battle joiners start from an empty private
+//          board against the original room timer; coop joiners replay the log.
 //        - status=lobby → OK.
 //   5. Enforce room cap (8 players) when adding a new joiner.
 //   6. Otherwise pick a color from the unused palette slots and insert.
@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
   }
 
   // Rejoin? Caller already has a seat — return it as-is, regardless of room
-  // status. This MUST run before the mid-game-join gate below: a player who
+  // status. This MUST run before the new-joiner status checks below: a player who
   // refreshes mid-battle (or revisits a finished room) owns their seat and has
   // to be let back in, otherwise the in-progress gate would bounce them to an
   // error page and their game would appear lost. See DECISIONS.md #0024.
@@ -107,9 +107,6 @@ Deno.serve(async (req) => {
   // New-joiner mid-game policy.
   if (room.status === 'finished') {
     return errorResponse('room_finished', 'this room is already over', 409);
-  }
-  if (room.status === 'playing' && room.mode === 'battle') {
-    return errorResponse('room_in_progress', 'this battle has already started', 409);
   }
 
   // New joiner: enforce cap.

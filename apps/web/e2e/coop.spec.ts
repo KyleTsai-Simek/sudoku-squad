@@ -30,6 +30,15 @@ test.setTimeout(120_000);
 const SYNC = 20_000; // per cross-client wait
 const ROOM_CODE_RE = /\/r\/([a-z0-9]{6})/;
 
+async function createCoopRoom(page: import('@playwright/test').Page): Promise<string> {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Sudoku Squad' })).toBeVisible();
+  await page.getByRole('button', { name: /Start a game/ }).click();
+  await page.getByRole('button', { name: /Co-op/ }).click();
+  await page.waitForURL(ROOM_CODE_RE, { timeout: 15000 });
+  return page.url().match(ROOM_CODE_RE)![1]!;
+}
+
 /** Find a board row that has at least two empty (non-given) cells, so we have
  *  a peer pair to exercise the note auto-clear/undo. Returns 1-based row +
  *  the first two 1-based columns. */
@@ -62,12 +71,7 @@ test('coop: shared board syncs + undo restores auto-cleared peer notes', async (
   const pageB = await ctxB.newPage();
 
   try {
-    // A creates a co-op room.
-    await pageA.goto('/');
-    await expect(pageA.getByRole('heading', { name: 'Sudoku Squad' })).toBeVisible();
-    await pageA.getByRole('button', { name: /Co-op/ }).click();
-    await pageA.waitForURL(ROOM_CODE_RE, { timeout: 15000 });
-    const code = pageA.url().match(ROOM_CODE_RE)![1]!;
+    const code = await createCoopRoom(pageA);
 
     // B joins via the shared room URL.
     await pageB.goto(`/r/${code}`);

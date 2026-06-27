@@ -34,6 +34,15 @@ test.skip(!!process.env.CI, 'battle smoke requires live Supabase — skipping in
 
 const ROOM_CODE_RE = /\/r\/([a-z0-9]{6})/;
 
+async function createBattleRoom(page: import('@playwright/test').Page): Promise<string> {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Sudoku Squad' })).toBeVisible();
+  await page.getByRole('button', { name: /Start a game/ }).click();
+  await page.getByRole('button', { name: /^Battle/ }).click();
+  await page.waitForURL(ROOM_CODE_RE, { timeout: 15000 });
+  return page.url().match(ROOM_CODE_RE)![1]!;
+}
+
 test('battle: create + join + start + sync', async ({ browser }) => {
   const ctxA = await browser.newContext();
   const ctxB = await browser.newContext();
@@ -41,13 +50,7 @@ test('battle: create + join + start + sync', async ({ browser }) => {
   const pageB = await ctxB.newPage();
 
   try {
-    // A creates a battle room. The Battle card is a single button that
-    // creates a room and navigates to /r/{code} directly.
-    await pageA.goto('/');
-    await expect(pageA.getByRole('heading', { name: 'Sudoku Squad' })).toBeVisible();
-    await pageA.getByRole('button', { name: /^Battle/ }).click();
-    await pageA.waitForURL(ROOM_CODE_RE, { timeout: 15000 });
-    const code = pageA.url().match(ROOM_CODE_RE)![1]!;
+    const code = await createBattleRoom(pageA);
 
     // B joins by navigating directly to the room URL (the same path shared-
     // link recipients take). The home page no longer carries a join input;
@@ -138,10 +141,7 @@ test('battle: reload mid-game restores own board + progress', async ({ browser }
   const pageB = await ctxB.newPage();
 
   try {
-    await pageA.goto('/');
-    await pageA.getByRole('button', { name: /^Battle/ }).click();
-    await pageA.waitForURL(ROOM_CODE_RE, { timeout: 15000 });
-    const code = pageA.url().match(ROOM_CODE_RE)![1]!;
+    const code = await createBattleRoom(pageA);
 
     await pageB.goto(`/r/${code}`);
     await pageB.waitForURL(new RegExp(`/r/${code}`), { timeout: 15000 });
@@ -226,5 +226,55 @@ test('battle: reload mid-game restores own board + progress', async ({ browser }
   } finally {
     await ctxA.close();
     await ctxB.close();
+  }
+});
+
+test('battle: late joiner enters an already-started game', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const ctxA = await browser.newContext();
+  const ctxB = await browser.newContext();
+  const ctxC = await browser.newContext();
+  const pageA = await ctxA.newPage();
+  const pageB = await ctxB.newPage();
+  const pageC = await ctxC.newPage();
+
+  try {
+    const code = await createBattleRoom(pageA);
+
+    await pageB.goto(`/r/${code}`);
+    await pageB.waitForURL(new RegExp(`/r/${code}`), { timeout: 15000 });
+    await expect(pageA.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: 10000 });
+
+    await pageA.getByRole('button', { name: 'Start battle', exact: true }).click();
+    await pageA.getByRole('grid', { name: 'Sudoku board' }).waitFor({ timeout: 15000 });
+    await pageA.waitForTimeout(6000);
+
+    await pageC.goto(`/r/${code}`);
+    await pageC.waitForURL(new RegExp(`/r/${code}`), { timeout: 15000 });
+    await pageC.getByRole('grid', { name: 'Sudoku board' }).waitFor({ timeout: 30000 });
+
+    await expect(pageC.locator('li').filter({ hasText: '%' })).toHaveCount(3, {
+      timeout: 10000,
+    });
+    await expect(pageA.locator('li').filter({ hasText: '%' })).toHaveCount(3, {
+      timeout: 10000,
+    });
+
+    const lateJoinerMaxPct = async () => {
+      const texts = await pageC.locator('li').filter({ hasText: '%' }).allInnerTexts();
+      const nums = texts.flatMap((t) =>
+        Array.from(t.matchAll(/(\d+)\s*%/g)).map((m) => Number(m[1])),
+      );
+      return nums.length ? Math.max(...nums) : 0;
+    };
+
+    await expect.poll(lateJoinerMaxPct, { timeout: 10000 }).toBe(0);
+    await pageC.locator('[role="gridcell"]:not([aria-label*="given"])').first().click();
+    await pageC.getByRole('button', { name: 'Enter 1' }).click();
+    await expect.poll(lateJoinerMaxPct, { timeout: 10000 }).toBeGreaterThan(0);
+  } finally {
+    await ctxA.close();
+    await ctxB.close();
+    await ctxC.close();
   }
 });
