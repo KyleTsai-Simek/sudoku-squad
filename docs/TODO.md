@@ -196,6 +196,21 @@ Same Easy / Medium / Hard puzzle for every player each Pacific day, with daily s
 
 ---
 
+## End-game share links + OG images 🔲 Planned
+
+Shareable result links from end-game modals, with result-aware text and dynamic Open Graph images, are scoped in [SHARE_LINKS_PLAN.md](SHARE_LINKS_PLAN.md) and tracked by [DECISIONS #0051](DECISIONS.md).
+
+- [x] Confirm product decisions: signed stateless `/s/{token}` links, all end-game modals, anonymous shares, softer "Try this puzzle" copy, and playful board-card OG images.
+- [x] Add share-result helpers for time formatting, share-message formatting, signed token creation/validation, and Web Share API + clipboard fallback.
+- [x] Add a public share/challenge route that renders dynamic metadata and routes humans to `/play/{puzzleCode}` for the same puzzle.
+- [x] Add a dynamic `opengraph-image` route that includes Sudoku Squad branding, difficulty, solve time, and a playful non-solution visual.
+- [x] Add a preview/debug route or fixtures so local/prod links and OG images can be inspected before social caches are involved.
+- [x] Add Share actions to single-player, battle, and coop end-game modals without disrupting existing daily row, Return-to-lobby, Keep-solving, and Back-to-menu actions.
+- [~] Add tests for helper formatting/token validation, valid/tampered share routes, completion-modal share UI, clipboard fallback, and mobile layout. Current coverage: single-player Playwright smoke checks Share button, clipboard fallback, signed `/s/` link, and challenge-page navigation; focused unit coverage for token edge cases is still pending because `apps/web` has no unit-test harness yet.
+- [~] Manually verify several share links and direct OG image URLs on desktop/mobile; after deploy, test unfurls in target apps. Local `/share-preview` and direct OG PNG render are verified; external unfurls remain.
+
+---
+
 ## Leaderboards 🔄 First completion board deployed
 
 Global completion leaderboard for "most puzzles solved" across anonymous and signed-in users. See [DECISIONS #0048](DECISIONS.md).

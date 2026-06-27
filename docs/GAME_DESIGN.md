@@ -31,6 +31,13 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 - Display names come from the current `issued_usernames` row, so a signed-in username change is reflected on the leaderboard for everyone.
 - The first UI requests the top 15 and bolds the current player when present. If the current player is outside the top 15 or has zero completions, their row is pinned above the ranked list; if they are inside the top 15, they appear in the normal ranked position. The backend RPC returns the current player's row outside the requested page and for zero-completion callers, so large leaderboards can show both the leaders and "your place" without loading every ranked user.
 
+### End-game sharing 🔄 implemented locally
+- End-game modals should offer a Share action once a puzzle is complete: single-player completion, daily completion, battle winner, and coop win.
+- Shared text should include the visible difficulty and solve time, plus a link that lets another player try the exact same puzzle.
+- Share links should unfurl with a result-specific Open Graph image: Sudoku Squad branding, difficulty, solve time, and a playful board-card visual. The visual must not expose the solution in a useful way.
+- The recipient experience should be direct: open a short `/s/{token}` share link, see a compact challenge/result page, then tap to play the same puzzle via `/play/{puzzleCode}`.
+- Tone and identity are settled for the first pass: anonymous shares with softer "Try this puzzle" copy, not username-based or competitive "Can you beat me?" copy. Local `/share-preview` supports iteration before external unfurl caches are involved. See [SHARE_LINKS_PLAN.md](SHARE_LINKS_PLAN.md).
+
 ### Battle ✅ live (Phase 2)
 - 2–8 players, each with their own private copy of the same puzzle.
 - Each player sees their own board only. We do show a **progress bar per opponent** (% cells correctly filled) — enough social pressure without giving away their answers.
@@ -179,3 +186,4 @@ Optional email sign-in, layered on top of anonymous play:
 2. **Host migration** acknowledgement — explicit or silent? Leaning silent (transfer to longest-tenured remaining player).
 3. **Mobile lobby / share link UX** — auto-copy on room create? Native share sheet? QR code for in-person play?
 4. **Mobile cursor visualization in coop** — phones have no persistent cursor. Working assumption: ring stays on the last-tapped cell, fades after ~3 seconds of inactivity. Confirm with testing.
+5. **End-game share link iteration** — after implementation, test real share links and OG images, then iterate on board-card art and copy.

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import type { Difficulty } from '@sudoku-squad/core';
 import { useCoopStore, computeOwnership } from '@/lib/coop-store';
 import { playerColorStyle } from '@/lib/player-colors';
 import {
@@ -29,12 +30,22 @@ interface Props {
   players: RoomPlayerProgress[];
   settings: RoomSettings;
   serverStartedAt: string | null;
+  serverFinishedAt: string | null;
+  difficulty: Difficulty | null;
   /** Non-null means rooms.status='finished'. Coop never has a single winner;
    *  the room row's winner_player_id stays NULL and the win is shared. */
   finished: boolean;
 }
 
-export function CoopGame({ room, players, settings, serverStartedAt, finished }: Props) {
+export function CoopGame({
+  room,
+  players,
+  settings,
+  serverStartedAt,
+  serverFinishedAt,
+  difficulty,
+  finished,
+}: Props) {
   const board = useCoopStore((s) => s.board);
   const givens = useCoopStore((s) => s.givens);
   const startedAt = useCoopStore((s) => s.startedAt);
@@ -144,6 +155,21 @@ export function CoopGame({ room, players, settings, serverStartedAt, finished }:
     return Math.max(0, now - startedAt);
   }, [now, startedAt]);
 
+  const shareResult = useMemo(() => {
+    if (!difficulty || startedAt === null || !finished) return undefined;
+    const serverEnd = serverFinishedAt ? new Date(serverFinishedAt).getTime() : null;
+    const localEnd = finishedAt ?? now;
+    const solveTimeMs = Math.max(0, (serverEnd ?? localEnd) - startedAt);
+    return {
+      puzzleCode: room.puzzle_code,
+      difficulty,
+      solveTimeMs,
+      mode: 'coop' as const,
+      roomCode: room.room_code,
+      playerCount: players.length,
+    };
+  }, [difficulty, finished, finishedAt, now, players.length, room.puzzle_code, room.room_code, serverFinishedAt, startedAt]);
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center gap-4 px-3 py-4">
       <AppHeader
@@ -206,6 +232,7 @@ export function CoopGame({ room, players, settings, serverStartedAt, finished }:
         finished={finished}
         players={players}
         dismissed={winDismissed}
+        shareResult={shareResult}
         onDismiss={() => setWinDismissed(true)}
       />
     </main>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import type { Difficulty } from '@sudoku-squad/core';
 import { useBattleStore } from '@/lib/battle-store';
 import {
   fetchOwnMoves,
@@ -28,7 +29,9 @@ interface Props {
   players: RoomPlayerProgress[];
   settings: RoomSettings;
   serverStartedAt: string | null;
+  serverFinishedAt: string | null;
   winnerPlayerId: string | null;
+  difficulty: Difficulty | null;
 }
 
 export function BattleGame({
@@ -36,7 +39,9 @@ export function BattleGame({
   players,
   settings,
   serverStartedAt,
+  serverFinishedAt,
   winnerPlayerId,
+  difficulty,
 }: Props) {
   const board = useBattleStore((s) => s.board);
   const startedAt = useBattleStore((s) => s.startedAt);
@@ -131,6 +136,21 @@ export function BattleGame({
     winnerPlayerId !== room.own_player_id &&
     finishedAt === null;
 
+  const shareResult = useMemo(() => {
+    if (!difficulty || startedAt === null || winnerPlayerId === null) return undefined;
+    const serverEnd = serverFinishedAt ? new Date(serverFinishedAt).getTime() : null;
+    const localEnd = finishedAt ?? now;
+    const solveTimeMs = Math.max(0, (serverEnd ?? localEnd) - startedAt);
+    return {
+      puzzleCode: room.puzzle_code,
+      difficulty,
+      solveTimeMs,
+      mode: 'battle' as const,
+      roomCode: room.room_code,
+      playerCount: players.length,
+    };
+  }, [difficulty, finishedAt, now, players.length, room.puzzle_code, room.room_code, serverFinishedAt, startedAt, winnerPlayerId]);
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center gap-4 px-3 py-4">
       <AppHeader
@@ -191,6 +211,7 @@ export function BattleGame({
         players={players}
         dismissed={winnerDismissed}
         canKeepSolving={canKeepSolving}
+        shareResult={shareResult}
         onDismiss={() => setWinnerDismissed(true)}
       />
     </main>

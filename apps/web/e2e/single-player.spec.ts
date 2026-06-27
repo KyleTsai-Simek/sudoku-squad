@@ -12,7 +12,7 @@ import { expect, test } from '@playwright/test';
  * This is the load-bearing regression test for Phase 1. Keep it green.
  */
 
-// Pinned sample-1 from apps/web/lib/sample-puzzles.ts (easy).
+// Pinned sample-1 from apps/web/lib/sample-puzzles.ts (medium).
 const SAMPLE_CODE = '3santv';
 const GIVENS =
   '53..7....6..195....98....6.8...6...34..8.3..17...2...6.6....28....419..5....8..79';
@@ -20,6 +20,10 @@ const SOLUTION =
   '534678912672195348198342567859761423426853791713924856961537284287419635345286179';
 
 test('single-player: solve to completion via keyboard', async ({ page }) => {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+  });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Sudoku Squad' })).toBeVisible();
 
@@ -44,4 +48,16 @@ test('single-player: solve to completion via keyboard', async ({ page }) => {
   await expect(overlay).toBeVisible();
   await expect(overlay.getByText('You won!')).toBeVisible();
   await expect(overlay.getByRole('button', { name: /Play another/ })).toBeVisible();
+  await overlay.getByRole('button', { name: 'Share' }).click();
+  await expect(overlay.getByRole('button', { name: 'Copied share link' })).toBeVisible();
+  const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clipboard).toContain('Try this Medium Sudoku Squad puzzle.');
+  const shareUrl = clipboard.match(/http:\/\/localhost:\d+\/s\/\S+/)?.[0];
+  expect(shareUrl).toBeTruthy();
+  await page.goto(shareUrl!);
+  await expect(page.getByRole('heading', { name: 'Try this puzzle' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Play this puzzle' })).toHaveAttribute(
+    'href',
+    `/play/${SAMPLE_CODE}`,
+  );
 });

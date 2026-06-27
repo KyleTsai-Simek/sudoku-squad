@@ -342,6 +342,8 @@ export function LobbyClient({ code }: { code: string }) {
           players={visiblePlayers}
           settings={settings}
           serverStartedAt={roomRow?.started_at ?? null}
+          serverFinishedAt={roomRow?.finished_at ?? null}
+          difficulty={currentDifficulty}
           finished={status === 'finished'}
         />
       );
@@ -352,7 +354,9 @@ export function LobbyClient({ code }: { code: string }) {
         players={visiblePlayers}
         settings={settings}
         serverStartedAt={roomRow?.started_at ?? null}
+        serverFinishedAt={roomRow?.finished_at ?? null}
         winnerPlayerId={status === 'finished' ? winnerPlayerId : null}
+        difficulty={currentDifficulty}
       />
     );
   }

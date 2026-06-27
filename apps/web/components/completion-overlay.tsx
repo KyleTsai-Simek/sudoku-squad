@@ -7,6 +7,7 @@ import { pickRandomUnsolved } from '@/lib/pick-puzzle';
 import { fireWinConfetti } from '@/lib/confetti';
 import { difficultyLabel } from '@/lib/difficulty-labels';
 import { DailyPuzzleRow, type DailyCompletionOverride } from '@/components/daily-puzzle-row';
+import { ShareResultButton } from '@/components/share-result-button';
 
 function formatElapsed(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -66,6 +67,17 @@ export function CompletionOverlay() {
           {hintsUsed > 0 ? ` · ${hintsUsed} hint${hintsUsed === 1 ? '' : 's'}` : ''}
         </p>
         <div className="mt-6 flex flex-col gap-2">
+          {puzzle ? (
+            <ShareResultButton
+              result={{
+                puzzleCode: puzzle.code,
+                difficulty: puzzle.difficulty,
+                solveTimeMs: elapsed,
+                mode: 'single',
+                ...(puzzle.daily ? { dailyDate: puzzle.daily.date } : {}),
+              }}
+            />
+          ) : null}
           {completedDaily ? <DailyPuzzleRow completedOverride={completedDaily} /> : null}
           {!completedDaily ? (
             <button

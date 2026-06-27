@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { fireWinConfetti } from '@/lib/confetti';
 import { playerColorStyle } from '@/lib/player-colors';
 import { returnToLobby, type RoomPlayerProgress } from '@/lib/rooms';
+import { ShareResultButton, type ShareResultInput } from './share-result-button';
 
 interface Props {
   roomId: string;
@@ -16,6 +17,7 @@ interface Props {
   /** True if the player can keep solving (they didn't win). */
   canKeepSolving: boolean;
   dismissed: boolean;
+  shareResult?: ShareResultInput;
 }
 
 export function BattleWinnerOverlay({
@@ -26,6 +28,7 @@ export function BattleWinnerOverlay({
   onDismiss,
   canKeepSolving,
   dismissed,
+  shareResult,
 }: Props) {
   const router = useRouter();
   const [returning, setReturning] = useState(false);
@@ -67,6 +70,7 @@ export function BattleWinnerOverlay({
           <h2 className="mt-2 text-2xl font-semibold">Nicely done.</h2>
         ) : null}
         <div className="mt-6 flex flex-col gap-2">
+          {shareResult ? <ShareResultButton result={shareResult} /> : null}
           <button
             type="button"
             onClick={onReturn}

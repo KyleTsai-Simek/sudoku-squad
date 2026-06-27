@@ -12,6 +12,7 @@ Four phases, each with an explicit **exit criterion** — we don't move on until
 | Phase 3 — Coop mode | 🔄 MVP landed (shared board, server-overlay sync, shared win, local two-context smoke) |
 | Phase 5 — Authenticated accounts | 🔄 Built/deployed; full email/merge/rename e2e verification remains |
 | Cross-cutting — Completion leaderboard | 🔄 Implemented; migrations 0023/0024/0025 live, manual rename verification remains |
+| Cross-cutting — End-game share links + OG images | 🔄 Implemented locally; deploy + external unfurl validation remain |
 | Cross-cutting — Theme refresh + dark mode | ✅ Complete |
 | Phase 4 — iOS (React Native) | Pending |
 
@@ -32,6 +33,7 @@ Four phases, each with an explicit **exit criterion** — we don't move on until
 **Phase 1 cleanup (not blocking Phase 2):**
 - Mobile audit on 375 px / ~420 px widths.
 - Favicon + Open Graph metadata.
+- End-game share links with result-aware Open Graph images; implemented locally via signed `/s/{token}` routes. Deploy + external unfurl validation remain.
 - Lighthouse / PWA manifest.
 - `next lint` → ESLint CLI migration.
 - Register `sudokusquad.com` and point at Vercel.

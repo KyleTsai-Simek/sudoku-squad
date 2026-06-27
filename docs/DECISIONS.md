@@ -17,6 +17,28 @@ Format:
 
 ---
 
+## 0051 — End-game share links and dynamic result Open Graph images
+**Date:** 2026-06-27
+**Status:** Accepted and implemented locally; deploy + external unfurl validation remain
+
+**Context.** The app currently has static root metadata and lobby copy-link behavior, but end-game modals do not let a player share a result. The desired flow is a result share from completion overlays: share text includes difficulty and solve time, the link lets another player play the same puzzle, and the unfurl image is fun and result-specific rather than generic site branding.
+
+**Decision.** Use signed, stateless short URLs at `/s/{token}`. The token contains public result facts only: puzzle code, visible difficulty, solve time, mode, optional daily date, optional multiplayer room code, and a signature. The share page validates the token, renders dynamic metadata, and gives human visitors a direct action to play `/play/{puzzleCode}`. A sibling dynamic Open Graph image route renders a `1200x630` result image with Sudoku Squad branding, difficulty, solve time, and a playful board-card visual that does not expose the solution.
+
+The first implementation should add anonymous Share actions to all end-game modals: single-player completion, daily completion, battle winner, and coop win. Share copy should use softer "Try this puzzle" language rather than competitive "Can you beat me?" language, and should not include the player's username.
+
+**Alternatives considered.**
+- Persist every share in a `share_results` table. Useful for analytics, moderation, deletion, and shorter slugs, but it adds schema/RLS/migration work before we know those needs exist.
+- Use unsigned query params. Simple and easy to debug, but shared times could be edited casually and then displayed as first-party metadata.
+- Link directly to `/play/{code}` and rely only on navigator share text. Rejected for the intended unfurl behavior because crawlers need a stable result-specific page and image.
+
+**Consequences.**
+- Implementation should stay in `apps/web`; `packages/core` remains untouched.
+- Share pages must never expose the puzzle solution, email, `auth.uid()`, or private account data.
+- Production deploys must set `SHARE_TOKEN_SECRET`; local development uses a dev-only fallback so `/share-preview` works out of the box.
+- If result authenticity beyond "not casually editable" becomes important, or if we need share deletion/analytics, supersede this with a persisted `share_results` design.
+- Share-result copy and images should stay anonymous unless a later user decision explicitly changes that privacy posture.
+
 ## 0050 — Confirmed lobby presence for mobile in-app browser joins
 **Date:** 2026-06-27
 **Status:** Accepted and implemented in branch; migration `0026` plus `confirm-room-presence`, `start-game`, `submit-move`, `create-room`, and web changes need backend/web deploy.

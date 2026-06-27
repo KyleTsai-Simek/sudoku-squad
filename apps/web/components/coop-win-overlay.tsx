@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fireWinConfetti } from '@/lib/confetti';
 import { returnToLobby, type RoomPlayerProgress } from '@/lib/rooms';
+import { ShareResultButton, type ShareResultInput } from './share-result-button';
 
 interface Props {
   roomId: string;
@@ -11,6 +12,7 @@ interface Props {
   players: RoomPlayerProgress[];
   dismissed: boolean;
   onDismiss: () => void;
+  shareResult?: ShareResultInput;
 }
 
 /**
@@ -18,7 +20,7 @@ interface Props {
  * "Solved together!" copy — there's no individual winner in coop. Same
  * Return-to-lobby flow (per DECISIONS #0030 same-room replay cycle).
  */
-export function CoopWinOverlay({ roomId, finished, players, dismissed, onDismiss }: Props) {
+export function CoopWinOverlay({ roomId, finished, players, dismissed, onDismiss, shareResult }: Props) {
   const router = useRouter();
   const [returning, setReturning] = useState(false);
   const visible = finished && !dismissed;
@@ -54,6 +56,7 @@ export function CoopWinOverlay({ roomId, finished, players, dismissed, onDismiss
             : `${players.length} players finished the puzzle.`}
         </p>
         <div className="mt-6 flex flex-col gap-2">
+          {shareResult ? <ShareResultButton result={shareResult} /> : null}
           <button
             type="button"
             onClick={onReturn}
