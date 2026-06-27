@@ -42,7 +42,7 @@ function cn(...parts: Array<string | false | null | undefined>): string {
 
 const lobbySelectorSelectedClassName = 'border-selected bg-selected text-foreground';
 const lobbySelectorIdleClassName =
-  'border-primary-muted bg-primary-muted text-foreground hover:border-primary-soft hover:bg-primary-soft';
+  'border-primary-soft bg-primary-soft text-foreground hover:border-selected hover:bg-selected';
 
 export function LobbyClient({ code }: { code: string }) {
   const router = useRouter();
