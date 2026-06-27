@@ -23,6 +23,7 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 - The daily completion modal reuses the same Easy / Medium / Hard row. The just-finished daily is shown as completed immediately, and the next unsolved daily becomes the primary button; the existing home/another-puzzle controls remain below the row.
 - A daily solve is recorded only when the player completes the assigned puzzle on its assigned Pacific day; future leaderboard/history UI will read `player_daily_completions`.
 - Single-player and multiplayer lobby selectors expose the five visible difficulty labels: Easy / Medium / Hard / Expert / Extreme. Home single-player difficulty buttons are centered one-word labels; the hidden `killer` tier remains unsurfaced.
+- Quick Play subflows use short helper copy under their page headings: "Start a game" says "Choose a game mode.", and "Single-player" says "Choose a difficulty level."
 
 ### Leaderboards 🔄 first board deployed
 - The home page shows a bottom "Puzzles solved" leaderboard. It ranks players by unique completed puzzles from `player_completions`, across anonymous and signed-in users.
@@ -132,6 +133,7 @@ Optional email sign-in, layered on top of anonymous play:
 
 1. **Create.** Host clicks "Battle" or "Coop" → server creates a `room` with a short code, redirects to `/r/{code}`.
 2. **Lobby.** Host sees the share link. New joiners get a durable seat immediately, but they appear to other players only after staying visible in the room for a few seconds. This filters out mobile in-app browser hops before the user opens the link in their real browser. The joining user still sees their own row while waiting. Host clicks **Start** when ready; Battle's two-player gate counts confirmed visible players only.
+   Lobby mode and difficulty selectors use a medium-blue treatment so the Start buttons remain the only primary-blue CTAs.
 3. **Playing.** Game timer starts. Realtime channel active.
 4. **Finishing.**
    - Battle: first player to complete legally wins. Channel announces; everyone else's game ends with "X won." Losers can keep solving if they want (low-priority feature; defer if needed).

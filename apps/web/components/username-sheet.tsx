@@ -66,10 +66,7 @@ export function UsernameSheet({
             maxLength={20}
             className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary-border focus:outline-none"
           />
-          <p className="text-xs text-muted">
-            3–20 characters. If it’s taken, we’ll add a number like{' '}
-            <span className="font-mono">name#1234</span>.
-          </p>
+          <p className="text-xs text-muted">3–20 characters.</p>
           {error ? <p className="text-xs text-danger">{error}</p> : null}
           <button
             type="submit"

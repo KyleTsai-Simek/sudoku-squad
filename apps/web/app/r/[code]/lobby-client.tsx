@@ -40,6 +40,10 @@ function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
 }
 
+const lobbySelectorSelectedClassName = 'border-primary bg-selected text-foreground';
+const lobbySelectorIdleClassName =
+  'border-primary-border bg-primary-soft text-foreground hover:border-primary hover:bg-selected';
+
 export function LobbyClient({ code }: { code: string }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: 'joining' });
@@ -489,9 +493,7 @@ export function LobbyClient({ code }: { code: string }) {
                   disabled={selected}
                   className={cn(
                     'rounded-lg border px-2 py-2 text-xs font-medium transition-colors',
-                    selected
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-surface text-muted hover:border-primary-border',
+                    selected ? lobbySelectorSelectedClassName : lobbySelectorIdleClassName,
                   )}
                 >
                   {difficultyLabel(d)}
@@ -524,9 +526,7 @@ export function LobbyClient({ code }: { code: string }) {
                   disabled={selected}
                   className={cn(
                     'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
-                    selected
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-surface text-muted hover:border-primary-border',
+                    selected ? lobbySelectorSelectedClassName : lobbySelectorIdleClassName,
                   )}
                 >
                   {m === 'coop' ? 'Co-op' : 'Battle'}

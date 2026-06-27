@@ -187,7 +187,7 @@ export function HomeClient() {
                 onChange={(e) => setJoinCode(e.target.value)}
                 placeholder="6-char room code"
                 maxLength={6}
-                className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono lowercase tracking-widest text-foreground placeholder:text-muted focus:border-primary-border focus:outline-none"
+                className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-mono lowercase tracking-widest text-foreground placeholder:text-muted focus:border-primary-border focus:outline-none"
               />
               <button
                 type="submit"
@@ -208,7 +208,11 @@ export function HomeClient() {
 
       {view.kind === 'quickplay' && (
         <div className="flex w-full flex-col gap-3">
-          <BackRow onBack={() => setView({ kind: 'home' })} title="Start a game" />
+          <BackRow
+            onBack={() => setView({ kind: 'home' })}
+            title="Start a game"
+            description="Choose a game mode."
+          />
           <ModeButton
             label="Single-player"
             description="One puzzle, just you."
@@ -231,7 +235,11 @@ export function HomeClient() {
 
       {view.kind === 'sp' && (
         <div className="flex w-full flex-col gap-2">
-          <BackRow onBack={() => setView({ kind: 'quickplay' })} title="Single-player" />
+          <BackRow
+            onBack={() => setView({ kind: 'quickplay' })}
+            title="Single-player"
+            description="Choose a difficulty level."
+          />
           {VISIBLE_DIFFICULTIES.map((tier) => {
             const t = counts?.[tier];
             const total = t?.total ?? 0;
@@ -421,7 +429,15 @@ function actionClassName({
   return `${layout} border-primary-border bg-primary-muted text-foreground hover:bg-primary-soft`;
 }
 
-function BackRow({ onBack, title }: { onBack: () => void; title: string }) {
+function BackRow({
+  onBack,
+  title,
+  description,
+}: {
+  onBack: () => void;
+  title: string;
+  description?: string;
+}) {
   return (
     <div className="flex flex-col items-start gap-3">
       <button
@@ -433,7 +449,10 @@ function BackRow({ onBack, title }: { onBack: () => void; title: string }) {
         <span aria-hidden="true">←</span>
         <span>Back</span>
       </button>
-      <h2 className="text-2xl font-semibold tracking-normal text-foreground">{title}</h2>
+      <div className="flex flex-col gap-1">
+        <h2 className="text-2xl font-semibold tracking-normal text-foreground">{title}</h2>
+        {description ? <p className="text-sm text-muted">{description}</p> : null}
+      </div>
     </div>
   );
 }
