@@ -75,6 +75,20 @@ Deno.serve(async (req) => {
     return errorResponse('not_found', `no room with code "${code}"`, 404);
   }
 
+  if (room.status === 'lobby') {
+    const cutoff = new Date(Date.now() - 120_000).toISOString();
+    const { error: pruneErr } = await admin
+      .from('room_players')
+      .delete()
+      .eq('room_id', room.id)
+      .eq('is_host', false)
+      .is('lobby_confirmed_at', null)
+      .lt('joined_at', cutoff);
+    if (pruneErr) {
+      console.error('stale unconfirmed room_players prune failed', pruneErr);
+    }
+  }
+
   // Load current players.
   const { data: players, error: playersErr } = await admin
     .from('room_players')

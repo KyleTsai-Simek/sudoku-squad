@@ -84,15 +84,27 @@ Deno.serve(async (req) => {
     return errorResponse('forbidden', 'only the host can start the game', 403);
   }
 
-  // Load all players (used for cap check + has_returned validation).
+  const staleCutoff = new Date(Date.now() - 120_000).toISOString();
+  const { error: pruneErr } = await admin
+    .from('room_players')
+    .delete()
+    .eq('room_id', room.id)
+    .eq('is_host', false)
+    .is('lobby_confirmed_at', null)
+    .lt('joined_at', staleCutoff);
+  if (pruneErr) {
+    console.error('stale unconfirmed room_players prune failed', pruneErr);
+  }
+
+  // Load confirmed players (used for cap check + has_returned validation).
   const { data: players, error: playersErr } = await admin
     .from('room_players')
-    .select('player_id, has_returned')
+    .select('player_id, has_returned, lobby_confirmed_at')
     .eq('room_id', room.id);
   if (playersErr) {
     return errorResponse('internal', `players read failed: ${playersErr.message}`, 500);
   }
-  const allPlayers = players ?? [];
+  const allPlayers = (players ?? []).filter((p) => p.lobby_confirmed_at !== null);
   if (room.mode === 'battle' && allPlayers.length < MIN_BATTLE_PLAYERS) {
     return errorResponse(
       'too_few_players',

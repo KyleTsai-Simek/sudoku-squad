@@ -61,6 +61,7 @@ export interface RoomError {
     | 'room_in_progress'
     | 'room_finished'
     | 'room_full'
+    | 'players_not_ready'
     | 'too_few_players'
     | 'invalid_move'
     | 'internal'
@@ -177,6 +178,14 @@ export async function joinRoom(args: {
       own_is_host: v.is_host,
     },
   };
+}
+
+export async function confirmRoomPresence(roomId: string): Promise<Result<void>> {
+  const res = await invoke<{ last_seen_at: string }>('confirm-room-presence', {
+    room_id: roomId,
+  });
+  if (!res.ok) return res;
+  return { ok: true, value: undefined };
 }
 
 /**
@@ -357,6 +366,8 @@ export async function fetchOwnMoves(
 export interface RoomPlayerProgress extends RoomPlayer {
   progress_pct: number;
   has_returned: boolean;
+  lobby_confirmed_at: string | null;
+  last_seen_at: string | null;
 }
 
 export async function fetchRoomPlayers(roomId: string): Promise<RoomPlayerProgress[]> {
@@ -364,7 +375,7 @@ export async function fetchRoomPlayers(roomId: string): Promise<RoomPlayerProgre
   if (!client) return [];
   const { data, error } = await client
     .from('room_players')
-    .select('player_id, username, color, is_host, progress_pct, has_returned')
+    .select('player_id, username, color, is_host, progress_pct, has_returned, lobby_confirmed_at, last_seen_at')
     .eq('room_id', roomId)
     .order('joined_at', { ascending: true });
   if (error) {

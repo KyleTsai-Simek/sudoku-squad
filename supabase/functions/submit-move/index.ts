@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
   const [playerRes, puzzleRes, dupRes] = await Promise.all([
     admin
       .from('room_players')
-      .select('player_id')
+      .select('player_id, lobby_confirmed_at')
       .eq('room_id', room_id)
       .eq('player_id', userId)
       .maybeSingle(),
@@ -349,6 +349,19 @@ Deno.serve(async (req) => {
   }
   const { progressPct, won } = materialize(p.givens, (replayMoves ?? []) as MoveRow[], p.solution);
 
+  const seenAt = new Date().toISOString();
+  const presencePromise = admin
+    .from('room_players')
+    .update({
+      lobby_confirmed_at: playerRes.data.lobby_confirmed_at ?? seenAt,
+      last_seen_at: seenAt,
+    })
+    .eq('room_id', room_id)
+    .eq('player_id', userId)
+    .then(({ error }) => {
+      if (error) console.error('room presence update failed', error);
+    });
+
   // Step 6: cache progress.
   const progressUpdate = admin
     .from('room_players')
@@ -375,7 +388,7 @@ Deno.serve(async (req) => {
       .select('winner_player_id')
       .maybeSingle();
     if (winErr) {
-      await progressPromise;
+      await Promise.all([progressPromise, presencePromise]);
       return errorResponse('internal', `room finish update failed: ${winErr.message}`, 500);
     }
     isWinner = claimed?.winner_player_id === userId;
@@ -399,7 +412,7 @@ Deno.serve(async (req) => {
       .select('id')
       .maybeSingle();
     if (winErr) {
-      await progressPromise;
+      await Promise.all([progressPromise, presencePromise]);
       return errorResponse('internal', `room finish update failed: ${winErr.message}`, 500);
     }
     isSharedWin = !!claimed;
@@ -434,7 +447,7 @@ Deno.serve(async (req) => {
     if (cErr) console.error('player_completions upsert failed', cErr);
   }
 
-  await progressPromise;
+  await Promise.all([progressPromise, presencePromise]);
 
   // Per-move autocheck — fill cell_correct on value moves when autoCheck is on.
   const settings = normalizeSettings(room.settings);

@@ -17,6 +17,29 @@ Format:
 
 ---
 
+## 0050 — Confirmed lobby presence for mobile in-app browser joins
+**Date:** 2026-06-27
+**Status:** Accepted and implemented in branch; migration `0026` plus `confirm-room-presence`, `start-game`, `submit-move`, `create-room`, and web changes need backend/web deploy.
+
+**Context.** Mobile invite links often open first inside an app-owned browser before the user reopens the link in their real iOS browser. Because anonymous Supabase sessions are scoped to browser storage, those two contexts can become two different `auth.uid()` values. Before this decision, `/r/{code}` called `join-room` on mount, `join-room` immediately inserted a durable `room_players` row, and the lobby rendered every `room_players` row. A transient app-browser visit could therefore appear to hosts as an extra anonymous player and could even satisfy Battle's two-player Start gate.
+
+**Decision.** Keep `room_players` as the durable membership table, but add a separate confirmed-presence signal for lobby visibility and Start eligibility. Migration `0026_room_player_lobby_presence.sql` adds nullable `room_players.lobby_confirmed_at` and `last_seen_at`; existing rows are backfilled as confirmed. Hosts created by `create-room` are confirmed immediately. New joiners still get a durable seat right away for rejoin/RLS/late-join correctness, but the web client waits 5 seconds while visible before calling the new `confirm-room-presence` Edge Function. After confirmation, the client heartbeats every 15 seconds while visible.
+
+Lobby UI hides unconfirmed rows from everyone except the row's own browser, so the joining user still sees themselves during the short wait but hosts do not see transient app-browser hops. `start-game` prunes stale unconfirmed non-host rows older than 2 minutes and counts only confirmed rows for Battle's minimum-player gate and `has_returned` readiness. `join-room` also opportunistically prunes stale unconfirmed lobby rows before enforcing the 8-player cap. `submit-move` marks the caller confirmed, so a real late joiner who starts playing becomes visible even if the delayed confirmation call has not fired yet.
+
+**Alternatives considered.**
+- Delete quick leavers from `room_players` on unload/blur. Rejected because mobile unload is unreliable and `room_players` is also the durable anchor for rejoin, moves/RLS, host status, late joins, kick behavior, and play-again.
+- Use Supabase Realtime Presence only. Deferred for cursors/online state; Start gating and cleanup need a durable server-visible signal, and the current app already depends on `room_players` broadcasts.
+- Reuse `has_returned`. Rejected because it means "ready for the next round after finishing," not "currently confirmed in the lobby." Combining the concepts would break the play-again lifecycle.
+
+**Consequences.**
+- New deploy order: apply migration `0026`, then deploy `confirm-room-presence`, `create-room`, `join-room`, `start-game`, and `submit-move`; web can then deploy normally through Vercel.
+- Existing rooms remain visible after migration because existing `room_players` rows are backfilled with `lobby_confirmed_at = joined_at`.
+- Unconfirmed rows may remain briefly in the database, but they are hidden, do not count for Start, and are pruned on later joins/starts. A future scheduled cleanup can remove old private warmed rooms and stale unconfirmed rows more broadly.
+- Confirmed players remain durable participants during task switching and after the game starts; this change only suppresses never-confirmed transient joins.
+
+---
+
 ## 0049 — Warm multiplayer rooms and late joins in both modes
 **Date:** 2026-06-27
 **Status:** Accepted and implemented; `join-room` Edge Function deployed.

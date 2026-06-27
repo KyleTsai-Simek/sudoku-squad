@@ -21,6 +21,12 @@ entrypoint = "./functions/join-room/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/join-room/*.html" ]
 
+[functions.confirm-room-presence]
+enabled = true
+verify_jwt = true
+import_map = "./functions/confirm-room-presence/deno.json"
+entrypoint = "./functions/confirm-room-presence/index.ts"
+
 [functions.start-game]
 enabled = true
 verify_jwt = true

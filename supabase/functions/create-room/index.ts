@@ -135,12 +135,15 @@ Deno.serve(async (req) => {
 
   // Insert the host as the first room_player.
   const color = nextColor([]);
+  const now = new Date().toISOString();
   const { error: playerErr } = await admin.from('room_players').insert({
     room_id: roomId,
     player_id: userId,
     username,
     color,
     is_host: true,
+    lobby_confirmed_at: now,
+    last_seen_at: now,
   });
   if (playerErr) {
     // Roll back the room so we don't leave it dangling.

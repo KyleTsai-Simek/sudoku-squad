@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   changeDifficulty,
   changeMode,
+  confirmRoomPresence,
   fetchPuzzleDifficulty,
   fetchRoom,
   fetchRoomPlayers,
@@ -111,6 +112,16 @@ export function LobbyClient({ code }: { code: string }) {
       void refreshRoom();
     }
 
+    async function confirmPresence() {
+      if (document.visibilityState !== 'visible') return;
+      const res = await confirmRoomPresence(roomId);
+      if (!res.ok) {
+        console.error('confirmRoomPresence failed', res.error);
+        return;
+      }
+      await refreshPlayers();
+    }
+
     let unsubPlayers: (() => void) | null = null;
     let unsubRoom: (() => void) | null = null;
     (async () => {
@@ -127,9 +138,19 @@ export function LobbyClient({ code }: { code: string }) {
     // Backgrounded tabs throttle WebSockets and miss events; refetch on
     // return-to-visible.
     const onVis = () => {
-      if (document.visibilityState === 'visible') refreshBoth();
+      if (document.visibilityState === 'visible') {
+        refreshBoth();
+        void confirmPresence();
+      }
     };
     document.addEventListener('visibilitychange', onVis);
+
+    const confirmTimeoutId = window.setTimeout(() => {
+      void confirmPresence();
+    }, 5000);
+    const heartbeatId = window.setInterval(() => {
+      void confirmPresence();
+    }, 15000);
 
     // Safety-net poll. Realtime is the primary path; this catches a silently
     // wedged channel that never reports a reconnect (the worst case for "I'm
@@ -140,6 +161,8 @@ export function LobbyClient({ code }: { code: string }) {
     return () => {
       cancelled = true;
       document.removeEventListener('visibilitychange', onVis);
+      window.clearTimeout(confirmTimeoutId);
+      window.clearInterval(heartbeatId);
       window.clearInterval(pollId);
       unsubPlayers?.();
       unsubRoom?.();
@@ -296,6 +319,9 @@ export function LobbyClient({ code }: { code: string }) {
   const winnerPlayerId = roomRow?.winner_player_id ?? null;
 
   const settings = roomRow?.settings ?? DEFAULT_ROOM_SETTINGS;
+  const visiblePlayers = players.filter(
+    (p) => p.lobby_confirmed_at !== null || p.player_id === room.own_player_id,
+  );
 
   if ((status === 'playing' || status === 'finished') && liveRoom) {
     // CRITICAL: pass `liveRoom`, not `room`. The phase.room snapshot from
@@ -309,7 +335,7 @@ export function LobbyClient({ code }: { code: string }) {
       return (
         <CoopGame
           room={liveRoom}
-          players={players}
+          players={visiblePlayers}
           settings={settings}
           serverStartedAt={roomRow?.started_at ?? null}
           finished={status === 'finished'}
@@ -319,7 +345,7 @@ export function LobbyClient({ code }: { code: string }) {
     return (
       <BattleGame
         room={liveRoom}
-        players={players}
+        players={visiblePlayers}
         settings={settings}
         serverStartedAt={roomRow?.started_at ?? null}
         winnerPlayerId={status === 'finished' ? winnerPlayerId : null}
@@ -331,10 +357,10 @@ export function LobbyClient({ code }: { code: string }) {
   // Battle needs at least 2 players (a race against yourself is silly); coop
   // can start solo and pick up friends mid-game (#0024). Use liveMode so
   // toggling mode in the lobby immediately updates the player-count gate.
-  const enoughPlayers = liveMode === 'battle' ? players.length >= 2 : players.length >= 1;
-  const stragglers = players.filter((p) => !p.has_returned);
+  const enoughPlayers = liveMode === 'battle' ? visiblePlayers.length >= 2 : visiblePlayers.length >= 1;
+  const stragglers = visiblePlayers.filter((p) => !p.has_returned);
   const allReady = stragglers.length === 0;
-  const otherHost = players.find((p) => p.is_host && p.player_id !== room.own_player_id);
+  const otherHost = visiblePlayers.find((p) => p.is_host && p.player_id !== room.own_player_id);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center gap-8 px-6 py-4">
@@ -369,13 +395,13 @@ export function LobbyClient({ code }: { code: string }) {
 
       <section className="w-full">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
-          Players ({players.length}/8)
+          Players ({visiblePlayers.length}/8)
         </h2>
         <ul className="flex flex-col gap-2">
-          {players.length === 0 ? (
+          {visiblePlayers.length === 0 ? (
             <li className="text-sm text-muted">Loading…</li>
           ) : null}
-          {players.map((p) => {
+          {visiblePlayers.map((p) => {
             const isYou = p.player_id === room.own_player_id;
             return (
               <li

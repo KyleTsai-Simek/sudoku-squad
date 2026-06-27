@@ -131,7 +131,7 @@ Optional email sign-in, layered on top of anonymous play:
 ## Room lifecycle
 
 1. **Create.** Host clicks "Battle" or "Coop" → server creates a `room` with a short code, redirects to `/r/{code}`.
-2. **Lobby.** Host sees the share link. As other players join via link, they appear in the lobby with their username + color. Host clicks **Start** when ready.
+2. **Lobby.** Host sees the share link. New joiners get a durable seat immediately, but they appear to other players only after staying visible in the room for a few seconds. This filters out mobile in-app browser hops before the user opens the link in their real browser. The joining user still sees their own row while waiting. Host clicks **Start** when ready; Battle's two-player gate counts confirmed visible players only.
 3. **Playing.** Game timer starts. Realtime channel active.
 4. **Finishing.**
    - Battle: first player to complete legally wins. Channel announces; everyone else's game ends with "X won." Losers can keep solving if they want (low-priority feature; defer if needed).
@@ -142,9 +142,10 @@ Optional email sign-in, layered on top of anonymous play:
 
 ## Connection / disconnect handling
 
-- If a player drops connection mid-game, their seat is held for 60 seconds; their cursor disappears but their inputs so far remain.
-- If they rejoin within 60s, they pick up where they left off.
-- If they don't, in battle the game continues without them. In coop, the game continues — their seat is freed up.
+- Durable room membership is separate from confirmed lobby presence. A brand-new joiner is hidden from other players until they stay visible for about 5 seconds; after confirmation, they remain a room participant through normal task switching.
+- If a player drops connection mid-game, their durable seat and inputs so far remain. Battle and coop both support returning through the room URL; late joins after Start continue to work.
+- A confirmed player who comes back after the game has started rejoins the game surface and can continue participating.
+- Never-confirmed lobby rows are ignored for Start and can be pruned after a short stale window.
 - Host migration: if the original host leaves, the longest-tenured remaining player becomes host. **OPEN**: should host migration require explicit acknowledgement?
 
 ---

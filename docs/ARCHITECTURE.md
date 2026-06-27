@@ -88,9 +88,10 @@ sudoku-squad/
                           # preflight-3m (source scan), audit-difficulty
                           # (live DB audit), check-connectivity
   supabase/
-    migrations/           # 0001..0025 applied to live project
-    functions/            # Edge Functions: create-room, join-room, start-game,
-                          # submit-move, change-difficulty, change-mode,
+    migrations/           # 0001..0026 (0026 pending deploy until STATUS says live)
+    functions/            # Edge Functions: create-room, join-room,
+                          # confirm-room-presence, start-game, submit-move,
+                          # change-difficulty, change-mode,
                           # claim-username, kick-player, update-room-settings,
                           # return-to-lobby
   docs/                   # STATUS, GOALS_AND_SCOPE, ARCHITECTURE, ROADMAP,
@@ -110,7 +111,7 @@ sudoku-squad/
 
 ## 4. Data model (Supabase / Postgres)
 
-Live SQL is in `supabase/migrations/`. Tables below reflect the in-repo schema through migration 0022, applied to the linked Supabase project.
+Live SQL is in `supabase/migrations/`. Tables below reflect the in-repo schema through migration 0026. Migration 0026 adds confirmed lobby-presence fields and is pending deploy until STATUS says it is live.
 
 ### `puzzles`
 Pre-generated puzzles. Immutable once ingested. **15,000 rows** live across **six tiers** (five visible, one hidden): 2,500 each in easy / medium / hard / expert / extreme / killer after the [#0047](DECISIONS.md) label shift. The whole bank is now QQWing-generated after [#0042](DECISIONS.md): easy/medium use the original high-clue naked-singles pipeline ([#0033](DECISIONS.md)); hard/expert/extreme/killer use QQWing difficulty class + technique counts and carry typed QQWing metadata columns (migration 0016). Migration 0017 removed the old Kaggle-sourced upper tiers.
@@ -177,7 +178,11 @@ A player's membership in a room. Anonymous; identified by `(room_id, player_id)`
 | `is_host` | boolean | |
 | `progress_pct` | smallint | Cached % of non-given cells the player has *filled* (right or wrong). Updated by `submit-move`. Doesn't leak correctness — for that, the host enables `settings.autoCheck` and clients flag wrong cells from the per-move `cell_correct` response. Reset to 0 on each new round. |
 | `has_returned` | boolean default true | Used by the return-to-lobby cycle ([#0030](DECISIONS.md)). Flipped to false when the room transitions `playing → finished`; flipped back to true when the player clicks "Return to lobby". The next-round Start blocks until all surviving members are `true`. |
+| `lobby_confirmed_at` | timestamptz nullable | Set once a client remains visible in the room long enough to count as a real participant ([#0050](DECISIONS.md)). Unconfirmed rows are hidden from other lobby users and do not count for Start. Hosts are confirmed on create; gameplay submissions also confirm the caller. |
+| `last_seen_at` | timestamptz nullable | Best-effort heartbeat timestamp updated by `confirm-room-presence` and `submit-move`; reserved for disconnect grace/stale-row cleanup. |
 | PK | (`room_id`, `player_id`) | |
+
+`room_players` is durable membership, not pure online presence. Lobby visibility and Battle's Start gate use confirmed rows (`lobby_confirmed_at is not null`) so temporary mobile in-app browser joins do not appear as real participants. The own client may render its unconfirmed row locally during the short confirmation delay.
 
 ### `moves`
 The append-only log of player actions. This is the durable record; clients reconstruct state by replaying or applying snapshots.
