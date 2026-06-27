@@ -54,7 +54,23 @@ export function CalendarIcon(props: IconProps) {
 }
 
 export function PlayIcon(props: IconProps) {
-  return <Icon {...props} path="M320-200v-560l440 280-440 280Z" />;
+  const { className, size = 24 } = props;
+  return (
+    <svg
+      viewBox="0 -960 960 960"
+      width={size}
+      height={size}
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80ZM400-320v-320l240 160-240 160Z"
+      />
+    </svg>
+  );
 }
 
 export function JoinIcon(props: IconProps) {

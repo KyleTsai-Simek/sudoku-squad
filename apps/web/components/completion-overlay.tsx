@@ -6,6 +6,7 @@ import { useGameStore } from '@/lib/game-store';
 import { pickRandomUnsolved } from '@/lib/pick-puzzle';
 import { fireWinConfetti } from '@/lib/confetti';
 import { difficultyLabel } from '@/lib/difficulty-labels';
+import { DailyPuzzleRow, type DailyCompletionOverride } from '@/components/daily-puzzle-row';
 
 function formatElapsed(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -30,6 +31,14 @@ export function CompletionOverlay() {
 
   if (finishedAt === null || startedAt === null) return null;
   const elapsed = finishedAt - startedAt;
+  const completedDaily: DailyCompletionOverride | undefined = puzzle?.daily
+    ? {
+        date: puzzle.daily.date,
+        difficulty: puzzle.daily.difficulty,
+        code: puzzle.code,
+        solveTimeMs: elapsed,
+      }
+    : undefined;
 
   async function onPlayAnother() {
     if (!puzzle) return;
@@ -57,16 +66,19 @@ export function CompletionOverlay() {
           {hintsUsed > 0 ? ` · ${hintsUsed} hint${hintsUsed === 1 ? '' : 's'}` : ''}
         </p>
         <div className="mt-6 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={onPlayAnother}
-            disabled={loadingNext}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
-          >
-            {loadingNext
-              ? 'Loading…'
-              : `Play another ${puzzle ? difficultyLabel(puzzle.difficulty) : ''}`}
-          </button>
+          {completedDaily ? <DailyPuzzleRow completedOverride={completedDaily} /> : null}
+          {!completedDaily ? (
+            <button
+              type="button"
+              onClick={onPlayAnother}
+              disabled={loadingNext}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
+            >
+              {loadingNext
+                ? 'Loading…'
+                : `Play another ${puzzle ? difficultyLabel(puzzle.difficulty) : ''}`}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => router.push('/')}

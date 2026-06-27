@@ -181,6 +181,7 @@ Same Easy / Medium / Hard puzzle for every player each Pacific day, with daily s
 - [x] Migration `0020` — `daily_puzzles`, `player_daily_completions`, `player_completions.solve_time_ms`, Pacific-day helper, lazy assignment RPC, and daily-aware SP completion RPC.
 - [x] Web `/daily` route with Easy / Medium / Hard cards.
 - [x] Home Daily Puzzles row with Easy / Medium / Hard, completion checkmark/time, and one-primary-CTA hierarchy.
+- [x] Reuse the Daily Puzzles row in the daily completion modal, with completed buttons showing today's solved count plus solve time and the next unsolved daily promoted as primary.
 - [x] Quick Play "Start a game" button routes to the previous Single-player / Co-op / Battle menu.
 - [x] Single-player completion recording includes elapsed time and daily metadata.
 - [x] `merge-progress` unions daily completion rows during anonymous → saved-account merges.

@@ -11,18 +11,17 @@ import {
   getCompletionLeaderboard,
   type LeaderboardEntry,
 } from '@/lib/leaderboard';
-import {
-  getDailyCompletions,
-  getDailyPuzzles,
-  type DailyCompletion,
-  type DailyDifficulty,
-  type DailyPuzzle,
-} from '@/lib/daily-puzzles';
 import { joinRoom, type RoomMode } from '@/lib/rooms';
 import { consumePreloadedRoom, preloadMultiplayerRooms } from '@/lib/preloaded-rooms';
 import { getUsername } from '@/lib/username';
 import { useAuthStore } from '@/lib/auth-store';
 import { AppHeader } from '@/components/app-header';
+import {
+  DailyPuzzleRow,
+  formatPacificMonthDay,
+  nextDailyDifficulty,
+  useDailyPuzzleState,
+} from '@/components/daily-puzzle-row';
 import {
   CalendarIcon,
   JoinIcon,
@@ -42,8 +41,6 @@ interface TierState {
  *  after the label shift. */
 const MP_DEFAULT_DIFFICULTY: Difficulty = 'hard';
 
-const DAILY_DIFFICULTIES: DailyDifficulty[] = ['easy', 'medium', 'hard'];
-
 type View = { kind: 'home' } | { kind: 'quickplay' } | { kind: 'sp' };
 
 export function HomeClient() {
@@ -56,10 +53,7 @@ export function HomeClient() {
   const [joinPending, setJoinPending] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [completed, setCompleted] = useState<number | null>(null);
-  const [dailyPuzzles, setDailyPuzzles] = useState<DailyPuzzle[] | null>(null);
-  const [dailyCompletions, setDailyCompletions] = useState<
-    Partial<Record<DailyDifficulty, DailyCompletion>>
-  >({});
+  const dailyState = useDailyPuzzleState();
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[] | null | undefined>(
     undefined,
   );
@@ -104,30 +98,6 @@ export function HomeClient() {
     };
   }, [userId, completed]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const puzzles = await getDailyPuzzles();
-      if (cancelled) return;
-      setDailyPuzzles(puzzles);
-      const date = puzzles[0]?.date;
-      if (!date) {
-        setDailyCompletions({});
-        return;
-      }
-      const completions = await getDailyCompletions(date);
-      if (cancelled) return;
-      const byDifficulty: Partial<Record<DailyDifficulty, DailyCompletion>> = {};
-      for (const completion of completions) {
-        byDifficulty[completion.difficulty] = completion;
-      }
-      setDailyCompletions(byDifficulty);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
-
   async function startSolo(tier: Difficulty) {
     setLoadingSolo(tier);
     const code = await pickRandomUnsolved(tier);
@@ -162,13 +132,9 @@ export function HomeClient() {
     setJoinError(roomErrorMessage(res.error.code, res.error.message));
   }
 
-  const dailyByDifficulty = dailyPuzzles
-    ? Object.fromEntries(dailyPuzzles.map((puzzle) => [puzzle.difficulty, puzzle])) as
-        Partial<Record<DailyDifficulty, DailyPuzzle>>
-    : {};
-  const dailyHeading = `${formatPacificMonthDay(dailyPuzzles?.[0]?.date)} Daily Puzzles`;
-  const primaryDaily = DAILY_DIFFICULTIES.find((difficulty) => !dailyCompletions[difficulty]);
-  const quickPlayPrimary = dailyPuzzles !== null && !primaryDaily;
+  const dailyHeading = `${formatPacificMonthDay(dailyState.puzzles?.[0]?.date)} Daily Puzzles`;
+  const primaryDaily = nextDailyDifficulty(dailyState);
+  const quickPlayPrimary = dailyState.puzzles !== null && !primaryDaily;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-6 px-6 py-4">
@@ -181,21 +147,7 @@ export function HomeClient() {
         <>
           <div className="flex w-full flex-col gap-2 pt-1">
             <SectionHeader icon={CalendarIcon} title={dailyHeading} />
-            <div className="grid w-full grid-cols-3 gap-2">
-              {DAILY_DIFFICULTIES.map((difficulty) => {
-                const puzzle = dailyByDifficulty[difficulty];
-                const completion = dailyCompletions[difficulty];
-                return (
-                  <DailyButton
-                    key={difficulty}
-                    difficulty={difficulty}
-                    puzzle={puzzle}
-                    completion={completion}
-                    primary={primaryDaily === difficulty}
-                  />
-                );
-              })}
-            </div>
+            <DailyPuzzleRow state={dailyState} />
           </div>
 
           <div className="flex w-full flex-col gap-2 pt-1">
@@ -278,7 +230,7 @@ export function HomeClient() {
       )}
 
       {view.kind === 'sp' && (
-        <div className="flex w-full flex-col gap-3">
+        <div className="flex w-full flex-col gap-2">
           <BackRow onBack={() => setView({ kind: 'quickplay' })} label="Single-player" />
           {VISIBLE_DIFFICULTIES.map((tier) => {
             const t = counts?.[tier];
@@ -305,8 +257,8 @@ export function HomeClient() {
                 }
                 className={
                   empty
-                    ? 'flex min-h-20 cursor-not-allowed items-center justify-center rounded-xl border border-dashed border-border px-3 py-3 text-center text-sm font-semibold uppercase tracking-widest text-muted'
-                    : actionClassName({ primary: true, compact: true })
+                    ? 'flex min-h-14 cursor-not-allowed items-center justify-center rounded-xl border border-dashed border-border px-3 py-2 text-center text-sm font-semibold uppercase tracking-widest text-muted'
+                    : difficultyButtonClassName
                 }
               >
                 {label}
@@ -318,6 +270,9 @@ export function HomeClient() {
     </main>
   );
 }
+
+const difficultyButtonClassName =
+  'flex min-h-14 items-center justify-center rounded-xl border border-primary-border bg-primary-muted px-3 py-2 text-center text-sm font-semibold uppercase tracking-widest text-foreground transition-colors hover:bg-primary-soft disabled:opacity-60';
 
 function CompletionLeaderboard({
   entries,
@@ -446,49 +401,6 @@ function ModeButton({
   );
 }
 
-function DailyButton({
-  difficulty,
-  puzzle,
-  completion,
-  primary,
-}: {
-  difficulty: DailyDifficulty;
-  puzzle?: DailyPuzzle;
-  completion?: DailyCompletion;
-  primary: boolean;
-}) {
-  const href = puzzle
-    ? `/play/${puzzle.code}?daily=${puzzle.date}&dailyDifficulty=${puzzle.difficulty}`
-    : '/daily';
-  const label = DIFFICULTY_LABEL[difficulty];
-  const content = (
-    <>
-      {completion ? (
-        <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-success text-[0.7rem] font-bold leading-none text-primary-foreground">
-          ✓
-        </span>
-      ) : null}
-      <span className={completion ? 'text-xs font-semibold uppercase tracking-widest' : 'text-sm font-semibold uppercase tracking-widest'}>
-        {label}
-      </span>
-      {completion ? (
-        <span className="min-h-[1rem] text-xs font-medium">
-          {formatElapsed(completion.solveTimeMs)}
-        </span>
-      ) : null}
-    </>
-  );
-  const className = completion
-    ? 'relative flex min-h-20 flex-col items-start justify-end gap-1 rounded-lg border border-success bg-success-soft px-3 py-3 text-left text-success-foreground transition-colors hover:bg-complete-strong'
-    : actionClassName({ primary, compact: true });
-
-  return (
-    <a href={href} className={className}>
-      {content}
-    </a>
-  );
-}
-
 function actionClassName({
   primary,
   compact = false,
@@ -507,31 +419,6 @@ function actionClassName({
     return `${layout} border-primary bg-primary text-primary-foreground hover:bg-primary-hover`;
   }
   return `${layout} border-primary-border bg-primary-muted text-foreground hover:bg-primary-soft`;
-}
-
-function formatElapsed(ms: number | null): string {
-  if (ms === null) return 'Solved';
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes === 0) return `${seconds}s`;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-}
-
-function formatPacificMonthDay(date?: string): string {
-  const parsed = parsePacificDate(date);
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'long',
-    day: 'numeric',
-    timeZone: 'America/Los_Angeles',
-  }).format(parsed);
-}
-
-function parsePacificDate(date?: string): Date {
-  if (!date) return new Date();
-  const [year, month, day] = date.split('-').map(Number);
-  if (!year || !month || !day) return new Date();
-  return new Date(Date.UTC(year, month - 1, day, 12));
 }
 
 function BackRow({ onBack, label }: { onBack: () => void; label: string }) {
