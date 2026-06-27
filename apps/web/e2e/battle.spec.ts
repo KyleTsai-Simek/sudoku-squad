@@ -33,6 +33,7 @@ test.skip(!!process.env.CI, 'battle smoke requires live Supabase — skipping in
  */
 
 const ROOM_CODE_RE = /\/r\/([a-z0-9]{6})/;
+const LOBBY_SYNC_TIMEOUT = 20_000;
 
 async function createBattleRoom(page: import('@playwright/test').Page): Promise<string> {
   await page.goto('/');
@@ -59,8 +60,8 @@ test('battle: create + join + start + sync', async ({ browser }) => {
     await pageB.waitForURL(new RegExp(`/r/${code}`), { timeout: 15000 });
 
     // Lobby sync: both see the (2/8) player count via Realtime broadcast.
-    await expect(pageA.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: 10000 });
-    await expect(pageB.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: 10000 });
+    await expect(pageA.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: LOBBY_SYNC_TIMEOUT });
+    await expect(pageB.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: LOBBY_SYNC_TIMEOUT });
 
     // A (host) starts the game. Two Start controls exist (inline + FAB);
     // target the inline one by its exact label.
@@ -145,7 +146,7 @@ test('battle: reload mid-game restores own board + progress', async ({ browser }
 
     await pageB.goto(`/r/${code}`);
     await pageB.waitForURL(new RegExp(`/r/${code}`), { timeout: 15000 });
-    await expect(pageA.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: 10000 });
+    await expect(pageA.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: LOBBY_SYNC_TIMEOUT });
 
     await pageA.getByRole('button', { name: 'Start battle', exact: true }).click();
     await pageA.getByRole('grid', { name: 'Sudoku board' }).waitFor({ timeout: 15000 });
@@ -243,7 +244,7 @@ test('battle: late joiner enters an already-started game', async ({ browser }) =
 
     await pageB.goto(`/r/${code}`);
     await pageB.waitForURL(new RegExp(`/r/${code}`), { timeout: 15000 });
-    await expect(pageA.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: 10000 });
+    await expect(pageA.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: LOBBY_SYNC_TIMEOUT });
 
     await pageA.getByRole('button', { name: 'Start battle', exact: true }).click();
     await pageA.getByRole('grid', { name: 'Sudoku board' }).waitFor({ timeout: 15000 });

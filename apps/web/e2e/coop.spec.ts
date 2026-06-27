@@ -28,6 +28,7 @@ test.skip(!!process.env.CI, 'coop smoke requires live Supabase — skipping in C
 test.setTimeout(120_000);
 
 const SYNC = 20_000; // per cross-client wait
+const LOBBY_SYNC_TIMEOUT = 20_000;
 const ROOM_CODE_RE = /\/r\/([a-z0-9]{6})/;
 
 async function createCoopRoom(page: import('@playwright/test').Page): Promise<string> {
@@ -78,8 +79,8 @@ test('coop: shared board syncs + undo restores auto-cleared peer notes', async (
     await pageB.waitForURL(new RegExp(`/r/${code}`), { timeout: 15000 });
 
     // Lobby sync: both see (2/8) via Realtime.
-    await expect(pageA.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: 10000 });
-    await expect(pageB.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: 10000 });
+    await expect(pageA.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: LOBBY_SYNC_TIMEOUT });
+    await expect(pageB.getByText(/\(2\s*\/\s*8\)/)).toBeVisible({ timeout: LOBBY_SYNC_TIMEOUT });
 
     // A (host) starts co-op. Both route from LobbyClient to CoopGame.
     await pageA.getByRole('button', { name: 'Start co-op', exact: true }).click();

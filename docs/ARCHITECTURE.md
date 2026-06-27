@@ -88,7 +88,7 @@ sudoku-squad/
                           # preflight-3m (source scan), audit-difficulty
                           # (live DB audit), check-connectivity
   supabase/
-    migrations/           # 0001..0026 (0026 pending deploy until STATUS says live)
+    migrations/           # 0001..0026 applied to live project
     functions/            # Edge Functions: create-room, join-room,
                           # confirm-room-presence, start-game, submit-move,
                           # change-difficulty, change-mode,
@@ -111,7 +111,7 @@ sudoku-squad/
 
 ## 4. Data model (Supabase / Postgres)
 
-Live SQL is in `supabase/migrations/`. Tables below reflect the in-repo schema through migration 0026. Migration 0026 adds confirmed lobby-presence fields and is pending deploy until STATUS says it is live.
+Live SQL is in `supabase/migrations/`. Tables below reflect the in-repo schema through migration 0026, applied to the linked Supabase project.
 
 ### `puzzles`
 Pre-generated puzzles. Immutable once ingested. **15,000 rows** live across **six tiers** (five visible, one hidden): 2,500 each in easy / medium / hard / expert / extreme / killer after the [#0047](DECISIONS.md) label shift. The whole bank is now QQWing-generated after [#0042](DECISIONS.md): easy/medium use the original high-clue naked-singles pipeline ([#0033](DECISIONS.md)); hard/expert/extreme/killer use QQWing difficulty class + technique counts and carry typed QQWing metadata columns (migration 0016). Migration 0017 removed the old Kaggle-sourced upper tiers.
