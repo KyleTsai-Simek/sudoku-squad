@@ -40,7 +40,7 @@ const TOGGLES: Toggle[] = [
 ];
 
 const checkboxClassName =
-  'h-5 w-5 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40';
+  'h-5 w-5 cursor-pointer accent-primary-soft disabled:cursor-not-allowed disabled:opacity-40';
 
 export function LobbySettingsPanel({
   roomId,

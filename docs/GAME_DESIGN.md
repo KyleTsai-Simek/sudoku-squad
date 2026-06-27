@@ -133,7 +133,7 @@ Optional email sign-in, layered on top of anonymous play:
 
 1. **Create.** Host clicks "Battle" or "Coop" → server creates a `room` with a short code, redirects to `/r/{code}`.
 2. **Lobby.** Host sees the share link. New joiners get a durable seat immediately, but they appear to other players only after staying visible in the room for a few seconds. This filters out mobile in-app browser hops before the user opens the link in their real browser. The joining user still sees their own row while waiting. Host clicks **Start** when ready; Battle's two-player gate counts confirmed visible players only.
-   Lobby mode and difficulty selectors use a medium-blue treatment so the Start buttons remain the only primary-blue CTAs.
+   Lobby mode and difficulty selectors use white buttons with blue outlines when unselected and light-blue fills when selected, so Start remains the only primary-blue CTA.
 3. **Playing.** Game timer starts. Realtime channel active.
 4. **Finishing.**
    - Battle: first player to complete legally wins. Channel announces; everyone else's game ends with "X won." Losers can keep solving if they want (low-priority feature; defer if needed).
