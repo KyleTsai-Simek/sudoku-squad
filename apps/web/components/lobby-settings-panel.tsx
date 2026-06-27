@@ -39,6 +39,9 @@ const TOGGLES: Toggle[] = [
   },
 ];
 
+const checkboxClassName =
+  'h-5 w-5 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-40';
+
 export function LobbySettingsPanel({
   roomId,
   settings,
@@ -127,7 +130,7 @@ export function LobbySettingsPanel({
               checked={displayedPublic}
               disabled={disabled}
               onChange={(e) => onTogglePublic(e.target.checked)}
-              className="h-5 w-5 cursor-pointer accent-warning disabled:cursor-not-allowed disabled:opacity-40"
+              className={checkboxClassName}
             />
           </label>
         </li>
@@ -148,7 +151,7 @@ export function LobbySettingsPanel({
                   checked={displayed}
                   disabled={disabled}
                   onChange={(e) => onToggle(t.key, e.target.checked)}
-                  className="h-5 w-5 cursor-pointer accent-warning disabled:cursor-not-allowed disabled:opacity-40"
+                  className={checkboxClassName}
                 />
               </label>
             </li>
