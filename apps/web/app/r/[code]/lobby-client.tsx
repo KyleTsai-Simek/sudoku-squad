@@ -40,9 +40,9 @@ function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
 }
 
-const lobbySelectorSelectedClassName = 'border-primary-border bg-primary-soft text-foreground';
+const lobbySelectorSelectedClassName = 'border-primary-soft bg-primary-soft text-foreground';
 const lobbySelectorIdleClassName =
-  'border-primary-border bg-surface text-foreground hover:border-primary hover:bg-primary-muted';
+  'border-primary-muted bg-primary-muted text-foreground hover:border-primary-soft hover:bg-primary-soft';
 
 export function LobbyClient({ code }: { code: string }) {
   const router = useRouter();
