@@ -1,7 +1,7 @@
 # End-game share links + OG images plan
 
 **Date:** 2026-06-29  
-**Status:** Implemented locally; external unfurl validation remains.
+**Status:** Implemented; external unfurl validation remains.
 
 ## Goal
 
