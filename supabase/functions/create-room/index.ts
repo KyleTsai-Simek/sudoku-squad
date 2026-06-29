@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
       'expected { mode: "battle"|"coop", difficulty: "easy"|"medium"|"hard"|"expert"|"extreme", username: 1..20 chars }',
     );
   }
-  const { mode, difficulty, username, is_public = false } = parsed;
+  const { mode, difficulty, username, is_public = true } = parsed;
 
   const admin = serviceClient();
 

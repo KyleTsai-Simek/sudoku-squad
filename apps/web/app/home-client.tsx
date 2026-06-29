@@ -110,6 +110,7 @@ export function HomeClient() {
     const res = await consumePreloadedRoom(mode, MP_DEFAULT_DIFFICULTY);
     setLoadingMp(null);
     if (res.ok) {
+      markLobbyCreated(res.value.room_code);
       router.push(`/r/${res.value.room_code}`);
     } else {
       alert(`Could not start ${mode}: ${res.error.message}`);
@@ -277,6 +278,13 @@ export function HomeClient() {
       )}
     </main>
   );
+}
+
+function markLobbyCreated(roomCode: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(`sudoku-squad:lobby-created:${roomCode}`, '1');
+  } catch {}
 }
 
 const difficultyButtonClassName =

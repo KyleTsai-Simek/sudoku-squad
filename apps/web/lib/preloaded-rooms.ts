@@ -1,7 +1,13 @@
 'use client';
 
 import type { Difficulty } from '@sudoku-squad/core';
-import { createRoom, type RoomMode, type RoomState, type RoomError } from './rooms';
+import {
+  createRoom,
+  updateRoomSettings,
+  type RoomMode,
+  type RoomState,
+  type RoomError,
+} from './rooms';
 import { getUsername } from './username';
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: RoomError };
@@ -50,7 +56,25 @@ export async function consumePreloadedRoom(
   if (existing?.difficulty === difficulty) {
     warmRooms.delete(mode);
     const warmed = await existing.promise;
-    if (warmed.ok) return warmed;
+    if (warmed.ok) {
+      const published = await updateRoomSettings({
+        room_id: warmed.value.room_id,
+        is_public: true,
+      });
+      if (!published.ok) return published;
+      return warmed;
+    }
   }
-  return createPrivateRoom(mode, difficulty);
+  try {
+    const username = await getUsername();
+    return await createRoom({ mode, difficulty, username, is_public: true });
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        code: 'internal',
+        message: error instanceof Error ? error.message : 'Could not create room',
+      },
+    };
+  }
 }

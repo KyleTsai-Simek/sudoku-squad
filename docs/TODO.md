@@ -213,6 +213,18 @@ Shareable result links from end-game modals, with result-aware text and dynamic 
 - [x] Refresh the OG image and landing page: larger Sudoku Squad / Try this puzzle text, no mode label, daily-aware category, puzzle code, and a single white result area.
 - [x] Move the daily completion modal Share action below the daily row next to Back to menu, use the iOS share icon, and add the same Daily Puzzles header treatment as home.
 
+## Multiplayer lobby share links + defaults 🔄 Implemented; manual test pending
+
+Room invite links should feel like completion shares while still opening directly into the lobby at `/r/{code}`. See [DECISIONS #0053](DECISIONS.md).
+
+- [x] Make player-created lobbies public by default while keeping unused warm preloaded rooms private until consumed.
+- [x] Auto-copy `Tap this link to play sudoku with me!` plus the room URL when a creator lands in their lobby, and show a snackbar-style confirmation.
+- [x] Add the iOS share icon to the lobby copy button.
+- [x] Rename `Settings` to `Lobby Settings` and collapse it by default for hosts and non-hosts.
+- [x] Add room-route Open Graph metadata and a room OG image using the existing Sudoku Squad logo/board-card visual, with "Play sudoku with me" and "Join game" copy.
+- [x] Add `/share-preview` examples for lobby OG images.
+- [ ] Manual product test: create battle and co-op lobbies, confirm auto-copy/snackbar, public/private toggle, non-host read-only settings, direct join, and real link unfurls after deploy.
+
 ---
 
 ## Leaderboards 🔄 First completion board deployed

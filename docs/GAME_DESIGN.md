@@ -38,6 +38,13 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 - The recipient experience should be direct: open a short `/s/{puzzleCode}/{time}` share link, see a compact challenge/result page, then tap to play the same puzzle. Daily share links must preserve daily metadata so completing today's shared daily behaves like entering from the home Daily Puzzles row.
 - Tone and identity are settled for the first pass: anonymous shares with softer "Try this puzzle" copy, not username-based or competitive "Can you beat me?" copy. Local `/share-preview` supports iteration before external unfurl caches are involved. See [SHARE_LINKS_PLAN.md](SHARE_LINKS_PLAN.md).
 
+### Multiplayer lobby sharing 🔄 implemented locally; manual test pending
+- Battle and co-op lobby invite links use the existing short room URL shape, `/r/{code}`, and should open directly into the lobby join flow with no interstitial page.
+- Player-created lobbies are public by default. Hosts can uncheck Public lobby inside Lobby Settings to make a lobby private. Unused warmed preload rooms stay private until consumed so public browsing is not polluted by background preloads.
+- When the creator lands in the lobby, the app copies the invite payload to their clipboard and shows a snackbar confirmation. The copied text is: "Tap this link to play sudoku with me!" plus the room URL.
+- The lobby copy button uses the iOS share icon and copies the same payload.
+- Room links should unfurl with a lobby-specific Open Graph image: existing Sudoku Squad branding and puzzle preview, middle copy "Play sudoku with me", and bottom CTA "Join game". Local `/share-preview` includes direct lobby OG-image examples.
+
 ### Battle ✅ live (Phase 2)
 - 2–8 players, each with their own private copy of the same puzzle.
 - Each player sees their own board only. We do show a **progress bar per opponent** (% cells correctly filled) — enough social pressure without giving away their answers.
@@ -141,6 +148,7 @@ Optional email sign-in, layered on top of anonymous play:
 1. **Create.** Host clicks "Battle" or "Coop" → server creates a `room` with a short code, redirects to `/r/{code}`.
 2. **Lobby.** Host sees the share link. New joiners get a durable seat immediately, but they appear to other players only after staying visible in the room for a few seconds. This filters out mobile in-app browser hops before the user opens the link in their real browser. The joining user still sees their own row while waiting. Host clicks **Start** when ready; Battle's two-player gate counts confirmed visible players only.
    Lobby mode and difficulty selectors follow a tonal toggle pattern: faint-blue containers when unselected and a deeper light-blue selected container, so Start remains the only primary-blue CTA.
+   Lobby Settings are collapsed by default; hosts can expand them to change Public lobby, Show conflicts, Auto-check, and Highlight same value while the room is still in lobby, and non-hosts can expand them read-only.
 3. **Playing.** Game timer starts. Realtime channel active.
 4. **Finishing.**
    - Battle: first player to complete legally wins. Channel announces; everyone else's game ends with "X won." Losers can keep solving if they want (low-priority feature; defer if needed).

@@ -25,7 +25,9 @@ import type { Difficulty } from '@sudoku-squad/core';
 import { getUsername } from '@/lib/username';
 import { AppHeader } from '@/components/app-header';
 import { LobbySettingsPanel } from '@/components/lobby-settings-panel';
+import { IosShareIcon } from '@/components/material-icons';
 import { DEFAULT_ROOM_SETTINGS } from '@/lib/rooms';
+import { buildLobbyClipboardText } from '@/lib/lobby-share';
 import { playerColorStyle } from '@/lib/player-colors';
 import { difficultyLabel, VISIBLE_DIFFICULTIES } from '@/lib/difficulty-labels';
 import { BattleGame } from './battle-game';
@@ -49,7 +51,7 @@ export function LobbyClient({ code }: { code: string }) {
   const [phase, setPhase] = useState<Phase>({ kind: 'joining' });
   const [players, setPlayers] = useState<RoomPlayerProgress[]>([]);
   const [roomRow, setRoomRow] = useState<RoomRow | null>(null);
-  const [shareCopied, setShareCopied] = useState(false);
+  const [shareNotice, setShareNotice] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [startPending, setStartPending] = useState(false);
   const [currentDifficulty, setCurrentDifficulty] = useState<Difficulty | null>(null);
@@ -64,6 +66,11 @@ export function LobbyClient({ code }: { code: string }) {
   // against a pending change. Toggle buttons themselves stay enabled and
   // update immediately.
   const [pendingSync, setPendingSync] = useState(0);
+
+  const showShareNotice = useCallback((message: string) => {
+    setShareNotice(message);
+    window.setTimeout(() => setShareNotice(null), 2400);
+  }, []);
 
   // 1. Join (or rejoin) the room on mount.
   useEffect(() => {
@@ -245,15 +252,37 @@ export function LobbyClient({ code }: { code: string }) {
     [phase],
   );
 
-  const onCopyShare = useCallback(async () => {
+  const copyShareLink = useCallback(async (roomCode: string): Promise<boolean> => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
-      setShareCopied(true);
-      window.setTimeout(() => setShareCopied(false), 1500);
+      await navigator.clipboard.writeText(
+        buildLobbyClipboardText(roomCode, window.location.origin),
+      );
+      return true;
     } catch {
-      // ignore
+      return false;
     }
   }, []);
+
+  useEffect(() => {
+    if (phase.kind !== 'in_lobby') return;
+    const roomCode = phase.room.room_code;
+    const key = `sudoku-squad:lobby-created:${roomCode}`;
+    let shouldCopy = false;
+    try {
+      shouldCopy = window.sessionStorage.getItem(key) === '1';
+      if (shouldCopy) window.sessionStorage.removeItem(key);
+    } catch {}
+    if (!shouldCopy) return;
+    void copyShareLink(roomCode).then((copied) => {
+      if (copied) showShareNotice('Share link copied to clipboard.');
+    });
+  }, [copyShareLink, phase, showShareNotice]);
+
+  const onCopyShare = useCallback(async () => {
+    if (phase.kind !== 'in_lobby') return;
+    const copied = await copyShareLink(phase.room.room_code);
+    if (copied) showShareNotice('Share link copied to clipboard.');
+  }, [copyShareLink, phase, showShareNotice]);
 
   const onStart = useCallback(async () => {
     if (phase.kind !== 'in_lobby') return;
@@ -395,9 +424,10 @@ export function LobbyClient({ code }: { code: string }) {
         <button
           type="button"
           onClick={onCopyShare}
-          className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted"
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted"
         >
-          {shareCopied ? 'Link copied' : 'Copy share link'}
+          <IosShareIcon size={18} />
+          <span>Copy share link</span>
         </button>
       </section>
 
@@ -630,6 +660,15 @@ export function LobbyClient({ code }: { code: string }) {
           loading={startPending || pendingSync > 0}
           errorText={startError}
         />
+      ) : null}
+      {shareNotice ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 left-1/2 z-50 w-[min(92vw,28rem)] -translate-x-1/2 rounded-lg bg-foreground px-4 py-3 text-center text-sm font-medium text-background shadow-xl"
+        >
+          {shareNotice}
+        </div>
       ) : null}
     </main>
   );

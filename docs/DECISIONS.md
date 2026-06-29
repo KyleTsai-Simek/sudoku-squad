@@ -17,6 +17,26 @@ Format:
 
 ---
 
+## 0053 — Rich multiplayer lobby invites with public-by-default rooms
+**Date:** 2026-06-29
+**Status:** Accepted and implemented locally
+
+**Context.** Multiplayer lobbies already have short `/r/{code}` invite URLs, but the lobby share action only copies the raw URL, room creation defaults to private, and the lobby settings controls are always expanded. Completion shares now have a richer short-link/OG-image pattern that should also apply to co-op and battle lobby invites.
+
+**Decision.** Keep the room invite URL as `/r/{code}` so recipients open directly into the existing join flow with no interstitial. New player-created battle and co-op lobbies should become public by default, with the host able to uncheck Public lobby to make the room private. Because home-page warm preloads are created before explicit player intent, unused warmed rooms stay private; when a warmed room is consumed, the client flips it public before routing the creator into the lobby.
+
+The creator's browser should auto-copy the share payload when it lands in the lobby: `Tap this link to play sudoku with me!` plus the room URL for clipboard fallback. The lobby copy button should use the iOS share icon and the same payload. The room route should provide rich Open Graph metadata and an OG image reusing the completion-share visual language: Sudoku Squad branding and the puzzle preview stay, the result/difficulty/time middle content becomes "Play sudoku with me", and the bottom CTA becomes "Join game". `Lobby Settings` replaces `Settings` and is collapsed by default for everyone; non-hosts can inspect but not change settings.
+
+**Alternatives considered.**
+- Add a new `/invite/{slug}` interstitial page. Rejected because the requested recipient experience is direct lobby join.
+- Make warm preloaded rooms public immediately. Rejected because ordinary home-page visits would create public abandoned lobbies.
+- Persist invite/share rows. Rejected because room codes are already the durable short slug and no invite analytics/deletion surface is needed yet.
+
+**Consequences.**
+- `/r/{code}` is now both the app join route and the crawler metadata route for lobby invites.
+- Public-by-default is implemented at the function/client contract layer first; the historical database column default remains documented as legacy schema default unless a later migration changes it.
+- `/share-preview` remains the local QA surface for share pages and direct OG-image URLs, now including lobby invite examples.
+
 ## 0052 — Short conventional share links and daily-preserving share entry
 **Date:** 2026-06-29
 **Status:** Accepted and implemented

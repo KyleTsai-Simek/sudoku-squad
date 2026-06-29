@@ -112,53 +112,69 @@ export function LobbySettingsPanel({
   const displayedPublic = optimistic.is_public ?? isPublic;
 
   return (
-    <section className="w-full">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
-        Settings {locked ? '(locked — game in progress)' : isHost ? '' : '(host only)'}
-      </h2>
-      <ul className="flex flex-col gap-2">
-        <li className="flex items-start justify-between gap-4 rounded-lg border border-border bg-surface px-3 py-2">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">Public lobby</p>
-            <p className="text-xs text-muted">
-              Anyone on the home page can see and join this room.
-            </p>
-          </div>
-          <label className="flex shrink-0 cursor-pointer items-center">
-            <input
-              type="checkbox"
-              checked={displayedPublic}
-              disabled={disabled}
-              onChange={(e) => onTogglePublic(e.target.checked)}
-              className={checkboxClassName}
-            />
-          </label>
-        </li>
-        {TOGGLES.map((t) => {
-          const displayed = optimistic[t.key] ?? settings[t.key];
-          return (
-            <li
-              key={t.key}
-              className="flex items-start justify-between gap-4 rounded-lg border border-border bg-surface px-3 py-2"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">{t.label}</p>
-                <p className="text-xs text-muted">{t.description}</p>
-              </div>
-              <label className="flex shrink-0 cursor-pointer items-center">
-                <input
-                  type="checkbox"
-                  checked={displayed}
-                  disabled={disabled}
-                  onChange={(e) => onToggle(t.key, e.target.checked)}
-                  className={checkboxClassName}
-                />
-              </label>
-            </li>
-          );
-        })}
-      </ul>
-      {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
-    </section>
+    <details className="w-full group">
+      <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg border border-border bg-surface px-3 py-3 text-left transition-colors hover:bg-surface-muted">
+        <span>
+          <span className="block text-xs font-semibold uppercase tracking-widest text-muted">
+            Lobby Settings
+          </span>
+          <span className="mt-1 block text-xs text-muted">
+            {locked
+              ? 'Locked while the game is in progress'
+              : isHost
+                ? 'Tap to edit lobby options'
+                : 'Tap to view host-selected options'}
+          </span>
+        </span>
+        <span className="text-lg leading-none text-muted transition-transform group-open:rotate-180" aria-hidden>
+          v
+        </span>
+      </summary>
+      <div className="mt-2">
+        <ul className="flex flex-col gap-2">
+          <li className="flex items-start justify-between gap-4 rounded-lg border border-border bg-surface px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">Public lobby</p>
+              <p className="text-xs text-muted">
+                Anyone on the home page can see and join this room.
+              </p>
+            </div>
+            <label className="flex shrink-0 cursor-pointer items-center">
+              <input
+                type="checkbox"
+                checked={displayedPublic}
+                disabled={disabled}
+                onChange={(e) => onTogglePublic(e.target.checked)}
+                className={checkboxClassName}
+              />
+            </label>
+          </li>
+          {TOGGLES.map((t) => {
+            const displayed = optimistic[t.key] ?? settings[t.key];
+            return (
+              <li
+                key={t.key}
+                className="flex items-start justify-between gap-4 rounded-lg border border-border bg-surface px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">{t.label}</p>
+                  <p className="text-xs text-muted">{t.description}</p>
+                </div>
+                <label className="flex shrink-0 cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    checked={displayed}
+                    disabled={disabled}
+                    onChange={(e) => onToggle(t.key, e.target.checked)}
+                    className={checkboxClassName}
+                  />
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+        {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
+      </div>
+    </details>
   );
 }

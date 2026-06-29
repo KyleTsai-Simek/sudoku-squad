@@ -47,6 +47,17 @@ const CASES: SharePreviewCase[] = [
   },
 ];
 
+const LOBBY_CASES = [
+  {
+    label: 'Battle lobby invite',
+    href: '/r/battle1/opengraph-image?preview=1&p=3santv&m=battle',
+  },
+  {
+    label: 'Co-op lobby invite',
+    href: '/r/coop01/opengraph-image?preview=1&p=mdkr7p&m=coop',
+  },
+];
+
 export default function SharePreviewPage() {
   return (
     <main className="min-h-screen bg-background px-5 py-8 text-foreground">
@@ -94,6 +105,36 @@ export default function SharePreviewPage() {
             );
           })}
         </div>
+
+        <section className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Lobby invite OG images</h2>
+            <p className="text-sm text-muted">
+              Direct image examples for room links. Real room URLs use the same image route.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {LOBBY_CASES.map((preview) => (
+              <section
+                key={preview.label}
+                className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4"
+              >
+                <div>
+                  <p className="text-sm font-semibold">{preview.label}</p>
+                  <p className="mt-2 text-xs text-muted">
+                    Tap this link to play sudoku with me!
+                  </p>
+                </div>
+                <Link
+                  href={preview.href}
+                  className="w-fit rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:bg-surface-muted"
+                >
+                  Open OG image
+                </Link>
+              </section>
+            ))}
+          </div>
+        </section>
 
         <p className="text-sm text-muted">
           Sample pack available: {SAMPLE_PUZZLES.map((p) => p.code).join(', ')}
