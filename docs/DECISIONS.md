@@ -17,6 +17,26 @@ Format:
 
 ---
 
+## 0054 — Presence-filtered public lobby browsing
+**Date:** 2026-06-29
+**Status:** Accepted, implemented, and deployed
+
+**Context.** Rich lobby invites made player-created multiplayer rooms public by default. Because `rooms` are durable session records, a public room could continue to appear on the home page after its creator navigated away, closed the tab, or started the game.
+
+**Decision.** Keep durable `rooms` and `room_players` rows for direct invite links, rejoin, late joins, and same-room replay, but make the home-page public-lobby list a presence-filtered read model. Migration `0027_public_lobbies_presence.sql` adds `get_public_lobbies`, a SECURITY DEFINER RPC that returns only public rooms still in `status = 'lobby'` with at least one confirmed participant whose `last_seen_at` is within the caller-provided recency window. The web client uses a 30-second window and polls every 10 seconds in addition to the existing `rooms` Realtime subscription so lobbies can age out even when no room row changes.
+
+`return-to-lobby` refreshes the caller's confirmed presence timestamp as it moves a finished room back to lobby, so completed public rooms can reappear in the home list when players intentionally return to the lobby.
+
+**Alternatives considered.**
+- Delete room rows when the creator leaves. Rejected because unload/close signals are unreliable and room rows anchor direct links, RLS membership, moves, rejoin, kick, late joins, and play-again.
+- Keep listing `playing` rooms until they go stale. Rejected because the home page should show joinable lobby rooms; late joins still work through direct `/r/{code}` links.
+- Query `room_players` directly from the anonymous home page. Rejected because RLS intentionally prevents anonymous users from reading membership rows for rooms they have not joined.
+
+**Consequences.**
+- Empty public lobbies disappear from the home page after the 30-second recency window plus the next 10-second poll.
+- Started games disappear from home as soon as the room status update is observed, which is stricter than the requested 30-second bound.
+- `/r/{code}` remains the source of truth for joining a specific room; public browsing is only a discovery surface.
+
 ## 0053 — Rich multiplayer lobby invites with public-by-default rooms
 **Date:** 2026-06-29
 **Status:** Accepted and implemented locally

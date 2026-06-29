@@ -158,7 +158,7 @@ A multiplayer session. Created when a host clicks "Battle" or "Coop" and gets a 
 | `mode` | text | `battle` / `coop`. (`single` was dropped in migration 0004 — single-player doesn't use rooms; see [#0022](DECISIONS.md).) |
 | `puzzle_code` | text FK → `puzzles(code)` | The puzzle this room is playing. Per [DECISIONS.md #0020](DECISIONS.md). Rotates on every round of a same-room replay cycle ([#0030](DECISIONS.md)). |
 | `status` | text | `lobby` / `playing` / `finished`. Cycles back to `lobby` when players "Return to lobby" ([#0030](DECISIONS.md)). |
-| `is_public` | boolean default false | Host toggle. Public rooms appear in the home page list ([#0029](DECISIONS.md)). |
+| `is_public` | boolean default false | Host toggle. Public rooms can appear in the home page list when they are still lobby-status and have recent confirmed presence ([#0029](DECISIONS.md), [#0054](DECISIONS.md)). |
 | `winner_player_id` | uuid nullable | Battle mode only. Cleared on next-round start. |
 | `settings` | jsonb not null default `{}` | Host-edited room settings (`showConflicts`, `autoCheck`, `highlightSameValue`); locks at Start. |
 | `next_seq` | bigint not null default 1 | Per-room atomic move-seq counter. `submit-move` reserves via `reserve_room_seq` RPC (one `UPDATE … RETURNING` round-trip). Reset to 1 on each `start-game`. Added in migration 0014, see [DECISIONS #0036](DECISIONS.md). |
@@ -183,7 +183,7 @@ A player's membership in a room. Anonymous; identified by `(room_id, player_id)`
 | `last_seen_at` | timestamptz nullable | Best-effort heartbeat timestamp updated by `confirm-room-presence` and `submit-move`; reserved for disconnect grace/stale-row cleanup. |
 | PK | (`room_id`, `player_id`) | |
 
-`room_players` is durable membership, not pure online presence. Lobby visibility and Battle's Start gate use confirmed rows (`lobby_confirmed_at is not null`) so temporary mobile in-app browser joins do not appear as real participants. The own client may render its unconfirmed row locally during the short confirmation delay.
+`room_players` is durable membership, not pure online presence. Lobby visibility and Battle's Start gate use confirmed rows (`lobby_confirmed_at is not null`) so temporary mobile in-app browser joins do not appear as real participants. The home page's public-lobby browse additionally requires a recent `last_seen_at` so empty public lobbies age out without deleting the underlying room. The own client may render its unconfirmed row locally during the short confirmation delay.
 
 ### `moves`
 The append-only log of player actions. This is the durable record; clients reconstruct state by replaying or applying snapshots.

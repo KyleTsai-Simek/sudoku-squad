@@ -12,8 +12,8 @@ import {
 /**
  * Compact card list of open public rooms. Optionally filtered to a specific
  * mode via the `mode` prop (used by the join-mode views in home-client).
- * Without the filter, shows every open public room. Auto-refreshes on any
- * `rooms` realtime event.
+ * Without the filter, shows every attended public lobby room. Auto-refreshes
+ * on any `rooms` realtime event and polls so last_seen recency can age out.
  *
  * Renders `emptyState` (or hides the section entirely) when the filtered
  * list is empty. The home-page's join view passes a tailored empty state
@@ -39,8 +39,10 @@ export function PublicLobbyList({ mode, emptyState }: Props) {
       if (cancelled) return;
       unsub = await subscribeToPublicLobbies(refresh);
     })();
+    const interval = window.setInterval(refresh, 10_000);
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
       unsub?.();
     };
   }, []);

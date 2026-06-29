@@ -433,25 +433,26 @@ export interface PublicLobby {
   created_at: string;
 }
 
+const PUBLIC_LOBBY_RECENCY_MS = 30_000;
+
 /**
- * List currently-open public rooms (status in lobby/playing). Used by the
- * home page. Cheap query — `rooms_public_idx` partial index covers it.
+ * List public lobby rooms that still have at least one recently-seen confirmed
+ * participant. Used by the home page. The RPC is SECURITY DEFINER because anon
+ * users cannot read other rooms' room_players rows directly.
  */
 export async function fetchPublicLobbies(): Promise<PublicLobby[]> {
   const client = getSupabase();
   if (!client) return [];
-  const { data, error } = await client
-    .from('rooms')
-    .select('id, code, mode, status, created_at')
-    .eq('is_public', true)
-    .in('status', ['lobby', 'playing'])
-    .order('created_at', { ascending: false })
-    .limit(20);
+  const recentAfter = new Date(Date.now() - PUBLIC_LOBBY_RECENCY_MS).toISOString();
+  const { data, error } = await client.rpc('get_public_lobbies', {
+    p_recent_after: recentAfter,
+    p_limit: 20,
+  });
   if (error) {
     console.error('fetchPublicLobbies error', error);
     return [];
   }
-  return data ?? [];
+  return (data ?? []) as PublicLobby[];
 }
 
 export async function subscribeToPublicLobbies(onChange: () => void): Promise<() => void> {

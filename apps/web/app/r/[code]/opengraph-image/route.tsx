@@ -64,7 +64,9 @@ export async function GET(request: NextRequest, { params }: Props) {
               flex: 1,
               display: 'flex',
               flexDirection: 'column',
-              padding: '48px 56px',
+              justifyContent: 'center',
+              gap: 34,
+              padding: '40px 56px',
               background: '#ffffff',
             }}
           >
@@ -72,12 +74,8 @@ export async function GET(request: NextRequest, { params }: Props) {
 
             <div
               style={{
-                flex: 1,
                 display: 'flex',
                 flexDirection: 'column',
-                justifyContent: 'center',
-                gap: 18,
-                paddingBottom: 18,
               }}
             >
               <div

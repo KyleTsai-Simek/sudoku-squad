@@ -57,9 +57,16 @@ Deno.serve(async (req) => {
   }
   if (!caller) return errorResponse('not_found', 'caller is not in this room', 404);
 
+  const now = new Date().toISOString();
+
   const { error: hrErr } = await admin
     .from('room_players')
-    .update({ has_returned: true, progress_pct: 0 })
+    .update({
+      has_returned: true,
+      progress_pct: 0,
+      lobby_confirmed_at: now,
+      last_seen_at: now,
+    })
     .eq('room_id', parsed.room_id)
     .eq('player_id', userId);
   if (hrErr) {

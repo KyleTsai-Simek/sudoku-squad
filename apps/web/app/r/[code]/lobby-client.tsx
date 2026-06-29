@@ -25,7 +25,7 @@ import type { Difficulty } from '@sudoku-squad/core';
 import { getUsername } from '@/lib/username';
 import { AppHeader } from '@/components/app-header';
 import { LobbySettingsPanel } from '@/components/lobby-settings-panel';
-import { IosShareIcon } from '@/components/material-icons';
+import { IosShareIcon, LinkIcon } from '@/components/material-icons';
 import { DEFAULT_ROOM_SETTINGS } from '@/lib/rooms';
 import { buildLobbyClipboardText } from '@/lib/lobby-share';
 import { playerColorStyle } from '@/lib/player-colors';
@@ -266,17 +266,14 @@ export function LobbyClient({ code }: { code: string }) {
   useEffect(() => {
     if (phase.kind !== 'in_lobby') return;
     const roomCode = phase.room.room_code;
-    const key = `sudoku-squad:lobby-created:${roomCode}`;
-    let shouldCopy = false;
+    const key = `sudoku-squad:lobby-share-copied:${roomCode}`;
+    let copied = false;
     try {
-      shouldCopy = window.sessionStorage.getItem(key) === '1';
-      if (shouldCopy) window.sessionStorage.removeItem(key);
+      copied = window.sessionStorage.getItem(key) === '1';
+      window.sessionStorage.removeItem(key);
     } catch {}
-    if (!shouldCopy) return;
-    void copyShareLink(roomCode).then((copied) => {
-      if (copied) showShareNotice('Share link copied to clipboard.');
-    });
-  }, [copyShareLink, phase, showShareNotice]);
+    if (copied) showShareNotice('Share link copied to clipboard.');
+  }, [phase, showShareNotice]);
 
   const onCopyShare = useCallback(async () => {
     if (phase.kind !== 'in_lobby') return;
@@ -665,9 +662,10 @@ export function LobbyClient({ code }: { code: string }) {
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-6 left-1/2 z-50 w-[min(92vw,28rem)] -translate-x-1/2 rounded-lg bg-foreground px-4 py-3 text-center text-sm font-medium text-background shadow-xl"
+          className="fixed bottom-6 left-1/2 z-50 flex w-[min(92vw,28rem)] -translate-x-1/2 items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-3 text-center text-sm font-medium text-background shadow-xl"
         >
-          {shareNotice}
+          <LinkIcon size={18} className="shrink-0" />
+          <span>{shareNotice}</span>
         </div>
       ) : null}
     </main>

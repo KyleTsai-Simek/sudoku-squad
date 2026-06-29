@@ -122,18 +122,20 @@ export function LobbySettingsPanel({
           aria-expanded={expanded}
           aria-controls={panelId}
           onClick={() => setExpanded((open) => !open)}
-          className="mb-2 flex w-full items-center justify-between text-left"
+          className="mb-2 inline-flex items-center gap-1 text-left"
         >
           <span className="text-xs font-semibold uppercase tracking-widest text-muted">
             Lobby Settings
-            <span className="ml-2 text-muted normal-case tracking-normal">
-              {locked ? '- locked' : isHost ? '- tap to edit' : '- host chooses'}
-            </span>
+            {locked || !isHost ? (
+              <span className="ml-2 text-muted normal-case tracking-normal">
+                {locked ? '- locked' : '- host chooses'}
+              </span>
+            ) : null}
           </span>
           <ExpandMoreIcon
-            size={20}
+            size={18}
             className={[
-              'text-muted transition-transform',
+              'shrink-0 text-muted transition-transform',
               expanded ? 'rotate-180' : '',
             ].join(' ')}
           />

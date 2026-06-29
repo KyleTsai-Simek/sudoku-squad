@@ -6,6 +6,7 @@ import type { Difficulty } from '@sudoku-squad/core';
 import { getTierCounts, pickRandomUnsolved } from '@/lib/pick-puzzle';
 import { getCompletionCount } from '@/lib/completions';
 import { DIFFICULTY_LABEL, VISIBLE_DIFFICULTIES } from '@/lib/difficulty-labels';
+import { buildLobbyClipboardText } from '@/lib/lobby-share';
 import {
   DEFAULT_LEADERBOARD_LIMIT,
   getCompletionLeaderboard,
@@ -110,7 +111,7 @@ export function HomeClient() {
     const res = await consumePreloadedRoom(mode, MP_DEFAULT_DIFFICULTY);
     setLoadingMp(null);
     if (res.ok) {
-      markLobbyCreated(res.value.room_code);
+      await markLobbyCreated(res.value.room_code);
       router.push(`/r/${res.value.room_code}`);
     } else {
       alert(`Could not start ${mode}: ${res.error.message}`);
@@ -280,10 +281,20 @@ export function HomeClient() {
   );
 }
 
-function markLobbyCreated(roomCode: string): void {
+async function markLobbyCreated(roomCode: string): Promise<void> {
   if (typeof window === 'undefined') return;
+  let copied = false;
   try {
-    window.sessionStorage.setItem(`sudoku-squad:lobby-created:${roomCode}`, '1');
+    await navigator.clipboard.writeText(
+      buildLobbyClipboardText(roomCode, window.location.origin),
+    );
+    copied = true;
+  } catch {}
+  try {
+    window.sessionStorage.setItem(
+      `sudoku-squad:lobby-share-copied:${roomCode}`,
+      copied ? '1' : '0',
+    );
   } catch {}
 }
 
