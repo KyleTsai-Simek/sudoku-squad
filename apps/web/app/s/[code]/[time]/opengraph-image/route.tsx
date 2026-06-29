@@ -110,7 +110,7 @@ export async function GET(request: NextRequest, { params }: Props) {
                     padding: '14px 24px',
                     fontSize: 30,
                     fontWeight: 850,
-                    color: '#1e3a8a',
+                    color: '#0f172a',
                   }}
                 >
                   <span>Finished in&nbsp;</span>
@@ -203,7 +203,7 @@ function FauxBoldTime({ value }: { value: string }) {
     fontSize: 38,
     fontWeight: 900,
     lineHeight: 1,
-    color: '#1e3a8a',
+    color: '#0f172a',
   };
 
   return (
@@ -222,10 +222,7 @@ function DailyBadge({ date }: { date: string }) {
         alignSelf: 'flex-start',
         alignItems: 'center',
         gap: 10,
-        borderRadius: 999,
-        background: '#eff6ff',
-        border: '2px solid #bfdbfe',
-        padding: '9px 16px',
+        padding: 0,
         fontSize: 22,
         fontWeight: 800,
         color: '#475569',
