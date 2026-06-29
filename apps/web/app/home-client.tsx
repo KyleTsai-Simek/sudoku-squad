@@ -166,6 +166,8 @@ export function HomeClient() {
             </button>
           </div>
 
+          <PublicLobbyList />
+
           {/* Compact join-by-code input. Sits below the primary home actions so
               shared-link recipients who only have a 6-char code can still get
               into a room without competing with the main CTA hierarchy. */}
@@ -201,8 +203,6 @@ export function HomeClient() {
             </div>
             {joinError ? <p className="text-xs text-danger">{joinError}</p> : null}
           </form>
-
-          <PublicLobbyList />
 
           <CompletionLeaderboard entries={leaderboard} />
         </>

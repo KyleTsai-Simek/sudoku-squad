@@ -17,6 +17,22 @@ Format:
 
 ---
 
+## 0055 — Public lobby cards show host and difficulty
+**Date:** 2026-06-29
+**Status:** Accepted, implemented, and deployed
+
+**Context.** The home page already hid the public-lobby section when no joinable public lobbies existed and refreshed the list with Realtime plus polling. When rooms were available, each row still led with the opaque room code and showed `lobby` as its status, which made the browse surface feel more like debugging output than a game invitation.
+
+**Decision.** Keep the existing presence-filtered browse model from [#0054](#0054--presence-filtered-public-lobby-browsing), but extend `get_public_lobbies` to return the room's current puzzle difficulty and the host's room-scoped username. The home page renders the section only when at least one public lobby is available, places it below Quick Play and above Have a code?, labels it "Join multiplayer game" with the Material Groups icon, and makes each row show host username, mode, and visible difficulty instead of room code and `lobby` status.
+
+**Alternatives considered.**
+- Query `room_players` directly from the client. Rejected because anonymous visitors still should not get raw cross-room membership access; the SECURITY DEFINER read model is the right public boundary.
+- Keep room codes visible in the browse list. Rejected because direct codes remain useful in the Have a code? flow, while public browsing should feel like choosing an active game.
+
+**Consequences.**
+- Migration `0028_public_lobbies_display_fields.sql` is applied on the linked Supabase project so the deployed client can rely on `difficulty` and `host_username` in public lobby rows.
+- The existing 30-second recency window, 10-second poll, and `rooms` Realtime refresh stay unchanged, so a user sitting on the home page can still see newly created public lobbies and stale lobbies age out.
+
 ## 0054 — Presence-filtered public lobby browsing
 **Date:** 2026-06-29
 **Status:** Accepted, implemented, and deployed

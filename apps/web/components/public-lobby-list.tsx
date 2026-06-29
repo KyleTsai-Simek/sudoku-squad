@@ -8,6 +8,8 @@ import {
   type PublicLobby,
   type RoomMode,
 } from '@/lib/rooms';
+import { difficultyLabel } from '@/lib/difficulty-labels';
+import { GroupsIcon } from '@/components/material-icons';
 
 /**
  * Compact card list of open public rooms. Optionally filtered to a specific
@@ -54,25 +56,33 @@ export function PublicLobbyList({ mode, emptyState }: Props) {
   }
 
   return (
-    <ul className="flex w-full flex-col gap-2">
-      {filtered.map((r) => (
-        <li key={r.id}>
-          <Link
-            href={`/r/${r.code}`}
-            className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm hover:border-primary-border"
-          >
-            <span className="flex items-center gap-3">
-              <span className="font-mono font-semibold tracking-widest text-foreground">
-                {r.code}
+    <section className="flex w-full flex-col gap-2 pt-1">
+      <div className="flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-widest text-muted">
+        <h2 className="inline-flex min-w-0 items-center gap-2">
+          <GroupsIcon size={16} className="shrink-0" />
+          <span className="truncate">Join multiplayer game</span>
+        </h2>
+      </div>
+      <ul className="flex w-full flex-col gap-2">
+        {filtered.map((r) => (
+          <li key={r.id}>
+            <Link
+              href={`/r/${r.code}`}
+              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm hover:border-primary-border"
+            >
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate font-semibold text-foreground">
+                  {r.host_username}
+                </span>
+                <span className="text-xs uppercase tracking-widest text-muted">
+                  {r.mode} · {difficultyLabel(r.difficulty)}
+                </span>
               </span>
-              <span className="text-xs uppercase tracking-widest text-muted">
-                {r.mode} · {r.status}
-              </span>
-            </span>
-            <span className="text-xs text-muted">Join →</span>
-          </Link>
-        </li>
-      ))}
-    </ul>
+              <span className="shrink-0 text-xs text-muted">Join →</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

@@ -430,10 +430,20 @@ export interface PublicLobby {
   code: string;
   mode: RoomMode;
   status: RoomStatus;
+  difficulty: Difficulty;
+  host_username: string;
   created_at: string;
 }
 
 const PUBLIC_LOBBY_RECENCY_MS = 30_000;
+const PUBLIC_LOBBY_DIFFICULTIES = new Set<Difficulty>([
+  'easy',
+  'medium',
+  'hard',
+  'expert',
+  'extreme',
+  'killer',
+]);
 
 /**
  * List public lobby rooms that still have at least one recently-seen confirmed
@@ -452,7 +462,31 @@ export async function fetchPublicLobbies(): Promise<PublicLobby[]> {
     console.error('fetchPublicLobbies error', error);
     return [];
   }
-  return (data ?? []) as PublicLobby[];
+  return ((data ?? []) as Array<Record<string, unknown>>).flatMap((row) => {
+    if (
+      typeof row.id !== 'string' ||
+      typeof row.code !== 'string' ||
+      (row.mode !== 'battle' && row.mode !== 'coop') ||
+      (row.status !== 'lobby' && row.status !== 'playing' && row.status !== 'finished') ||
+      typeof row.difficulty !== 'string' ||
+      !PUBLIC_LOBBY_DIFFICULTIES.has(row.difficulty as Difficulty) ||
+      typeof row.host_username !== 'string' ||
+      typeof row.created_at !== 'string'
+    ) {
+      return [];
+    }
+    return [
+      {
+        id: row.id,
+        code: row.code,
+        mode: row.mode,
+        status: row.status,
+        difficulty: row.difficulty as Difficulty,
+        host_username: row.host_username,
+        created_at: row.created_at,
+      },
+    ];
+  });
 }
 
 export async function subscribeToPublicLobbies(onChange: () => void): Promise<() => void> {

@@ -89,7 +89,7 @@ sudoku-squad/
                           # preflight-3m (source scan), audit-difficulty
                           # (live DB audit), check-connectivity
   supabase/
-    migrations/           # 0001..0026 applied to live project
+    migrations/           # 0001..0028 in repo; see STATUS for live deploy state
     functions/            # Edge Functions: create-room, join-room,
                           # confirm-room-presence, start-game, submit-move,
                           # change-difficulty, change-mode,
@@ -183,7 +183,7 @@ A player's membership in a room. Anonymous; identified by `(room_id, player_id)`
 | `last_seen_at` | timestamptz nullable | Best-effort heartbeat timestamp updated by `confirm-room-presence` and `submit-move`; reserved for disconnect grace/stale-row cleanup. |
 | PK | (`room_id`, `player_id`) | |
 
-`room_players` is durable membership, not pure online presence. Lobby visibility and Battle's Start gate use confirmed rows (`lobby_confirmed_at is not null`) so temporary mobile in-app browser joins do not appear as real participants. The home page's public-lobby browse additionally requires a recent `last_seen_at` so empty public lobbies age out without deleting the underlying room. The own client may render its unconfirmed row locally during the short confirmation delay.
+`room_players` is durable membership, not pure online presence. Lobby visibility and Battle's Start gate use confirmed rows (`lobby_confirmed_at is not null`) so temporary mobile in-app browser joins do not appear as real participants. The home page's public-lobby browse additionally requires a recent `last_seen_at` so empty public lobbies age out without deleting the underlying room, and its `get_public_lobbies` read model exposes only lobby display fields: room code for the join URL, mode, current puzzle difficulty, host room username, status, and creation time. The own client may render its unconfirmed row locally during the short confirmation delay.
 
 ### `moves`
 The append-only log of player actions. This is the durable record; clients reconstruct state by replaying or applying snapshots.
