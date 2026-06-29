@@ -148,7 +148,7 @@ Optional email sign-in, layered on top of anonymous play:
 
 1. **Create.** Host clicks "Battle" or "Coop" → server creates a `room` with a short code, redirects to `/r/{code}`.
 2. **Lobby.** Host sees the share link. New joiners get a durable seat immediately, but they appear to other players only after staying visible in the room for a few seconds. This filters out mobile in-app browser hops before the user opens the link in their real browser. The joining user still sees their own row while waiting. Host clicks **Start** when ready; Battle's two-player gate counts confirmed visible players only.
-   Lobby mode and difficulty selectors follow a tonal toggle pattern for hosts: faint-blue containers when unselected and a deeper light-blue selected container, so Start remains the only primary-blue CTA. Joiners see a read-only Game Selection section with labeled Difficulty and Mode chips.
+   Lobby mode and difficulty selectors follow a tonal toggle pattern for hosts: faint-blue containers when unselected and a deeper light-blue selected container, so Start remains the only primary-blue CTA. Joiners see a read-only Game Selection section with labeled Difficulty and Mode chips, plus a disabled primary "Waiting for the host to start…" button in the Start position.
    Lobby Settings are collapsed by default; hosts can expand them to change Public lobby, Show conflicts, Auto-check, and Highlight same value while the room is still in lobby, and non-hosts can expand them read-only.
 3. **Playing.** Game timer starts. Realtime channel active.
 4. **Finishing.**
@@ -164,7 +164,7 @@ Optional email sign-in, layered on top of anonymous play:
 - If a player drops connection mid-game, their durable seat and inputs so far remain. Battle and coop both support returning through the room URL; late joins after Start continue to work.
 - A confirmed player who comes back after the game has started rejoins the game surface and can continue participating.
 - Never-confirmed lobby rows are ignored for Start and can be pruned after a short stale window.
-- Host migration: if the original host leaves, the longest-tenured remaining player becomes host. **OPEN**: should host migration require explicit acknowledgement?
+- Host migration is silent. If the current host is inactive for about 30 seconds and the lobby has 3+ confirmed players, the earliest joined active confirmed non-host becomes host. The host badge and controls update through the live `room_players` subscription.
 
 ---
 
@@ -192,7 +192,6 @@ Optional email sign-in, layered on top of anonymous play:
 ## Open UX questions (running list)
 
 1. **Time-based tiebreak** in battle if no one finishes — yes/no? Leaning no for V1.
-2. **Host migration** acknowledgement — explicit or silent? Leaning silent (transfer to longest-tenured remaining player).
-3. **Mobile lobby / share link UX** — auto-copy on room create? Native share sheet? QR code for in-person play?
-4. **Mobile cursor visualization in coop** — phones have no persistent cursor. Working assumption: ring stays on the last-tapped cell, fades after ~3 seconds of inactivity. Confirm with testing.
-5. **End-game share link iteration** — after implementation, test real share links and OG images, then iterate on board-card art and copy.
+2. **Mobile lobby / share link UX** — auto-copy on room create? Native share sheet? QR code for in-person play?
+3. **Mobile cursor visualization in coop** — phones have no persistent cursor. Working assumption: ring stays on the last-tapped cell, fades after ~3 seconds of inactivity. Confirm with testing.
+4. **End-game share link iteration** — after implementation, test real share links and OG images, then iterate on board-card art and copy.

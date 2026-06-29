@@ -17,6 +17,26 @@ Format:
 
 ---
 
+## 0056 — Silent lobby host handoff after inactive host heartbeat timeout
+**Date:** 2026-06-29
+**Status:** Accepted and implemented
+
+**Context.** Multiplayer lobbies depend on one host for difficulty, mode, settings, kick, and Start authority. If the host task-switches or leaves before starting, a lobby with enough other players could become stuck even though `room_players` already tracks durable membership and recent lobby presence through `last_seen_at`.
+
+**Decision.** Keep host authority on `room_players.is_host`, but add a server-side handoff helper, `reassign_inactive_lobby_host(room_id, inactive_after)`. `confirm-room-presence` calls this helper after every lobby heartbeat. In lobby-status rooms, when the current host's confirmed `last_seen_at` is older than the 30-second cutoff and the lobby has at least three confirmed players, the helper atomically promotes the earliest joined active confirmed non-host. If a lobby somehow has no host, the same helper promotes the earliest active confirmed participant without the three-player guard. The helper takes an advisory lock per room and rewrites all `is_host` flags in one update so there is at most one host.
+
+The web lobby derives the caller's host state from the live `room_players` row instead of the original join response, so Realtime updates immediately flip controls for the newly promoted host and demoted former host. Joiners' waiting state is rendered as a disabled primary button reading "Waiting for the host to start…" so the next required action remains visually aligned with the host's Start button.
+
+**Alternatives considered.**
+- Client-side host promotion. Rejected because Start/settings authority must stay server-authoritative and race-free.
+- Delete or kick inactive hosts. Rejected because durable membership is still useful if the original host returns; only authority needs to move.
+- Require explicit acknowledgement from the successor. Rejected for the first pass because silent transfer is lower friction and already aligned with the desired "always a host" lobby behavior.
+
+**Consequences.**
+- Active non-hosts trigger handoff through the existing heartbeat; no new visible user action is required.
+- A room with only one other confirmed player does not steal host authority after a brief task switch, but lobbies with three or more confirmed players can recover and start.
+- Host controls must always be derived from live `room_players`, not the join-time snapshot.
+
 ## 0055 — Public lobby cards show host and difficulty
 **Date:** 2026-06-29
 **Status:** Accepted, implemented, and deployed

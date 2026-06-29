@@ -2,12 +2,16 @@
 //
 // Marks the caller's durable room_players row as a confirmed visible lobby
 // participant. The client delays this call briefly so transient mobile
-// in-app-browser hops do not appear to hosts as real players.
+// in-app-browser hops do not appear to hosts as real players. Active clients
+// also use this heartbeat to trigger server-side host handoff when the current
+// lobby host has gone stale.
 
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { handlePreflight } from '../_shared/cors.ts';
 import { errorResponse, jsonResponse } from '../_shared/errors.ts';
 import { getCallerUserId, serviceClient } from '../_shared/supabase.ts';
+
+const HOST_INACTIVE_MS = 30_000;
 
 interface ConfirmRoomPresenceInput {
   room_id: string;
@@ -71,10 +75,23 @@ Deno.serve(async (req) => {
     return errorResponse('internal', `presence update failed: ${updateErr.message}`, 500);
   }
 
+  const inactiveAfter = new Date(Date.now() - HOST_INACTIVE_MS).toISOString();
+  const { data: handoff, error: handoffErr } = await admin
+    .rpc('reassign_inactive_lobby_host', {
+      p_room_id: parsed.room_id,
+      p_inactive_after: inactiveAfter,
+    })
+    .maybeSingle();
+
+  if (handoffErr) {
+    return errorResponse('internal', `host handoff failed: ${handoffErr.message}`, 500);
+  }
+
   return jsonResponse({
     room_id: parsed.room_id,
     player_id: userId,
     lobby_confirmed_at: existing.lobby_confirmed_at ?? now,
     last_seen_at: now,
+    host_handoff: handoff ?? null,
   });
 });

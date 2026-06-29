@@ -396,7 +396,8 @@ export function LobbyClient({ code }: { code: string }) {
     );
   }
 
-  const isHost = room.own_is_host;
+  const ownPlayer = visiblePlayers.find((p) => p.player_id === room.own_player_id);
+  const isHost = ownPlayer?.is_host ?? room.own_is_host;
   // Battle needs at least 2 players (a race against yourself is silly); coop
   // can start solo and pick up friends mid-game (#0024). Use liveMode so
   // toggling mode in the lobby immediately updates the player-count gate.
@@ -648,8 +649,14 @@ export function LobbyClient({ code }: { code: string }) {
           ) : null}
         </section>
       ) : (
-        <section className="w-full text-center text-sm text-muted">
-          Waiting for the host to start…
+        <section className="w-full text-center">
+          <button
+            type="button"
+            disabled
+            className="flex w-full cursor-not-allowed items-center justify-center rounded-xl bg-primary px-5 py-4 text-base font-semibold text-primary-foreground opacity-50"
+          >
+            Waiting for the host to start…
+          </button>
         </section>
       )}
 
