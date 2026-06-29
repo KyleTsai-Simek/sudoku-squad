@@ -39,6 +39,7 @@ interface GameState {
   settings: GameSettings;
   startedAt: number | null;
   finishedAt: number | null;
+  pausedAt: number | null;
   hintsUsed: number;
   conflicts: Set<CellIndex>;
   incorrect: Set<CellIndex>; // populated only when autoCheck is on
@@ -54,10 +55,13 @@ interface GameState {
     history: MoveHistory;
     startedAt: number;
     finishedAt: number | null;
+    pausedAt?: number | null;
     hintsUsed: number;
     notesMode: boolean;
   }) => void;
   resetGame: () => void;
+  pauseGame: (pausedAt?: number) => void;
+  resumeGame: () => void;
   selectCell: (cell: CellIndex | null) => void;
   moveSelection: (dx: number, dy: number) => void;
   toggleNotesMode: () => void;
@@ -115,6 +119,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   settings: DEFAULT_SETTINGS,
   startedAt: null,
   finishedAt: null,
+  pausedAt: null,
   hintsUsed: 0,
   conflicts: new Set(),
   incorrect: new Set(),
@@ -131,6 +136,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       notesMode: false,
       startedAt: Date.now(),
       finishedAt: null,
+      pausedAt: null,
       hintsUsed: 0,
       conflicts: derived.conflicts,
       incorrect: derived.incorrect,
@@ -148,6 +154,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       notesMode: snapshot.notesMode,
       startedAt: snapshot.startedAt,
       finishedAt: snapshot.finishedAt,
+      pausedAt: snapshot.pausedAt ?? null,
       hintsUsed: snapshot.hintsUsed,
       conflicts: derived.conflicts,
       incorrect: derived.incorrect,
@@ -159,9 +166,25 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (puzzle) get().startGame(puzzle);
   },
 
+  pauseGame: (pausedAt = Date.now()) => {
+    const { board, startedAt, finishedAt, pausedAt: existingPausedAt } = get();
+    if (!board || startedAt === null || finishedAt !== null || existingPausedAt !== null) {
+      return;
+    }
+    set({ pausedAt: Math.max(startedAt, pausedAt) });
+  },
+
+  resumeGame: () => {
+    const { startedAt, pausedAt } = get();
+    if (startedAt === null || pausedAt === null) return;
+    const pausedForMs = Math.max(0, Date.now() - pausedAt);
+    set({ startedAt: startedAt + pausedForMs, pausedAt: null });
+  },
+
   selectCell: (cell) => set({ selected: cell }),
 
   moveSelection: (dx, dy) => {
+    if (get().pausedAt !== null) return;
     const cur = get().selected ?? 40; // center
     const row = Math.floor(cur / 9);
     const col = cur % 9;
@@ -170,12 +193,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ selected: nr * 9 + nc });
   },
 
-  toggleNotesMode: () => set({ notesMode: !get().notesMode }),
-  setNotesMode: (on) => set({ notesMode: on }),
+  toggleNotesMode: () => {
+    if (get().pausedAt !== null) return;
+    set({ notesMode: !get().notesMode });
+  },
+  setNotesMode: (on) => {
+    if (get().pausedAt !== null) return;
+    set({ notesMode: on });
+  },
 
   enterValue: (value) => {
-    const { board, selected, puzzle, notesMode, finishedAt, startedAt } = get();
-    if (!board || !puzzle || selected === null || finishedAt !== null) return;
+    const { board, selected, puzzle, notesMode, finishedAt, startedAt, pausedAt } = get();
+    if (!board || !puzzle || selected === null || finishedAt !== null || pausedAt !== null) return;
     const cell = board.cells[selected];
     if (!cell || cell.given !== null) return;
 
@@ -207,8 +236,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   enterNote: (value) => {
-    const { board, selected, history, puzzle, settings, finishedAt } = get();
-    if (!board || !puzzle || selected === null || finishedAt !== null) return;
+    const { board, selected, history, puzzle, settings, finishedAt, pausedAt } = get();
+    if (!board || !puzzle || selected === null || finishedAt !== null || pausedAt !== null) return;
     const cell = board.cells[selected];
     if (!cell || cell.given !== null) return;
     const result = applyMoveWithHistory(board, history, {
@@ -227,8 +256,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   clearCell: () => {
-    const { board, selected, history, puzzle, settings, finishedAt } = get();
-    if (!board || !puzzle || selected === null || finishedAt !== null) return;
+    const { board, selected, history, puzzle, settings, finishedAt, pausedAt } = get();
+    if (!board || !puzzle || selected === null || finishedAt !== null || pausedAt !== null) return;
     const cell = board.cells[selected];
     if (!cell || cell.given !== null) return;
 
@@ -258,8 +287,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   undo: () => {
-    const { board, history, puzzle, settings } = get();
-    if (!board || !puzzle || !canUndo(history)) return;
+    const { board, history, puzzle, settings, pausedAt } = get();
+    if (!board || !puzzle || pausedAt !== null || !canUndo(history)) return;
     const result = undoHistory(board, history);
     const derived = recomputeDerived(result.state, settings, puzzle.solution);
     set({
@@ -271,8 +300,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   redo: () => {
-    const { board, history, puzzle, settings, startedAt } = get();
-    if (!board || !puzzle || !canRedo(history)) return;
+    const { board, history, puzzle, settings, startedAt, pausedAt } = get();
+    if (!board || !puzzle || pausedAt !== null || !canRedo(history)) return;
     const result = redoHistory(board, history);
     const derived = recomputeDerived(result.state, settings, puzzle.solution);
     const won = isWon(result.state, puzzle.solution);
@@ -298,8 +327,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   useHint: () => {
-    const { board, puzzle, history, settings, selected, finishedAt, startedAt } = get();
-    if (!board || !puzzle || finishedAt !== null) return;
+    const { board, puzzle, history, settings, selected, finishedAt, startedAt, pausedAt } = get();
+    if (!board || !puzzle || finishedAt !== null || pausedAt !== null) return;
 
     // Prefer the currently selected cell if it's empty and not a given.
     let target: CellIndex | null = null;

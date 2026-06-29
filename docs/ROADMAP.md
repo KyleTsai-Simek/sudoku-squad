@@ -151,7 +151,7 @@ After Phase 4 lands, the natural next moves are:
 5. **Friends list & private invites.**
 6. **Android** (only if the iOS app gets traction).
 7. **Real puzzle generator** so we're not dependent on a third-party dataset.
-8. **Coop "freeze the timer when nobody's present."** Today elapsed is wall-clock since `started_at`; freezing it requires presence tracking + accumulating *active* time instead, and changes the meaning of "elapsed" (matters for any future competitive/leaderboard time). Small feature, rides on the coop presence channel. Backlogged 2026-05-29 (see [DECISIONS #0040](DECISIONS.md) discussion).
+8. **Coop active-time timer.** Shipped in [DECISIONS #0057](DECISIONS.md): co-op elapsed time is server-owned active shared time and pauses when every player is away. Battle remains wall-clock after Start.
 9. **Coop "resume an in-progress room" UX.** The data layer already supports rejoining a persisted room and replaying its move log; this is the UI to surface "resume" instead of a cold join (and to handle a room that was `finished`/returned-to-lobby). Backlogged 2026-05-29.
 
 We don't commit to ordering yet — it depends on what users actually want after Phase 4.

@@ -33,3 +33,39 @@ test('single-player: in-progress game auto-resumes after reload', async ({ page 
   // ...and a cell we never touched is still empty.
   await expect(page.getByRole('gridcell', { name: /row 1, column 4, empty/ })).toBeVisible();
 });
+
+test('single-player: returning after task switching shows a paused resume gate', async ({ page }) => {
+  await page.goto(`/play/${SAMPLE_CODE}`);
+  await expect(page.getByRole('grid', { name: 'Sudoku board' })).toBeVisible();
+
+  await page.getByRole('gridcell', { name: /row 1, column 3, empty/ }).click();
+  await page.keyboard.press('4');
+  await expect(page.getByRole('gridcell', { name: /row 1, column 3, value 4/ })).toBeVisible();
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForTimeout(5_100);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+
+  await expect(page.getByRole('dialog', { name: 'Ready to continue?' })).toBeVisible();
+
+  await page.keyboard.press('5');
+  await expect(page.getByRole('gridcell', { name: /row 1, column 3, value 4/ })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Resume' }).click();
+  await expect(page.getByRole('dialog', { name: 'Ready to continue?' })).toBeHidden();
+
+  await page.keyboard.press('5');
+  await expect(page.getByRole('gridcell', { name: /row 1, column 3, value 5/ })).toBeVisible();
+});

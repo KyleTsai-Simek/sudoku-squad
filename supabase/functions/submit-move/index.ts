@@ -350,17 +350,28 @@ Deno.serve(async (req) => {
   const { progressPct, won } = materialize(p.givens, (replayMoves ?? []) as MoveRow[], p.solution);
 
   const seenAt = new Date().toISOString();
-  const presencePromise = admin
-    .from('room_players')
-    .update({
-      lobby_confirmed_at: playerRes.data.lobby_confirmed_at ?? seenAt,
-      last_seen_at: seenAt,
-    })
-    .eq('room_id', room_id)
-    .eq('player_id', userId)
-    .then(({ error }) => {
-      if (error) console.error('room presence update failed', error);
-    });
+  const presencePromise =
+    room.mode === 'coop'
+      ? admin
+          .rpc('update_coop_timer_presence', {
+            p_room_id: room_id,
+            p_player_id: userId,
+            p_active: true,
+          })
+          .then(({ error }) => {
+            if (error) console.error('coop timer presence update failed', error);
+          })
+      : admin
+          .from('room_players')
+          .update({
+            lobby_confirmed_at: playerRes.data.lobby_confirmed_at ?? seenAt,
+            last_seen_at: seenAt,
+          })
+          .eq('room_id', room_id)
+          .eq('player_id', userId)
+          .then(({ error }) => {
+            if (error) console.error('room presence update failed', error);
+          });
 
   // Step 6: cache progress.
   const progressUpdate = admin
@@ -417,6 +428,10 @@ Deno.serve(async (req) => {
     }
     isSharedWin = !!claimed;
     if (isSharedWin) {
+      const { error: timerErr } = await admin.rpc('finish_coop_timer', {
+        p_room_id: room_id,
+      });
+      if (timerErr) console.error('coop timer finish failed', timerErr);
       const { error: hrErr } = await admin
         .from('room_players')
         .update({ has_returned: false })

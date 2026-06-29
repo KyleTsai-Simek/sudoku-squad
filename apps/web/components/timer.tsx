@@ -13,16 +13,17 @@ function formatElapsed(ms: number): string {
 export function Timer() {
   const startedAt = useGameStore((s) => s.startedAt);
   const finishedAt = useGameStore((s) => s.finishedAt);
+  const pausedAt = useGameStore((s) => s.pausedAt);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    if (startedAt === null || finishedAt !== null) return;
+    if (startedAt === null || finishedAt !== null || pausedAt !== null) return;
     const handle = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(handle);
-  }, [startedAt, finishedAt]);
+  }, [startedAt, finishedAt, pausedAt]);
 
   if (startedAt === null) return null;
-  const elapsed = (finishedAt ?? now) - startedAt;
+  const elapsed = (finishedAt ?? pausedAt ?? now) - startedAt;
   return (
     <span
       aria-label="Elapsed time"

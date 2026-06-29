@@ -164,6 +164,9 @@ A multiplayer session. Created when a host clicks "Battle" or "Coop" and gets a 
 | `next_seq` | bigint not null default 1 | Per-room atomic move-seq counter. `submit-move` reserves via `reserve_room_seq` RPC (one `UPDATE … RETURNING` round-trip). Reset to 1 on each `start-game`. Added in migration 0014, see [DECISIONS #0036](DECISIONS.md). |
 | `started_at` | timestamptz nullable | |
 | `finished_at` | timestamptz nullable | Cleared on next-round start. |
+| `coop_active_elapsed_ms` | integer | Co-op only. Accumulated active elapsed time, excluding periods where every player is away. Reset on Start and finalized on shared completion. Added in migration 0030 ([#0057](DECISIONS.md)). |
+| `coop_timer_started_at` | timestamptz nullable | Co-op only. Current active timer segment start, null while paused/finished. Added in migration 0030. |
+| `coop_timer_paused_at` | timestamptz nullable | Co-op only. Last all-away pause timestamp. Added in migration 0030. |
 | `created_at` | timestamptz | |
 
 ### `room_players`
@@ -181,9 +184,13 @@ A player's membership in a room. Anonymous; identified by `(room_id, player_id)`
 | `has_returned` | boolean default true | Used by the return-to-lobby cycle ([#0030](DECISIONS.md)). Flipped to false when the room transitions `playing → finished`; flipped back to true when the player clicks "Return to lobby". The next-round Start blocks until all surviving members are `true`. |
 | `lobby_confirmed_at` | timestamptz nullable | Set once a client remains visible in the room long enough to count as a real participant ([#0050](DECISIONS.md)). Unconfirmed rows are hidden from other lobby users and do not count for Start. Hosts are confirmed on create; gameplay submissions also confirm the caller. |
 | `last_seen_at` | timestamptz nullable | Best-effort heartbeat timestamp updated by `confirm-room-presence` and `submit-move`; reserved for disconnect grace/stale-row cleanup. |
+| `game_presence_active` | boolean | Co-op gameplay presence flag used by `update_coop_timer_presence` for active-time accounting. Hidden tabs mark inactive; Resume/heartbeats/moves mark active. Added in migration 0030. |
+| `game_presence_updated_at` | timestamptz nullable | Latest gameplay presence update. Stale active rows are ignored when deciding whether the co-op timer should keep running. |
 | PK | (`room_id`, `player_id`) | |
 
 `room_players` is durable membership, not pure online presence. Lobby visibility and Battle's Start gate use confirmed rows (`lobby_confirmed_at is not null`) so temporary mobile in-app browser joins do not appear as real participants. The home page's public-lobby browse additionally requires a recent `last_seen_at` so empty public lobbies age out without deleting the underlying room, and its `get_public_lobbies` read model exposes only lobby display fields: room code for the join URL, mode, current puzzle difficulty, host room username, status, and creation time. The own client may render its unconfirmed row locally during the short confirmation delay. Lobby host state is also read live from `room_players`: after 30 seconds of host inactivity, active heartbeat callers can trigger an atomic host handoff to the next joined active participant when the lobby has 3+ confirmed players.
+
+Co-op active-time accounting is intentionally separate from lobby presence. `confirm-room-presence` accepts an optional gameplay-active flag and calls `update_coop_timer_presence`, which locks the room and updates `rooms.coop_*` timer fields. Battle ignores these fields and remains wall-clock from `started_at`.
 
 ### `moves`
 The append-only log of player actions. This is the durable record; clients reconstruct state by replaying or applying snapshots.

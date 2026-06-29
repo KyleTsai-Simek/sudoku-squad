@@ -17,6 +17,31 @@ Format:
 
 ---
 
+## 0057 — Away pause and server-owned co-op active time
+**Date:** 2026-06-29
+**Status:** Accepted and implemented
+
+**Context.** Players should not lose progress when task switching or reloading, and elapsed time should not keep running during ordinary single-player absence. Multiplayer already persists authoritative progress through the server `moves` log, but coop's requested "pause only when every player is away" behavior changes elapsed time from wall-clock since `rooms.started_at` to accumulated active time.
+
+**Decision.** Keep single-player game-state saving local. `sp-persistence` continues to store one in-progress puzzle snapshot in `localStorage`; when the page is hidden for at least 5 seconds and then becomes visible again, the single-player store enters a paused state, freezes elapsed time from the moment the tab was hidden, blocks board input, and requires the player to tap Resume. Resume rebases `startedAt` so solve duration excludes the away period. This applies to ordinary single-player and daily puzzles because both use the same `/play/[code]` store.
+
+Do not change battle timers: battle remains wall-clock after match start, including for late joiners and task switching.
+
+For coop, use a server-side active-time model instead of approximating from client-only state. Migration `0030` adds `rooms.coop_active_elapsed_ms`, `rooms.coop_timer_started_at`, `rooms.coop_timer_paused_at`, `room_players.game_presence_active`, and `room_players.game_presence_updated_at`. The `update_coop_timer_presence` RPC locks the room, updates the caller's gameplay presence, ignores stale active heartbeats, resumes the timer when active co-op player count crosses from 0 to at least 1, and pauses it when the count reaches 0. `finish_coop_timer` finalizes the accumulated active elapsed time on shared completion.
+
+The web co-op game sends active/inactive gameplay presence through the existing `confirm-room-presence` Edge Function. A hidden tab marks the player inactive; returning after at least 5 seconds shows the same paused Resume overlay as single-player. Tapping Resume marks the player active again and resumes the shared timer if every player had been away. Co-op elapsed display and share solve time read from the server-owned active elapsed fields.
+
+**Alternatives considered.**
+- Store single-player in-progress games server-side. Rejected for now because the existing local snapshot is accurate, cheap, offline-friendly, and already covers current-day dailies without adding server bloat.
+- Pause single-player silently on return without an overlay. Rejected because the requested experience is an explicit paused screen and a Resume action.
+- Freeze coop locally when the current browser is hidden. Rejected because other active players should keep the timer running, and a local-only pause would make clients disagree.
+- Infer co-op active time only from `last_seen_at`. Rejected because stale or missing heartbeats need an explicit timer transition under a room lock.
+
+**Consequences.**
+- Single-player persistence remains bounded to one local in-progress game; completion records still go server-side as before.
+- Multiplayer progress remains server-durable through `moves`; rejoin/reload materializes from the authoritative move log.
+- Co-op elapsed time is now "active shared time," not wall-clock since Start. Future daily/history/leaderboard surfaces should use that semantic deliberately.
+
 ## 0056 — Silent lobby host handoff after inactive host heartbeat timeout
 **Date:** 2026-06-29
 **Status:** Accepted and implemented

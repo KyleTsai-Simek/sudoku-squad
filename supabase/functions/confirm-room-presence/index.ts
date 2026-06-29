@@ -15,13 +15,20 @@ const HOST_INACTIVE_MS = 30_000;
 
 interface ConfirmRoomPresenceInput {
   room_id: string;
+  game_active?: boolean;
 }
 
 function parseInput(body: unknown): ConfirmRoomPresenceInput | null {
   if (!body || typeof body !== 'object') return null;
   const b = body as Record<string, unknown>;
   if (typeof b.room_id !== 'string' || b.room_id.length === 0) return null;
-  return { room_id: b.room_id };
+  if (typeof b.game_active !== 'undefined' && typeof b.game_active !== 'boolean') {
+    return null;
+  }
+  return {
+    room_id: b.room_id,
+    game_active: typeof b.game_active === 'boolean' ? b.game_active : undefined,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -62,17 +69,39 @@ Deno.serve(async (req) => {
     return errorResponse('forbidden', 'caller is not in this room', 403);
   }
 
+  const update: {
+    lobby_confirmed_at: string;
+    last_seen_at?: string;
+  } = {
+    lobby_confirmed_at: existing.lobby_confirmed_at ?? now,
+  };
+  if (parsed.game_active !== false) {
+    update.last_seen_at = now;
+  }
+
   const { error: updateErr } = await admin
     .from('room_players')
-    .update({
-      lobby_confirmed_at: existing.lobby_confirmed_at ?? now,
-      last_seen_at: now,
-    })
+    .update(update)
     .eq('room_id', parsed.room_id)
     .eq('player_id', userId);
 
   if (updateErr) {
     return errorResponse('internal', `presence update failed: ${updateErr.message}`, 500);
+  }
+
+  let coopTimer: unknown = null;
+  if (typeof parsed.game_active === 'boolean') {
+    const { data: timer, error: timerErr } = await admin
+      .rpc('update_coop_timer_presence', {
+        p_room_id: parsed.room_id,
+        p_player_id: userId,
+        p_active: parsed.game_active,
+      })
+      .maybeSingle();
+    if (timerErr) {
+      return errorResponse('internal', `coop timer update failed: ${timerErr.message}`, 500);
+    }
+    coopTimer = timer ?? null;
   }
 
   const inactiveAfter = new Date(Date.now() - HOST_INACTIVE_MS).toISOString();
@@ -91,7 +120,8 @@ Deno.serve(async (req) => {
     room_id: parsed.room_id,
     player_id: userId,
     lobby_confirmed_at: existing.lobby_confirmed_at ?? now,
-    last_seen_at: now,
+    last_seen_at: update.last_seen_at ?? existing.lobby_confirmed_at ?? now,
     host_handoff: handoff ?? null,
+    coop_timer: coopTimer,
   });
 });

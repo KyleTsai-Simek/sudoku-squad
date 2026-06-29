@@ -90,6 +90,7 @@ interface CoopState {
   conflicts: Set<CellIndex>;
   startedAt: number | null;
   finishedAt: number | null;
+  pausedAt: number | null;
   sharedProgressPct: number;
   lastError: string | null;
   /** Realtime events that arrived before `startCoop` ran (or before the
@@ -107,6 +108,8 @@ interface CoopState {
     initialMoves: ServerMove[],
   ) => void;
   applySettings: (settings: RoomSettings) => void;
+  pauseLocal: (pausedAt?: number) => void;
+  resumeLocal: () => void;
   selectCell: (cell: CellIndex | null) => void;
   moveSelection: (dx: number, dy: number) => void;
   toggleNotesMode: () => void;
@@ -335,6 +338,7 @@ export const useCoopStore = create<CoopState>((set, get) => ({
   conflicts: new Set(),
   startedAt: null,
   finishedAt: null,
+  pausedAt: null,
   sharedProgressPct: 0,
   lastError: null,
   pendingRemote: [],
@@ -368,6 +372,7 @@ export const useCoopStore = create<CoopState>((set, get) => ({
       conflicts: recomputeConflicts(remoteBoard, settings.showConflicts),
       startedAt: gameStartsAt,
       finishedAt: null,
+      pausedAt: null,
       sharedProgressPct: 0,
       lastError: null,
       pendingRemote: [],
@@ -382,9 +387,23 @@ export const useCoopStore = create<CoopState>((set, get) => ({
     });
   },
 
+  pauseLocal: (pausedAt = Date.now()) => {
+    const { board, startedAt, finishedAt, pausedAt: existingPausedAt } = get();
+    if (!board || startedAt === null || finishedAt !== null || existingPausedAt !== null) {
+      return;
+    }
+    set({ pausedAt: Math.max(startedAt, pausedAt) });
+  },
+
+  resumeLocal: () => {
+    if (get().pausedAt === null) return;
+    set({ pausedAt: null });
+  },
+
   selectCell: (cell) => set({ selected: cell }),
 
   moveSelection: (dx, dy) => {
+    if (get().pausedAt !== null) return;
     const cur = get().selected ?? 40;
     const row = Math.floor(cur / 9);
     const col = cur % 9;
@@ -393,12 +412,18 @@ export const useCoopStore = create<CoopState>((set, get) => ({
     set({ selected: nr * 9 + nc });
   },
 
-  toggleNotesMode: () => set({ notesMode: !get().notesMode }),
-  setNotesMode: (on) => set({ notesMode: on }),
+  toggleNotesMode: () => {
+    if (get().pausedAt !== null) return;
+    set({ notesMode: !get().notesMode });
+  },
+  setNotesMode: (on) => {
+    if (get().pausedAt !== null) return;
+    set({ notesMode: on });
+  },
 
   enterValue: async (value) => {
-    const { board, selected, room, notesMode, finishedAt, startedAt } = get();
-    if (!board || !room || selected === null || finishedAt !== null) return;
+    const { board, selected, room, notesMode, finishedAt, startedAt, pausedAt } = get();
+    if (!board || !room || selected === null || finishedAt !== null || pausedAt !== null) return;
     if (startedAt !== null && Date.now() < startedAt) return;
     const cell = board.cells[selected];
     if (!cell || cell.given !== null) return;
@@ -469,8 +494,8 @@ export const useCoopStore = create<CoopState>((set, get) => ({
   },
 
   enterNote: async (value) => {
-    const { board, selected, room, finishedAt, startedAt, remoteBoard } = get();
-    if (!board || !room || selected === null || finishedAt !== null) return;
+    const { board, selected, room, finishedAt, startedAt, remoteBoard, pausedAt } = get();
+    if (!board || !room || selected === null || finishedAt !== null || pausedAt !== null) return;
     if (!remoteBoard) return;
     if (startedAt !== null && Date.now() < startedAt) return;
     const cell = board.cells[selected];
@@ -511,8 +536,8 @@ export const useCoopStore = create<CoopState>((set, get) => ({
   },
 
   clearCell: async () => {
-    const { board, selected, room, finishedAt, startedAt, remoteBoard, history } = get();
-    if (!board || !room || selected === null || finishedAt !== null) return;
+    const { board, selected, room, finishedAt, startedAt, remoteBoard, history, pausedAt } = get();
+    if (!board || !room || selected === null || finishedAt !== null || pausedAt !== null) return;
     if (!remoteBoard) return;
     if (startedAt !== null && Date.now() < startedAt) return;
     const cell = board.cells[selected];
@@ -542,8 +567,8 @@ export const useCoopStore = create<CoopState>((set, get) => ({
     // see the exact same board, notes included. The previous single-move
     // approach lost the target's prior notes and the auto-cleared peer notes,
     // diverging the log from what the undoing player saw. See DECISIONS #0041.
-    const { board, room, history, remoteBoard } = get();
-    if (!board || !room || !remoteBoard) return;
+    const { board, room, history, remoteBoard, pausedAt } = get();
+    if (!board || !room || !remoteBoard || pausedAt !== null) return;
     if (!canUndo(history)) return;
     const undone = undoHistory(board, history);
     await submitCoopCompensation(get, set, board, undone.state, undone.history);
@@ -552,8 +577,8 @@ export const useCoopStore = create<CoopState>((set, get) => ({
   redo: async () => {
     // Symmetric to undo: re-apply locally, then emit the moves that reproduce
     // the resulting board on the server so peers track it too.
-    const { board, room, history, remoteBoard } = get();
-    if (!board || !room || !remoteBoard) return;
+    const { board, room, history, remoteBoard, pausedAt } = get();
+    if (!board || !room || !remoteBoard || pausedAt !== null) return;
     if (!canRedo(history)) return;
     const result = redoHistory(board, history);
     if (result.state === board) {

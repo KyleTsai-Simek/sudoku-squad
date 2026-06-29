@@ -12,6 +12,7 @@ import { AppHeader } from '@/components/app-header';
 import { Timer } from '@/components/timer';
 import { SettingsSheet } from '@/components/settings-sheet';
 import { CompletionOverlay } from '@/components/completion-overlay';
+import { SinglePlayerPauseOverlay } from '@/components/single-player-pause-overlay';
 import {
   KeyboardShortcutsButton,
   KeyboardShortcutsOverlay,
@@ -126,6 +127,7 @@ export function PlayClient({
           <NumberPad />
           <KeyboardController />
           <KeyboardShortcutsOverlay />
+          <SinglePlayerPauseOverlay />
           <CompletionOverlay />
         </>
       )}

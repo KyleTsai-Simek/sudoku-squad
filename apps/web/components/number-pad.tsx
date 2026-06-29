@@ -45,9 +45,10 @@ export function NumberPad() {
   const canUndo = useGameStore(selectCanUndo);
   const canRedo = useGameStore(selectCanRedo);
   const finishedAt = useGameStore((s) => s.finishedAt);
+  const pausedAt = useGameStore((s) => s.pausedAt);
   const board = useGameStore((s) => s.board);
   const selected = useGameStore((s) => s.selected);
-  const disabled = finishedAt !== null;
+  const disabled = finishedAt !== null || pausedAt !== null;
 
   // Value of the currently selected cell (or null). Drives the per-button
   // selected-digit highlight.

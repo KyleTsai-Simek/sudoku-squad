@@ -149,7 +149,11 @@ Deno.serve(async (req) => {
   }
   const { error: resetPlayersErr } = await admin
     .from('room_players')
-    .update({ progress_pct: 0 })
+    .update({
+      progress_pct: 0,
+      game_presence_active: false,
+      game_presence_updated_at: null,
+    })
     .eq('room_id', room.id);
   if (resetPlayersErr) {
     return errorResponse(
@@ -168,6 +172,9 @@ Deno.serve(async (req) => {
       started_at: startedAt,
       finished_at: null,
       winner_player_id: null,
+      coop_active_elapsed_ms: 0,
+      coop_timer_started_at: null,
+      coop_timer_paused_at: null,
       // Reset the per-room seq counter so the new round's moves start at 1.
       // Old moves were just wiped above; next_seq is the only piece of seq
       // state that survives the round flip and would otherwise grow forever.

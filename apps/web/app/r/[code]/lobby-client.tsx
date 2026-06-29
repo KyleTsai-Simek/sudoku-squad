@@ -377,7 +377,8 @@ export function LobbyClient({ code }: { code: string }) {
           players={visiblePlayers}
           settings={settings}
           serverStartedAt={roomRow?.started_at ?? null}
-          serverFinishedAt={roomRow?.finished_at ?? null}
+          serverActiveElapsedMs={roomRow?.coop_active_elapsed_ms ?? 0}
+          serverTimerStartedAt={roomRow?.coop_timer_started_at ?? null}
           difficulty={currentDifficulty}
           finished={status === 'finished'}
         />

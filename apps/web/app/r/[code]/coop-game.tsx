@@ -8,6 +8,7 @@ import { playerColorStyle } from '@/lib/player-colors';
 import {
   fetchAllMoves,
   fetchPuzzleGivens,
+  confirmRoomPresence,
   subscribeToMoves,
   type RoomPlayerProgress,
   type RoomSettings,
@@ -22,15 +23,18 @@ import {
   KeyboardShortcutsButton,
   KeyboardShortcutsOverlay,
 } from '@/components/keyboard-shortcuts-overlay';
+import { PauseResumeOverlay } from '@/components/pause-resume-overlay';
 
 const COUNTDOWN_MS = 5000;
+const AWAY_PAUSE_THRESHOLD_MS = 5_000;
 
 interface Props {
   room: RoomState;
   players: RoomPlayerProgress[];
   settings: RoomSettings;
   serverStartedAt: string | null;
-  serverFinishedAt: string | null;
+  serverActiveElapsedMs: number;
+  serverTimerStartedAt: string | null;
   difficulty: Difficulty | null;
   /** Non-null means rooms.status='finished'. Coop never has a single winner;
    *  the room row's winner_player_id stays NULL and the win is shared. */
@@ -42,7 +46,8 @@ export function CoopGame({
   players,
   settings,
   serverStartedAt,
-  serverFinishedAt,
+  serverActiveElapsedMs,
+  serverTimerStartedAt,
   difficulty,
   finished,
 }: Props) {
@@ -50,6 +55,7 @@ export function CoopGame({
   const givens = useCoopStore((s) => s.givens);
   const startedAt = useCoopStore((s) => s.startedAt);
   const finishedAt = useCoopStore((s) => s.finishedAt);
+  const pausedAt = useCoopStore((s) => s.pausedAt);
   const sharedProgressPct = useCoopStore((s) => s.sharedProgressPct);
   const serverMoves = useCoopStore((s) => s.serverMoves);
   const pendings = useCoopStore((s) => s.pendings);
@@ -58,6 +64,8 @@ export function CoopGame({
   const applyRemoteMove = useCoopStore((s) => s.applyRemoteMove);
   const markFinished = useCoopStore((s) => s.markFinished);
   const resync = useCoopStore((s) => s.resync);
+  const pauseLocal = useCoopStore((s) => s.pauseLocal);
+  const resumeLocal = useCoopStore((s) => s.resumeLocal);
   // Derive per-player credit at render time from server-confirmed moves
   // overlaid with our own pendings. This sidesteps having to keep an
   // ownership map in sync across every store transition and ensures the
@@ -110,6 +118,64 @@ export function CoopGame({
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [resync]);
 
+  useEffect(() => {
+    if (finished) return;
+    let hiddenAt: number | null = null;
+    let cancelled = false;
+
+    const setGameActive = (active: boolean) => {
+      void confirmRoomPresence(room.room_id, { gameActive: active });
+    };
+
+    if (document.visibilityState === 'visible' && useCoopStore.getState().pausedAt === null) {
+      setGameActive(true);
+    }
+
+    const heartbeatId = window.setInterval(() => {
+      if (
+        !cancelled &&
+        document.visibilityState === 'visible' &&
+        useCoopStore.getState().pausedAt === null
+      ) {
+        setGameActive(true);
+      }
+    }, 10_000);
+
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        setGameActive(false);
+        return;
+      }
+      if (document.visibilityState !== 'visible') return;
+      const awayStartedAt = hiddenAt;
+      hiddenAt = null;
+      if (
+        awayStartedAt !== null &&
+        Date.now() - awayStartedAt >= AWAY_PAUSE_THRESHOLD_MS
+      ) {
+        pauseLocal(awayStartedAt);
+        return;
+      }
+      if (useCoopStore.getState().pausedAt === null) {
+        setGameActive(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(heartbeatId);
+      document.removeEventListener('visibilitychange', onVis);
+      setGameActive(false);
+    };
+  }, [finished, pauseLocal, room.room_id]);
+
+  const onResume = () => {
+    resumeLocal();
+    void confirmRoomPresence(room.room_id, { gameActive: true });
+  };
+
   // One-shot init: fetch givens + the existing move log, then hand off to
   // startCoop. Guarded by `board.puzzleCode === room.puzzle_code` so a
   // re-render with the same puzzle is a no-op; a puzzle_code change
@@ -151,15 +217,19 @@ export function CoopGame({
   const inCountdown = startedAt !== null && now < startedAt;
   const countdownSeconds = inCountdown ? Math.max(1, Math.ceil((startedAt - now) / 1000)) : 0;
   const elapsed = useMemo(() => {
-    if (startedAt === null) return 0;
-    return Math.max(0, now - startedAt);
-  }, [now, startedAt]);
+    const activeSegmentStart = serverTimerStartedAt
+      ? new Date(serverTimerStartedAt).getTime()
+      : null;
+    return Math.max(
+      0,
+      serverActiveElapsedMs +
+        (activeSegmentStart === null ? 0 : Math.max(0, now - activeSegmentStart)),
+    );
+  }, [now, serverActiveElapsedMs, serverTimerStartedAt]);
 
   const shareResult = useMemo(() => {
     if (!difficulty || startedAt === null || !finished) return undefined;
-    const serverEnd = serverFinishedAt ? new Date(serverFinishedAt).getTime() : null;
-    const localEnd = finishedAt ?? now;
-    const solveTimeMs = Math.max(0, (serverEnd ?? localEnd) - startedAt);
+    const solveTimeMs = elapsed;
     return {
       puzzleCode: room.puzzle_code,
       difficulty,
@@ -168,7 +238,7 @@ export function CoopGame({
       roomCode: room.room_code,
       playerCount: players.length,
     };
-  }, [difficulty, finished, finishedAt, now, players.length, room.puzzle_code, room.room_code, serverFinishedAt, startedAt]);
+  }, [difficulty, elapsed, finished, players.length, room.puzzle_code, room.room_code, startedAt]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center gap-4 px-3 py-4">
@@ -235,6 +305,7 @@ export function CoopGame({
         shareResult={shareResult}
         onDismiss={() => setWinDismissed(true)}
       />
+      {pausedAt !== null ? <PauseResumeOverlay onResume={onResume} /> : null}
     </main>
   );
 }

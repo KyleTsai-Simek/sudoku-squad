@@ -11,7 +11,8 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 ### Single player ✅ live
 - One player, one puzzle.
 - All settings (notes, reveal, hints) available.
-- Local state only — does not require a Supabase room.
+- Local state only — does not require a Supabase room. One in-progress puzzle snapshot is saved locally so a reload or browser crash can resume the current puzzle without server-side single-player state.
+- Returning after the page has been hidden for at least 5 seconds shows a paused screen. The timer freezes from the moment the page was hidden, input is blocked, and the player taps Resume to continue.
 - Purpose: most casual entry point, also our testbed for the core engine.
 
 ### Daily puzzles 🔄 implemented in branch
@@ -60,6 +61,7 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 - Late joiners can enter an already-started co-op room until the room reaches 8 players. They replay the shared move log and can start helping immediately.
 - ✅ Last-write-wins per cell, server-ordered by `seq` (server-overlay reconciliation in `coop-store.ts`).
 - ✅ Game ends when the board is correctly completed. Win celebrated together (shared-win broadcast). Coop-colored shared progress.
+- ✅ Co-op elapsed time is active shared time: it runs while at least one player is active and pauses when every player is away. Returning after at least 5 seconds shows the same Resume overlay used by single-player; tapping Resume marks that player active and continues the shared timer.
 - 🔲 Visible colored cursors show where other players are looking (Supabase Presence).
 - 🔲 **Notes shared by default** with an opt-in **"Private notes"** toggle to keep your own pencil marks invisible to teammates. See [DECISIONS.md #0007](DECISIONS.md). Descopes to V2 if the build is tight.
 - 🔲 Disconnect/rejoin grace handling.
@@ -102,7 +104,7 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 | Notes (pencil marks) | **On** | Always available. |
 | Auto-clean notes | **Always on** | When you place a number, that digit is removed from the pencil-marks of every peer cell (row/col/box). Universal pattern in major sudoku apps; no toggle. Undo restores. |
 | Hints / Reveal cell | **Removed in V1** (Chunk A). Auto-check is the replacement signal: when on, the moment a wrong digit is placed it's flagged. The `sp_get_puzzle` RPC stays for SP auto-check; the multiplayer `hint` Edge Function was dropped from scope. |
-| Timer visible | **On** | Battle uses it for tiebreaks; coop just for fun. |
+| Timer visible | **On** | Battle uses wall-clock time after Start. Co-op shows server-owned active shared time. |
 | Appearance | **Auto** | Follows the user's system light/dark setting unless manually overridden to Light or Dark from the account menu. The override is stored locally. |
 
 ### The "reveal answers" cluster — resolved
@@ -163,6 +165,7 @@ Optional email sign-in, layered on top of anonymous play:
 - Durable room membership is separate from confirmed lobby presence. A brand-new joiner is hidden from other players until they stay visible for about 5 seconds; after confirmation, they remain a room participant through normal task switching.
 - If a player drops connection mid-game, their durable seat and inputs so far remain. Battle and coop both support returning through the room URL; late joins after Start continue to work.
 - A confirmed player who comes back after the game has started rejoins the game surface and can continue participating.
+- Battle timers do not pause after Start. Co-op uses server-owned active elapsed time, so the displayed timer pauses only when no players are active and resumes when at least one player taps Resume or otherwise becomes active.
 - Never-confirmed lobby rows are ignored for Start and can be pruned after a short stale window.
 - Host migration is silent. If the current host is inactive for about 30 seconds and the lobby has 3+ confirmed players, the earliest joined active confirmed non-host becomes host. The host badge and controls update through the live `room_players` subscription.
 

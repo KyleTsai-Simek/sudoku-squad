@@ -180,9 +180,15 @@ export async function joinRoom(args: {
   };
 }
 
-export async function confirmRoomPresence(roomId: string): Promise<Result<void>> {
+export async function confirmRoomPresence(
+  roomId: string,
+  options?: { gameActive?: boolean },
+): Promise<Result<void>> {
   const res = await invoke<{ last_seen_at: string }>('confirm-room-presence', {
     room_id: roomId,
+    ...(typeof options?.gameActive === 'boolean'
+      ? { game_active: options.gameActive }
+      : {}),
   });
   if (!res.ok) return res;
   return { ok: true, value: undefined };
@@ -404,10 +410,13 @@ export interface RoomRow {
   winner_player_id: string | null;
   started_at: string | null;
   finished_at: string | null;
+  coop_active_elapsed_ms: number;
+  coop_timer_started_at: string | null;
+  coop_timer_paused_at: string | null;
 }
 
 const ROOM_COLS =
-  'id, code, mode, status, puzzle_code, settings, is_public, winner_player_id, started_at, finished_at';
+  'id, code, mode, status, puzzle_code, settings, is_public, winner_player_id, started_at, finished_at, coop_active_elapsed_ms, coop_timer_started_at, coop_timer_paused_at';
 
 export async function fetchRoom(roomId: string): Promise<RoomRow | null> {
   const client = await ensureAuthClient();

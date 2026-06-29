@@ -27,6 +27,7 @@ import { useGameStore } from './game-store';
 
 const KEY = 'sudoku-squad:sp:current';
 const VERSION = 2;
+const AWAY_PAUSE_THRESHOLD_MS = 5_000;
 
 interface PersistedGame {
   v: number;
@@ -56,7 +57,7 @@ function storage(): Storage | null {
 export function saveCurrentGame(): void {
   const s = storage();
   if (!s) return;
-  const { puzzle, board, history, startedAt, finishedAt, hintsUsed, notesMode } =
+  const { puzzle, board, history, startedAt, finishedAt, pausedAt, hintsUsed, notesMode } =
     useGameStore.getState();
   if (!puzzle || !board || startedAt === null || finishedAt !== null) {
     // Nothing in progress → make sure we don't leave a stale slot around.
@@ -69,7 +70,7 @@ export function saveCurrentGame(): void {
     puzzle,
     board,
     history,
-    elapsedMs: Math.max(0, Date.now() - startedAt),
+    elapsedMs: Math.max(0, (pausedAt ?? Date.now()) - startedAt),
     hintsUsed,
     notesMode,
     savedAt: Date.now(),
@@ -130,6 +131,7 @@ export function resumeSavedGame(code: string): boolean {
     history: parsed.history,
     startedAt,
     finishedAt: null,
+    pausedAt: null,
     hintsUsed: parsed.hintsUsed ?? 0,
     notesMode: parsed.notesMode ?? false,
   });
@@ -151,6 +153,9 @@ export function installSpAutosave(): () => void {
   let lastBoard: BoardState | null = null;
   let lastHistory: MoveHistory | null = null;
   let lastFinished: number | null = null;
+  let lastStarted: number | null = null;
+  let lastPaused: number | null = null;
+  let hiddenAt: number | null = null;
 
   const unsub = useGameStore.subscribe((state) => {
     // Only react to game-meaningful changes — skip pure selection/notesMode
@@ -158,13 +163,17 @@ export function installSpAutosave(): () => void {
     if (
       state.board === lastBoard &&
       state.history === lastHistory &&
-      state.finishedAt === lastFinished
+      state.finishedAt === lastFinished &&
+      state.startedAt === lastStarted &&
+      state.pausedAt === lastPaused
     ) {
       return;
     }
     lastBoard = state.board;
     lastHistory = state.history;
     lastFinished = state.finishedAt;
+    lastStarted = state.startedAt;
+    lastPaused = state.pausedAt;
     if (state.finishedAt !== null) {
       clearSavedGame();
     } else {
@@ -173,8 +182,19 @@ export function installSpAutosave(): () => void {
   });
 
   const onVis = () => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+    if (typeof document === 'undefined') return;
+    if (document.visibilityState === 'hidden') {
+      hiddenAt = Date.now();
       saveCurrentGame();
+      return;
+    }
+
+    if (document.visibilityState === 'visible' && hiddenAt !== null) {
+      const awayStartedAt = hiddenAt;
+      hiddenAt = null;
+      if (Date.now() - awayStartedAt >= AWAY_PAUSE_THRESHOLD_MS) {
+        useGameStore.getState().pauseGame(awayStartedAt);
+      }
     }
   };
   if (typeof document !== 'undefined') {

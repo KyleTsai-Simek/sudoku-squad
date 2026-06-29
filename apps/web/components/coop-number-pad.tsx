@@ -48,9 +48,10 @@ export function CoopNumberPad() {
   const canUndo = useCoopStore(selectCoopCanUndo);
   const canRedo = useCoopStore(selectCoopCanRedo);
   const finishedAt = useCoopStore((s) => s.finishedAt);
+  const pausedAt = useCoopStore((s) => s.pausedAt);
   const board = useCoopStore((s) => s.board);
   const selected = useCoopStore((s) => s.selected);
-  const disabled = finishedAt !== null;
+  const disabled = finishedAt !== null || pausedAt !== null;
 
   const selectedDigit =
     board && selected !== null ? effectiveCellValue(board.cells[selected]!) : null;
