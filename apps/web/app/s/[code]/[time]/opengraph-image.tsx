@@ -70,54 +70,68 @@ export default async function OpenGraphImage({ params, searchParams }: Props) {
               background: '#ffffff',
             }}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
-              <div style={{ display: 'flex', fontSize: 58, fontWeight: 900, color: '#1d4ed8' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <div style={{ display: 'flex', fontSize: 58, fontWeight: 900, color: '#0f172a' }}>
                 Sudoku Squad
               </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 18 }}>
+                  <div style={{ display: 'flex', fontSize: 56, fontWeight: 900, lineHeight: 1 }}>
+                    {difficulty}
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      paddingBottom: 5,
+                      fontSize: 28,
+                      fontWeight: 800,
+                      color: '#64748b',
+                    }}
+                  >
+                    {code}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignSelf: 'flex-start',
+                    border: '2px solid #bfdbfe',
+                    borderRadius: 999,
+                    background: '#dbeafe',
+                    padding: '14px 24px',
+                    fontSize: 30,
+                    fontWeight: 900,
+                    color: '#1e3a8a',
+                  }}
+                >
+                  Finished in {time}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {dailyDate ? (
+                <div style={{ display: 'flex', fontSize: 22, fontWeight: 800, color: '#475569' }}>
+                  {formatMonthDay(dailyDate)} daily puzzle
+                </div>
+              ) : null}
               <div
                 style={{
                   display: 'flex',
-                  fontSize: 34,
+                  alignSelf: 'flex-start',
+                  borderRadius: 18,
+                  background: '#1d4ed8',
+                  padding: '20px 34px',
+                  fontSize: 32,
                   fontWeight: 900,
-                  letterSpacing: 1.8,
+                  letterSpacing: 1,
                   textTransform: 'uppercase',
-                  color: '#b45309',
+                  color: '#ffffff',
                 }}
               >
                 Try this puzzle
               </div>
             </div>
-
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 24 }}>
-              <div style={{ display: 'flex', fontSize: 64, fontWeight: 900, lineHeight: 1 }}>
-                {difficulty}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                <div style={{ display: 'flex', fontSize: 23, fontWeight: 800, color: '#475569' }}>
-                  Finished in
-                </div>
-                <div style={{ display: 'flex', fontSize: 58, fontWeight: 900, lineHeight: 1 }}>
-                  {time}
-                </div>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  paddingBottom: 5,
-                  fontSize: 24,
-                  fontWeight: 800,
-                  color: '#64748b',
-                }}
-              >
-                {code}
-              </div>
-            </div>
-
-            {dailyDate ? (
-              <div style={{ display: 'flex', fontSize: 22, fontWeight: 800, color: '#475569' }}>
-                {formatMonthDay(dailyDate)} daily puzzle
-              </div>
-            ) : null}
           </div>
         </div>
       </div>

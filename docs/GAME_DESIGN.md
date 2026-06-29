@@ -34,7 +34,7 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 ### End-game sharing 🔄 implemented locally
 - End-game modals should offer a Share action once a puzzle is complete: single-player completion, daily completion, battle winner, and coop win.
 - Shared text should be anonymous and simple: "Try this easy puzzle. I finished in 5:51!" plus a link that lets another player try the exact same puzzle.
-- Share links should unfurl with a result-specific Open Graph image: large Sudoku Squad branding, prominent "Try this puzzle" copy, difficulty, solve time, puzzle code, and a playful board-card visual. The visual must not expose the solution in a useful way.
+- Share links should unfurl with a result-specific Open Graph image: black Sudoku Squad branding, puzzle info, a finished-time badge, a primary-style "Try this puzzle" button, and a playful board-card visual. The visual must not expose the solution in a useful way.
 - The recipient experience should be direct: open a short `/s/{puzzleCode}/{time}` share link, see a compact challenge/result page, then tap to play the same puzzle. Daily share links must preserve daily metadata so completing today's shared daily behaves like entering from the home Daily Puzzles row.
 - Tone and identity are settled for the first pass: anonymous shares with softer "Try this puzzle" copy, not username-based or competitive "Can you beat me?" copy. Local `/share-preview` supports iteration before external unfurl caches are involved. See [SHARE_LINKS_PLAN.md](SHARE_LINKS_PLAN.md).
 
