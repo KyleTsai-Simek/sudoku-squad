@@ -261,7 +261,7 @@ Share pages and images must never expose `puzzles.solution`, `auth.uid()`, email
 
 ### Multiplayer lobby invite shares
 
-Lobby invite shares use the room URL itself: `/r/{roomCode}`. The route is still the direct join surface for human visitors, and it also provides crawler metadata plus a dynamic `opengraph-image` for rich previews. The image is a web-layer feature: it may read the public room row and the safe puzzle projection to render a logo, non-solution puzzle preview, "Play sudoku with me", and "Join game", but it must not expose the puzzle solution, `auth.uid()`, email, usernames, or private account data.
+Lobby invite shares use the room URL itself: `/r/{roomCode}`. The route is still the direct join surface for human visitors, and it also provides crawler metadata plus a dynamic `opengraph-image` for rich previews. The image is a web-layer feature: it may read the public room row and the safe puzzle projection to render a logo, non-solution puzzle preview, "Play sudoku with me!", and "Join game", but it must not expose the puzzle solution, `auth.uid()`, email, usernames, or private account data.
 
 New player-created rooms are public by product default. The historical `rooms.is_public` database column default remains `false`; `create-room` and the warm-room consumption path set the intended public value explicitly so unused background preloads can stay private until a user actually starts that room.
 

@@ -92,12 +92,7 @@ export function TrophyIcon(props: IconProps) {
 }
 
 export function ShareIcon(props: IconProps) {
-  return (
-    <Icon
-      {...props}
-      path="M680-80q-50 0-85-35t-35-85q0-6 3-28L282-392q-16 15-37 23.5t-45 8.5q-50 0-85-35t-35-85q0-50 35-85t85-35q24 0 45 8.5t37 23.5l281-164q-2-7-2.5-13.5T560-760q0-50 35-85t85-35q50 0 85 35t35 85q0 50-35 85t-85 35q-24 0-45-8.5T598-672L317-508q2 7 2.5 13.5t.5 14.5q0 8-.5 14.5T316-452l282 165q16-15 37-24t45-9q50 0 85 35t35 85q0 50-35 85t-85 35Z"
-    />
-  );
+  return <IosShareIcon {...props} />;
 }
 
 export function IosShareIcon(props: IconProps) {
@@ -107,4 +102,8 @@ export function IosShareIcon(props: IconProps) {
       path="M440-280h80v-240h120L480-680 320-520h120v240ZM200-120q-33 0-56.5-23.5T120-200v-240h80v240h560v-240h80v240q0 33-23.5 56.5T760-120H200Z"
     />
   );
+}
+
+export function ExpandMoreIcon(props: IconProps) {
+  return <Icon {...props} path="M480-344 240-584l56-56 184 184 184-184 56 56-240 240Z" />;
 }

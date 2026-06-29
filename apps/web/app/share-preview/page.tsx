@@ -50,11 +50,11 @@ const CASES: SharePreviewCase[] = [
 const LOBBY_CASES = [
   {
     label: 'Battle lobby invite',
-    href: '/r/battle1/opengraph-image?preview=1&p=3santv&m=battle',
+    href: '/r/battle1/opengraph-image?preview=1&p=3santv',
   },
   {
     label: 'Co-op lobby invite',
-    href: '/r/coop01/opengraph-image?preview=1&p=mdkr7p&m=coop',
+    href: '/r/coop01/opengraph-image?preview=1&p=mdkr7p',
   },
 ];
 

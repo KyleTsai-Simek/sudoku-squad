@@ -5,7 +5,6 @@ import type { NextRequest } from 'next/server';
 import { fetchPublicPuzzle, type PublicPuzzle } from '@/lib/public-puzzle';
 import { fetchPublicRoomShare } from '@/lib/public-room-share';
 import { isValidRoomCode } from '@/lib/lobby-share';
-import type { RoomMode } from '@/lib/rooms';
 
 export const runtime = 'nodejs';
 
@@ -17,12 +16,10 @@ export async function GET(request: NextRequest, { params }: Props) {
   const { code } = await params;
   const preview = request.nextUrl.searchParams.get('preview') === '1';
   const previewPuzzleCode = request.nextUrl.searchParams.get('p') ?? '3santv';
-  const previewMode = request.nextUrl.searchParams.get('m') === 'coop' ? 'coop' : 'battle';
 
   const room = !preview && isValidRoomCode(code) ? await fetchPublicRoomShare(code) : null;
   const previewPuzzle = preview ? await fetchPublicPuzzle(previewPuzzleCode) : null;
   const puzzle: PublicPuzzle | null = room?.puzzle ?? previewPuzzle;
-  const mode: RoomMode = room?.mode ?? previewMode;
   const logoDataUrl = await loadLogoDataUrl();
 
   return new ImageResponse(
@@ -86,24 +83,13 @@ export async function GET(request: NextRequest, { params }: Props) {
               <div
                 style={{
                   display: 'flex',
-                  alignSelf: 'flex-start',
-                  fontSize: 22,
-                  fontWeight: 800,
-                  color: '#475569',
-                }}
-              >
-                {mode === 'coop' ? 'Co-op lobby' : 'Battle lobby'}
-              </div>
-              <div
-                style={{
-                  display: 'flex',
                   fontSize: 39,
                   fontWeight: 700,
                   lineHeight: 1.08,
                   color: '#0f172a',
                 }}
               >
-                Play sudoku with me
+                Play sudoku with me!
               </div>
             </div>
 

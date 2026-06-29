@@ -221,7 +221,7 @@ Room invite links should feel like completion shares while still opening directl
 - [x] Auto-copy `Tap this link to play sudoku with me!` plus the room URL when a creator lands in their lobby, and show a snackbar-style confirmation.
 - [x] Add the iOS share icon to the lobby copy button.
 - [x] Rename `Settings` to `Lobby Settings` and collapse it by default for hosts and non-hosts.
-- [x] Add room-route Open Graph metadata and a room OG image using the existing Sudoku Squad logo/board-card visual, with "Play sudoku with me" and "Join game" copy.
+- [x] Add room-route Open Graph metadata and a room OG image using the existing Sudoku Squad logo/board-card visual, with "Play sudoku with me!" and "Join game" copy.
 - [x] Add `/share-preview` examples for lobby OG images.
 - [ ] Manual product test: create battle and co-op lobbies, confirm auto-copy/snackbar, public/private toggle, non-host read-only settings, direct join, and real link unfurls after deploy.
 

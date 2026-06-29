@@ -43,7 +43,7 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 - Player-created lobbies are public by default. Hosts can uncheck Public lobby inside Lobby Settings to make a lobby private. Unused warmed preload rooms stay private until consumed so public browsing is not polluted by background preloads.
 - When the creator lands in the lobby, the app copies the invite payload to their clipboard and shows a snackbar confirmation. The copied text is: "Tap this link to play sudoku with me!" plus the room URL.
 - The lobby copy button uses the iOS share icon and copies the same payload.
-- Room links should unfurl with a lobby-specific Open Graph image: existing Sudoku Squad branding and puzzle preview, middle copy "Play sudoku with me", and bottom CTA "Join game". Local `/share-preview` includes direct lobby OG-image examples.
+- Room links should unfurl with a lobby-specific Open Graph image: existing Sudoku Squad branding and puzzle preview, middle copy "Play sudoku with me!", and bottom CTA "Join game". Local `/share-preview` includes direct lobby OG-image examples.
 
 ### Battle ✅ live (Phase 2)
 - 2–8 players, each with their own private copy of the same puzzle.
