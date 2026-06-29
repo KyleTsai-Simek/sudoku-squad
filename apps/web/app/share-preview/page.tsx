@@ -1,54 +1,49 @@
 import Link from 'next/link';
-import { createShareToken, type ShareTokenPayload } from '@/lib/share-token';
+import { buildShareMessage, formatShareTime } from '@/lib/share-copy';
+import { buildSharePath, type ShareMode } from '@/lib/share-url';
 import { SAMPLE_PUZZLES } from '@/lib/sample-puzzles';
+import type { Difficulty } from '@sudoku-squad/core';
 
 export const dynamic = 'force-dynamic';
 
-const CASES: Array<{ label: string; payload: ShareTokenPayload }> = [
+interface SharePreviewCase {
+  label: string;
+  puzzleCode: string;
+  difficulty: Difficulty;
+  solveTimeMs: number;
+  mode: ShareMode;
+  dailyDate?: string;
+}
+
+const CASES: SharePreviewCase[] = [
   {
     label: 'Solo Medium, quick',
-    payload: {
-      version: 1,
-      puzzleCode: '3santv',
-      difficulty: 'medium',
-      solveTimeMs: 182_000,
-      mode: 'single',
-    },
+    puzzleCode: '3santv',
+    difficulty: 'medium',
+    solveTimeMs: 182_000,
+    mode: 'single',
   },
   {
     label: 'Daily Hard',
-    payload: {
-      version: 1,
-      puzzleCode: 'k9i5iv',
-      difficulty: 'hard',
-      solveTimeMs: 542_000,
-      mode: 'single',
-      dailyDate: '2026-06-27',
-    },
+    puzzleCode: 'k9i5iv',
+    difficulty: 'hard',
+    solveTimeMs: 542_000,
+    mode: 'single',
+    dailyDate: '2026-06-29',
   },
   {
     label: 'Battle Expert',
-    payload: {
-      version: 1,
-      puzzleCode: 'wzkgre',
-      difficulty: 'expert',
-      solveTimeMs: 731_000,
-      mode: 'battle',
-      roomCode: 'abc123',
-      playerCount: 3,
-    },
+    puzzleCode: 'wzkgre',
+    difficulty: 'expert',
+    solveTimeMs: 731_000,
+    mode: 'battle',
   },
   {
     label: 'Co-op Hard',
-    payload: {
-      version: 1,
-      puzzleCode: 'mdkr7p',
-      difficulty: 'hard',
-      solveTimeMs: 906_000,
-      mode: 'coop',
-      roomCode: 'coops1',
-      playerCount: 4,
-    },
+    puzzleCode: 'mdkr7p',
+    difficulty: 'hard',
+    solveTimeMs: 906_000,
+    mode: 'coop',
   },
 ];
 
@@ -64,18 +59,20 @@ export default function SharePreviewPage() {
         </header>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {CASES.map(({ label, payload }) => {
-            const token = createShareToken(payload);
-            const href = `/s/${token}`;
+          {CASES.map((preview) => {
+            const href = buildSharePath(preview);
             return (
               <section
-                key={label}
+                key={preview.label}
                 className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4"
               >
                 <div>
-                  <p className="text-sm font-semibold">{label}</p>
+                  <p className="text-sm font-semibold">{preview.label}</p>
                   <p className="text-xs text-muted">
-                    {payload.puzzleCode} · {payload.mode} · {payload.solveTimeMs}ms
+                    {preview.puzzleCode} · {preview.mode} · {formatShareTime(preview.solveTimeMs)}
+                  </p>
+                  <p className="mt-2 text-xs text-muted">
+                    {buildShareMessage(preview)}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">

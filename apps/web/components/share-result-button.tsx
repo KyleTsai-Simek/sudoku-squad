@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import type { Difficulty } from '@sudoku-squad/core';
 import { buildShareMessage, buildShareTitle } from '@/lib/share-copy';
-import type { ShareMode } from '@/lib/share-token';
-import { ShareIcon } from './material-icons';
+import { buildAbsoluteShareUrl, type ShareMode } from '@/lib/share-url';
+import { IosShareIcon } from './material-icons';
 
 export interface ShareResultInput {
   puzzleCode: string;
@@ -29,23 +29,15 @@ export function ShareResultButton({ result, variant = 'secondary' }: Props) {
   async function onShare() {
     setState('sharing');
     try {
-      const res = await fetch('/api/share-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(result),
-      });
-      if (!res.ok) throw new Error('Share link unavailable');
-      const data = (await res.json()) as { url?: string };
-      if (!data.url) throw new Error('Share link unavailable');
-
+      const url = buildAbsoluteShareUrl(result, window.location.origin);
       const title = buildShareTitle(result);
-      const text = buildShareMessage({ ...result, url: data.url });
+      const text = buildShareMessage(result);
       if (navigator.share) {
-        await navigator.share({ title, text, url: data.url });
+        await navigator.share({ title, text, url });
         setState('idle');
         return;
       }
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(`${text}\n${url}`);
       setState('copied');
       window.setTimeout(() => setState('idle'), 1600);
     } catch (error) {
@@ -79,7 +71,7 @@ export function ShareResultButton({ result, variant = 'secondary' }: Props) {
           : 'inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-surface-muted disabled:opacity-60'
       }
     >
-      <ShareIcon size={18} />
+      <IosShareIcon size={18} />
       {label}
     </button>
   );

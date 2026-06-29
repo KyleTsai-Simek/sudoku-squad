@@ -1,28 +1,42 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { verifyShareToken } from '@/lib/share-token';
-import { buildShareMessage, buildShareTitle, formatShareTime, shareModeLabel } from '@/lib/share-copy';
+import { buildShareTitle, formatShareTime } from '@/lib/share-copy';
 import { difficultyLabel } from '@/lib/difficulty-labels';
 import { fetchPublicPuzzle } from '@/lib/public-puzzle';
 import { siteUrl } from '@/lib/site-url';
+import {
+  buildPlayHref,
+  decodeShareTime,
+  isValidDailyDate,
+  isValidShareCode,
+} from '@/lib/share-url';
 
 interface Props {
-  params: Promise<{ token: string }>;
+  params: Promise<{ code: string; time: string }>;
+  searchParams: Promise<{ d?: string }>;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { token } = await params;
-  const payload = verifyShareToken(token);
-  if (!payload) {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
+  const { code, time } = await params;
+  const { d } = await searchParams;
+  const solveTimeMs = decodeShareTime(time);
+  const dailyDate = isValidDailyDate(d) ? d : undefined;
+  const puzzle = isValidShareCode(code) ? await fetchPublicPuzzle(code) : null;
+
+  if (!puzzle || solveTimeMs === null) {
     return {
       title: 'Try a Sudoku Squad puzzle',
       description: 'Open this Sudoku Squad challenge and play the same puzzle.',
     };
   }
-  const title = buildShareTitle(payload);
-  const description = buildShareMessage(payload);
-  const canonical = `${siteUrl()}/s/${token}`;
+
+  const title = buildShareTitle({ difficulty: puzzle.difficulty });
+  const description = `${difficultyLabel(puzzle.difficulty)} puzzle finished in ${formatShareTime(
+    solveTimeMs,
+  )}.`;
+  const canonical = shareCanonicalUrl(code, time, dailyDate);
+  const imageUrl = shareImageUrl(code, time, dailyDate);
   return {
     title,
     description,
@@ -33,28 +47,35 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url: canonical,
       siteName: 'Sudoku Squad',
       type: 'website',
-      images: [{ url: `${canonical}/opengraph-image`, width: 1200, height: 630 }],
+      images: [{ url: imageUrl, width: 1200, height: 630 }],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: [`${canonical}/opengraph-image`],
+      images: [imageUrl],
     },
   };
 }
 
-export default async function SharePage({ params }: Props) {
-  const { token } = await params;
-  const payload = verifyShareToken(token);
-  if (!payload) notFound();
-  const puzzle = await fetchPublicPuzzle(payload.puzzleCode);
+export default async function SharePage({ params, searchParams }: Props) {
+  const { code, time } = await params;
+  const { d } = await searchParams;
+  const solveTimeMs = decodeShareTime(time);
+  if (!isValidShareCode(code) || solveTimeMs === null) notFound();
+  const puzzle = await fetchPublicPuzzle(code);
   if (!puzzle) notFound();
 
-  const mode =
-    payload.mode === 'single'
-      ? 'Solo puzzle'
-      : `${shareModeLabel(payload.mode)}${payload.playerCount ? ` · ${payload.playerCount} players` : ''}`;
+  const dailyDate = isValidDailyDate(d) ? d : undefined;
+  const category = shareCategory({
+    dailyDate,
+    difficulty: difficultyLabel(puzzle.difficulty),
+  });
+  const playHref = buildPlayHref({
+    puzzleCode: code,
+    dailyDate,
+    difficulty: puzzle.difficulty,
+  });
 
   return (
     <main className="min-h-screen bg-background px-5 py-8 text-foreground">
@@ -73,22 +94,22 @@ export default async function SharePage({ params }: Props) {
           <div className="flex flex-col gap-5">
             <div>
               <p className="text-sm font-semibold uppercase tracking-widest text-warning">
-                {mode}
+                {category}
               </p>
               <h1 className="mt-2 text-4xl font-semibold tracking-normal">
                 Try this puzzle
               </h1>
               <p className="mt-3 text-lg text-muted">
-                A {difficultyLabel(payload.difficulty)} Sudoku Squad puzzle finished in{' '}
+                {difficultyLabel(puzzle.difficulty)} puzzle finished in{' '}
                 <span className="font-semibold text-foreground">
-                  {formatShareTime(payload.solveTimeMs)}
+                  {formatShareTime(solveTimeMs)}
                 </span>
                 .
               </p>
             </div>
 
             <Link
-              href={`/play/${payload.puzzleCode}`}
+              href={playHref}
               className="inline-flex w-fit items-center justify-center rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
             >
               Play this puzzle
@@ -98,6 +119,39 @@ export default async function SharePage({ params }: Props) {
       </div>
     </main>
   );
+}
+
+function shareCanonicalUrl(code: string, time: string, dailyDate?: string): string {
+  const url = new URL(`/s/${code}/${time}`, siteUrl());
+  if (dailyDate) url.searchParams.set('d', dailyDate);
+  return url.toString();
+}
+
+function shareImageUrl(code: string, time: string, dailyDate?: string): string {
+  const url = new URL(`/s/${code}/${time}/opengraph-image`, siteUrl());
+  if (dailyDate) url.searchParams.set('d', dailyDate);
+  return url.toString();
+}
+
+function shareCategory({
+  dailyDate,
+  difficulty,
+}: {
+  dailyDate?: string;
+  difficulty: string;
+}): string {
+  if (!dailyDate) return `${difficulty} puzzle`;
+  return `${formatMonthDay(dailyDate)} Daily ${difficulty} puzzle`;
+}
+
+function formatMonthDay(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const parsed = year && month && day ? new Date(Date.UTC(year, month - 1, day, 12)) : new Date();
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'America/Los_Angeles',
+  }).format(parsed);
 }
 
 function PuzzleCard({ givens }: { givens: number[] }) {

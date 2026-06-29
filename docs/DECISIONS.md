@@ -19,7 +19,7 @@ Format:
 
 ## 0052 — Short conventional share links and daily-preserving share entry
 **Date:** 2026-06-29
-**Status:** Accepted; implementation in progress
+**Status:** Accepted and implemented
 
 **Context.** The first end-game share implementation used signed stateless `/s/{token}` links. They worked, but the HMAC payload made links far too long for casual text sharing, required `SHARE_TOKEN_SECRET` in production, and the daily share page launched recipients into `/play/{code}` without the daily query params used by normal daily entry points. That meant completing a shared daily puzzle could record only an ordinary single-player completion instead of a daily completion. iMessage also rendered two previews because the native share payload duplicated the URL in both `text` and `url`.
 

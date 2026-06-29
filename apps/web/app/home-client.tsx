@@ -18,12 +18,12 @@ import { useAuthStore } from '@/lib/auth-store';
 import { AppHeader } from '@/components/app-header';
 import {
   DailyPuzzleRow,
+  DailyPuzzleHeader,
   formatPacificMonthDay,
   nextDailyDifficulty,
   useDailyPuzzleState,
 } from '@/components/daily-puzzle-row';
 import {
-  CalendarIcon,
   JoinIcon,
   PlayIcon,
   TrophyIcon,
@@ -146,7 +146,7 @@ export function HomeClient() {
       {view.kind === 'home' && (
         <>
           <div className="flex w-full flex-col gap-2 pt-1">
-            <SectionHeader icon={CalendarIcon} title={dailyHeading} />
+            <DailyPuzzleHeader title={dailyHeading} />
             <DailyPuzzleRow state={dailyState} />
           </div>
 

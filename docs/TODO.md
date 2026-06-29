@@ -196,22 +196,22 @@ Same Easy / Medium / Hard puzzle for every player each Pacific day, with daily s
 
 ---
 
-## End-game share links + OG images 🔄 Iteration in progress
+## End-game share links + OG images 🔄 Implemented; external unfurl validation remains
 
 Shareable result links from end-game modals, with result-aware text and dynamic Open Graph images, are scoped in [SHARE_LINKS_PLAN.md](SHARE_LINKS_PLAN.md) and tracked by [DECISIONS #0052](DECISIONS.md).
 
-- [x] Confirm product decisions: signed stateless `/s/{token}` links, all end-game modals, anonymous shares, softer "Try this puzzle" copy, and playful board-card OG images.
-- [x] Add share-result helpers for time formatting, share-message formatting, signed token creation/validation, and Web Share API + clipboard fallback.
-- [x] Add a public share/challenge route that renders dynamic metadata and routes humans to `/play/{puzzleCode}` for the same puzzle.
+- [x] Confirm product decisions: anonymous shares, all end-game modals, short conventional `/s/{puzzleCode}/{time}` links, daily metadata in query params, softer "Try this puzzle" copy, and playful board-card OG images.
+- [x] Add share-result helpers for time formatting, share-message formatting, short URL creation/parsing, and Web Share API + clipboard fallback.
+- [x] Add a public share/challenge route that renders dynamic metadata and routes humans to `/play/{puzzleCode}` for the same puzzle, preserving daily query params when present.
 - [x] Add a dynamic `opengraph-image` route that includes Sudoku Squad branding, difficulty, solve time, and a playful non-solution visual.
 - [x] Add a preview/debug route or fixtures so local/prod links and OG images can be inspected before social caches are involved.
 - [x] Add Share actions to single-player, battle, and coop end-game modals without disrupting existing daily row, Return-to-lobby, Keep-solving, and Back-to-menu actions.
 - [~] Add tests for helper formatting/token validation, valid/tampered share routes, completion-modal share UI, clipboard fallback, and mobile layout. Current coverage: single-player Playwright smoke checks Share button, clipboard fallback, signed `/s/` link, and challenge-page navigation; focused unit coverage for token edge cases is still pending because `apps/web` has no unit-test harness yet.
 - [~] Manually verify several share links and direct OG image URLs on desktop/mobile; after deploy, test unfurls in target apps. Local `/share-preview` and direct OG PNG render are verified; external unfurls remain.
-- [~] Replace signed `/s/{token}` links with short `/s/{puzzleCode}/{time}` links, update share copy to "Try this easy puzzle. I finished in x:xx!", and avoid duplicate iMessage previews by keeping URLs out of native share text.
-- [~] Preserve daily metadata from shared daily links into `/play/[code]` so daily backend completion, the daily completion modal, and the home daily row behave like normal daily entry.
-- [~] Refresh the OG image and landing page: larger Sudoku Squad / Try this puzzle text, no mode label, daily-aware category, puzzle code, and a single white result area.
-- [~] Move the daily completion modal Share action below the daily row next to Back to menu, use the iOS share icon, and add the same Daily Puzzles header treatment as home.
+- [x] Replace signed `/s/{token}` links with short `/s/{puzzleCode}/{time}` links, update share copy to "Try this easy puzzle. I finished in x:xx!", and avoid duplicate iMessage previews by keeping URLs out of native share text.
+- [x] Preserve daily metadata from shared daily links into `/play/[code]` so daily backend completion, the daily completion modal, and the home daily row behave like normal daily entry.
+- [x] Refresh the OG image and landing page: larger Sudoku Squad / Try this puzzle text, no mode label, daily-aware category, puzzle code, and a single white result area.
+- [x] Move the daily completion modal Share action below the daily row next to Back to menu, use the iOS share icon, and add the same Daily Puzzles header treatment as home.
 
 ---
 

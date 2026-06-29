@@ -6,7 +6,12 @@ import { useGameStore } from '@/lib/game-store';
 import { pickRandomUnsolved } from '@/lib/pick-puzzle';
 import { fireWinConfetti } from '@/lib/confetti';
 import { difficultyLabel } from '@/lib/difficulty-labels';
-import { DailyPuzzleRow, type DailyCompletionOverride } from '@/components/daily-puzzle-row';
+import {
+  DailyPuzzleHeader,
+  DailyPuzzleRow,
+  formatPacificMonthDay,
+  type DailyCompletionOverride,
+} from '@/components/daily-puzzle-row';
 import { ShareResultButton } from '@/components/share-result-button';
 
 function formatElapsed(ms: number): string {
@@ -40,6 +45,9 @@ export function CompletionOverlay() {
         solveTimeMs: elapsed,
       }
     : undefined;
+  const dailyHeading = completedDaily
+    ? `${formatPacificMonthDay(completedDaily.date)} Daily Puzzles`
+    : null;
 
   async function onPlayAnother() {
     if (!puzzle) return;
@@ -67,7 +75,13 @@ export function CompletionOverlay() {
           {hintsUsed > 0 ? ` · ${hintsUsed} hint${hintsUsed === 1 ? '' : 's'}` : ''}
         </p>
         <div className="mt-6 flex flex-col gap-2">
-          {puzzle ? (
+          {completedDaily && dailyHeading ? (
+            <div className="flex flex-col gap-2">
+              <DailyPuzzleHeader title={dailyHeading} />
+              <DailyPuzzleRow completedOverride={completedDaily} />
+            </div>
+          ) : null}
+          {!completedDaily && puzzle ? (
             <ShareResultButton
               result={{
                 puzzleCode: puzzle.code,
@@ -78,7 +92,6 @@ export function CompletionOverlay() {
               }}
             />
           ) : null}
-          {completedDaily ? <DailyPuzzleRow completedOverride={completedDaily} /> : null}
           {!completedDaily ? (
             <button
               type="button"
@@ -91,13 +104,34 @@ export function CompletionOverlay() {
                 : `Play another ${puzzle ? difficultyLabel(puzzle.difficulty) : ''}`}
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => router.push('/')}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-surface-muted"
-          >
-            Back to menu
-          </button>
+          {completedDaily && puzzle ? (
+            <div className="grid grid-cols-2 gap-2">
+              <ShareResultButton
+                result={{
+                  puzzleCode: puzzle.code,
+                  difficulty: puzzle.difficulty,
+                  solveTimeMs: elapsed,
+                  mode: 'single',
+                  dailyDate: completedDaily.date,
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => router.push('/')}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-surface-muted"
+              >
+                Back to menu
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => router.push('/')}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-surface-muted"
+            >
+              Back to menu
+            </button>
+          )}
         </div>
       </div>
     </div>

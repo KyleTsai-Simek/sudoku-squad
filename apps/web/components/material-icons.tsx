@@ -99,3 +99,12 @@ export function ShareIcon(props: IconProps) {
     />
   );
 }
+
+export function IosShareIcon(props: IconProps) {
+  return (
+    <Icon
+      {...props}
+      path="M440-280h80v-240h120L480-680 320-520h120v240ZM200-120q-33 0-56.5-23.5T120-200v-240h80v240h560v-240h80v240q0 33-23.5 56.5T760-120H200Z"
+    />
+  );
+}

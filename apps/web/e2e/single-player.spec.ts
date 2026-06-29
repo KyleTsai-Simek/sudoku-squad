@@ -51,9 +51,10 @@ test('single-player: solve to completion via keyboard', async ({ page }) => {
   await overlay.getByRole('button', { name: 'Share' }).click();
   await expect(overlay.getByRole('button', { name: 'Copied share link' })).toBeVisible();
   const clipboard = await page.evaluate(() => navigator.clipboard.readText());
-  expect(clipboard).toContain('Try this Medium Sudoku Squad puzzle.');
-  const shareUrl = clipboard.match(/http:\/\/localhost:\d+\/s\/\S+/)?.[0];
+  expect(clipboard).toContain('Try this medium puzzle. I finished in ');
+  const shareUrl = clipboard.match(/http:\/\/localhost:\d+\/s\/3santv\/[0-9a-z]+/)?.[0];
   expect(shareUrl).toBeTruthy();
+  expect(clipboard.match(/http:\/\/localhost:\d+\/s\//g)).toHaveLength(1);
   await page.goto(shareUrl!);
   await expect(page.getByRole('heading', { name: 'Try this puzzle' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Play this puzzle' })).toHaveAttribute(

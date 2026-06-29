@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { PuzzleCode } from '@sudoku-squad/core';
 import { DIFFICULTY_LABEL } from '@/lib/difficulty-labels';
+import { CalendarIcon } from '@/components/material-icons';
 import {
   getDailyCompletions,
   getDailyPuzzles,
@@ -113,6 +114,17 @@ export function DailyPuzzleRow({
           solvedCount={solvedCount}
         />
       ))}
+    </div>
+  );
+}
+
+export function DailyPuzzleHeader({ title }: { title: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-widest text-muted">
+      <h2 className="inline-flex min-w-0 items-center gap-2">
+        <CalendarIcon size={16} className="shrink-0" />
+        <span className="truncate">{title}</span>
+      </h2>
     </div>
   );
 }

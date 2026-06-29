@@ -1,7 +1,7 @@
 # End-game share links + OG images plan
 
 **Date:** 2026-06-29  
-**Status:** Short-link and daily-entry iteration in progress.
+**Status:** Implemented locally; external unfurl validation remains.
 
 ## Goal
 
@@ -96,8 +96,8 @@ Use a short conventional URL instead of a signed token:
 
 ## Implementation slices
 
-1. 🔄 Replace token helpers with short URL helpers and update share copy.
-2. 🔄 Add `/s/[code]/[time]` route + metadata + daily-preserving "Play this puzzle" page.
-3. 🔄 Refresh dynamic OG image route and preview cases.
-4. 🔄 Reposition daily-modal share action and switch to the iOS share icon.
-5. 🔄 Verify desktop/mobile UI plus link/metadata/image previews, including `/share-preview` and direct OG PNG checks before deployed social-app unfurl testing.
+1. ✅ Replace token helpers with short URL helpers and update share copy.
+2. ✅ Add `/s/[code]/[time]` route + metadata + daily-preserving "Play this puzzle" page.
+3. ✅ Refresh dynamic OG image route and preview cases.
+4. ✅ Reposition daily-modal share action and switch to the iOS share icon.
+5. 🔄 Verify deployed social-app unfurls after Vercel deploy. Local typecheck, production build, single-player Playwright share smoke, `/share-preview`, share page, daily share page, and direct OG PNG checks are complete.
