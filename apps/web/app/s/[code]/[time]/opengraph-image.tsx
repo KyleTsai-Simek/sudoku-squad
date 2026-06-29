@@ -32,7 +32,7 @@ export default async function OpenGraphImage({ params, searchParams }: Props) {
           display: 'flex',
           background: '#f8fafc',
           color: '#0f172a',
-          fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
           padding: 48,
         }}
       >
@@ -74,9 +74,10 @@ export default async function OpenGraphImage({ params, searchParams }: Props) {
               <div
                 style={{
                   display: 'flex',
-                  fontSize: 54,
-                  fontWeight: 700,
+                  fontSize: 58,
+                  fontWeight: 600,
                   lineHeight: 1.05,
+                  letterSpacing: -2.4,
                   color: '#0f172a',
                 }}
               >
