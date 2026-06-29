@@ -25,7 +25,16 @@ import type { Difficulty } from '@sudoku-squad/core';
 import { getUsername } from '@/lib/username';
 import { AppHeader } from '@/components/app-header';
 import { LobbySettingsPanel } from '@/components/lobby-settings-panel';
-import { IosShareIcon, LinkIcon } from '@/components/material-icons';
+import {
+  GroupsIcon,
+  HandshakeIcon,
+  IosShareIcon,
+  JoystickIcon,
+  LinkIcon,
+  SpeedIcon,
+  SportsScoreIcon,
+  SwordsIcon,
+} from '@/components/material-icons';
 import { DEFAULT_ROOM_SETTINGS } from '@/lib/rooms';
 import { buildLobbyClipboardText } from '@/lib/lobby-share';
 import { playerColorStyle } from '@/lib/player-colors';
@@ -427,8 +436,9 @@ export function LobbyClient({ code }: { code: string }) {
       </section>
 
       <section className="w-full">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
-          Players ({visiblePlayers.length}/8)
+        <h2 className="mb-3 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted">
+          <GroupsIcon size={16} className="shrink-0" />
+          <span>Players ({visiblePlayers.length}/8)</span>
         </h2>
         <ul className="flex flex-col gap-2">
           {visiblePlayers.length === 0 ? (
@@ -499,8 +509,9 @@ export function LobbyClient({ code }: { code: string }) {
       {isHost && status === 'lobby' ? (
         <>
           <section className="w-full">
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
-              Difficulty
+            <h2 className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted">
+              <SpeedIcon size={16} className="shrink-0" />
+              <span>Difficulty</span>
             </h2>
             {currentDifficulty === null ? (
               <p className="text-sm text-muted">Loading…</p>
@@ -535,8 +546,9 @@ export function LobbyClient({ code }: { code: string }) {
           </section>
 
           <section className="w-full">
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
-              Mode
+            <h2 className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted">
+              <JoystickIcon size={16} className="shrink-0" />
+              <span>Mode</span>
             </h2>
             <div className="grid grid-cols-2 gap-2">
               {(['battle', 'coop'] as const).map((m) => {
@@ -548,11 +560,16 @@ export function LobbyClient({ code }: { code: string }) {
                     onClick={() => onChangeMode(m)}
                     disabled={selected}
                     className={cn(
-                      'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                      'inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
                       selected ? lobbySelectorSelectedClassName : lobbySelectorIdleClassName,
                     )}
                   >
-                    {m === 'coop' ? 'Co-op' : 'Battle'}
+                    {m === 'coop' ? (
+                      <HandshakeIcon size={17} className="shrink-0" />
+                    ) : (
+                      <SwordsIcon size={17} className="shrink-0" />
+                    )}
+                    <span>{m === 'coop' ? 'Co-op' : 'Battle'}</span>
                   </button>
                 );
               })}
@@ -561,8 +578,9 @@ export function LobbyClient({ code }: { code: string }) {
         </>
       ) : (
         <section className="w-full">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
-            Game
+          <h2 className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted">
+            <SportsScoreIcon size={16} className="shrink-0" />
+            <span>Game Selection</span>
           </h2>
           {currentDifficulty === null ? (
             <p className="text-sm text-muted">Loading…</p>

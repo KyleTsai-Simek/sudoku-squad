@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState } from 'react';
 import { updateRoomSettings, type RoomSettings } from '@/lib/rooms';
-import { ExpandMoreIcon } from './material-icons';
+import { ExpandMoreIcon, SettingsIcon } from './material-icons';
 
 interface Props {
   roomId: string;
@@ -124,8 +124,9 @@ export function LobbySettingsPanel({
           onClick={() => setExpanded((open) => !open)}
           className="mb-2 inline-flex items-center gap-1 text-left"
         >
-          <span className="text-xs font-semibold uppercase tracking-widest text-muted">
-            Lobby Settings
+          <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted">
+            <SettingsIcon size={16} className="shrink-0" />
+            <span>Lobby Settings</span>
             {locked ? (
               <span className="ml-2 text-muted normal-case tracking-normal">
                 - locked
