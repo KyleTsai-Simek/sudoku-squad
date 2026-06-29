@@ -70,21 +70,29 @@ export default async function OpenGraphImage({ params, searchParams }: Props) {
               background: '#ffffff',
             }}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              <div style={{ display: 'flex', fontSize: 58, fontWeight: 900, color: '#0f172a' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  fontSize: 54,
+                  fontWeight: 700,
+                  lineHeight: 1.05,
+                  color: '#0f172a',
+                }}
+              >
                 Sudoku Squad
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 18 }}>
-                  <div style={{ display: 'flex', fontSize: 56, fontWeight: 900, lineHeight: 1 }}>
+                  <div style={{ display: 'flex', fontSize: 46, fontWeight: 700, lineHeight: 1 }}>
                     {difficulty}
                   </div>
                   <div
                     style={{
                       display: 'flex',
                       paddingBottom: 5,
-                      fontSize: 28,
-                      fontWeight: 800,
+                      fontSize: 24,
+                      fontWeight: 700,
                       color: '#64748b',
                     }}
                   >
@@ -100,11 +108,12 @@ export default async function OpenGraphImage({ params, searchParams }: Props) {
                     background: '#dbeafe',
                     padding: '14px 24px',
                     fontSize: 30,
-                    fontWeight: 900,
+                    fontWeight: 800,
                     color: '#1e3a8a',
                   }}
                 >
-                  Finished in {time}
+                  <span>Finished in&nbsp;</span>
+                  <span style={{ fontSize: 34, fontWeight: 950, lineHeight: 1 }}>{time}</span>
                 </div>
               </div>
             </div>
@@ -119,13 +128,11 @@ export default async function OpenGraphImage({ params, searchParams }: Props) {
                 style={{
                   display: 'flex',
                   alignSelf: 'flex-start',
-                  borderRadius: 18,
+                  borderRadius: 12,
                   background: '#1d4ed8',
-                  padding: '20px 34px',
-                  fontSize: 32,
-                  fontWeight: 900,
-                  letterSpacing: 1,
-                  textTransform: 'uppercase',
+                  padding: '18px 30px',
+                  fontSize: 30,
+                  fontWeight: 800,
                   color: '#ffffff',
                 }}
               >
