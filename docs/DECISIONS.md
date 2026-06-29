@@ -17,9 +17,30 @@ Format:
 
 ---
 
+## 0052 — Short conventional share links and daily-preserving share entry
+**Date:** 2026-06-29
+**Status:** Accepted; implementation in progress
+
+**Context.** The first end-game share implementation used signed stateless `/s/{token}` links. They worked, but the HMAC payload made links far too long for casual text sharing, required `SHARE_TOKEN_SECRET` in production, and the daily share page launched recipients into `/play/{code}` without the daily query params used by normal daily entry points. That meant completing a shared daily puzzle could record only an ordinary single-player completion instead of a daily completion. iMessage also rendered two previews because the native share payload duplicated the URL in both `text` and `url`.
+
+**Decision.** Supersede signed share tokens for new links with short, conventional, public result URLs: `/s/{puzzleCode}/{time}` where `time` is elapsed seconds encoded in base36. Optional daily metadata rides as `?d=YYYY-MM-DD`; difficulty is loaded from the public puzzle row rather than encoded in the link. New share pages ignore solo/co-op/battle labels and display only puzzle category, daily status when present, solve time, and the puzzle code. The play CTA must preserve daily metadata by linking to `/play/{puzzleCode}?daily=YYYY-MM-DD&dailyDifficulty={difficulty}` for daily shares.
+
+Native share should pass human text and URL separately, with the text containing no URL. Clipboard fallback should still copy both. The share text is exactly the simple anonymous form: "Try this easy puzzle. I finished in 5:51!" with the visible difficulty lowercased.
+
+**Alternatives considered.**
+- Keep signed stateless URLs and shorten field names further. Rejected because the signature and encoded JSON still make links much longer than the desired product feel.
+- Store every share in a table with a short slug. Rejected for now because non-unique links are acceptable, we do not need deletion or analytics yet, and puzzle code + elapsed time is enough for the first share iteration.
+- Infer daily status server-side by checking today's daily rows only. Rejected because shared daily links should keep their original daily date metadata for copy/OG/page rendering, while backend completion recording already enforces whether the puzzle matches today's assigned daily.
+
+**Consequences.**
+- New share links are intentionally editable and non-authentic; they are a lightweight invitation, not a verified score certificate.
+- `SHARE_TOKEN_SECRET` is no longer required for new share creation.
+- Existing long token links may be allowed to expire/break unless a separate compatibility pass is explicitly needed.
+- `/share-preview` remains the QA surface for page, text, and direct OG-image inspection without having to solve a puzzle.
+
 ## 0051 — End-game share links and dynamic result Open Graph images
 **Date:** 2026-06-27
-**Status:** Accepted and implemented locally; deploy + external unfurl validation remain
+**Status:** Superseded by #0052
 
 **Context.** The app currently has static root metadata and lobby copy-link behavior, but end-game modals do not let a player share a result. The desired flow is a result share from completion overlays: share text includes difficulty and solve time, the link lets another player play the same puzzle, and the unfurl image is fun and result-specific rather than generic site branding.
 

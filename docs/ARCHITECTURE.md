@@ -59,7 +59,7 @@ sudoku-squad/
   apps/
     web/                  # Next.js — the live app
       app/                # routes: /, /daily, /play/[code], /r/[code],
-                          # /s/[token], /share-preview
+                          # /s/[code]/[time], /share-preview
       components/         # SP + battle boards, number pads, overlays,
                           # keyboard controllers, settings panels, icons
       lib/                # game-store + battle-store + coop-store (zustand),
@@ -253,13 +253,11 @@ For fast rejoin, we can persist the current materialized board state per room (c
 
 ### End-game share results
 
-End-game share links are a web-layer feature rather than a core-game primitive. The implementation uses a signed, stateless `/s/{token}` URL containing public result facts: puzzle code, visible difficulty, solve time, mode, optional daily date, optional multiplayer room code, and optional player count. The token is minted by `/api/share-token` and verified server-side by the share route before rendering metadata or the Open Graph image. This avoids a new table while preventing casual edits to shared times.
+End-game share links are a web-layer feature rather than a core-game primitive. New links use the short conventional shape `/s/{puzzleCode}/{time}`, where `time` is elapsed seconds encoded in base36. Daily shares add `?d=YYYY-MM-DD`. The share route loads difficulty and givens from the public puzzle projection, renders metadata/OG image content, and links humans to `/play/{puzzleCode}`. For daily shares, that play link preserves the normal daily query params: `/play/{puzzleCode}?daily=YYYY-MM-DD&dailyDifficulty={difficulty}`.
 
-If we later need analytics, deletion/moderation, or durable canonical result history, add a `share_results` table with a generated slug, player id, puzzle code, difficulty, solve time, mode, and optional daily metadata. That table is intentionally deferred until the product need is clear.
+These links are anonymous, public, and intentionally non-authentic; elapsed time can be edited by changing the URL. They are an invitation surface, not a verified score certificate. If we later need analytics, deletion/moderation, or durable canonical result history, add a `share_results` table with a generated slug, player id, puzzle code, difficulty, solve time, mode, and optional daily metadata. That table is intentionally deferred until the product need is clear.
 
-Share pages and images must never expose `puzzles.solution`, `auth.uid()`, email, usernames, or private account data. Human visitors should land on a challenge page that links to the existing `/play/{puzzleCode}` route for the same puzzle.
-
-Production deploys must configure `SHARE_TOKEN_SECRET`; local development falls back to a dev-only secret so preview links work without extra setup.
+Share pages and images must never expose `puzzles.solution`, `auth.uid()`, email, usernames, or private account data. No production share-token secret is required for new links.
 
 ---
 

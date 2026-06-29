@@ -6,7 +6,7 @@
 **Branch:** `main`
 **Live:** https://sudoku-squad-web.vercel.app/
 
-**End-game share links are implemented locally** ([DECISIONS #0051](DECISIONS.md)): all completion modals now expose anonymous "Try this puzzle" shares backed by signed stateless `/s/{token}` links, a challenge page, and a dynamic playful board-card Open Graph image that lets recipients play the same puzzle without exposing the solution. Local verification covered web typecheck, production build, the single-player Playwright smoke with clipboard fallback + share-page navigation, `/share-preview`, and a direct OG PNG render. Remaining: deploy with `SHARE_TOKEN_SECRET` set and test real unfurls in target apps.
+**End-game share links are being revised** ([DECISIONS #0052](DECISIONS.md)): the signed `/s/{token}` implementation is being replaced with much shorter conventional `/s/{puzzleCode}/{time}` links, daily-preserving share landing pages, simpler share text, and refreshed board-card OG art. `/share-preview` remains the way to inspect share pages and direct OG image URLs without beating a puzzle. `SHARE_TOKEN_SECRET` is no longer required for new share links.
 
 This doc captures *where we actually are*. Update it whenever a phase milestone lands or the focus shifts. If you're a new agent or contributor picking this up cold, this is the single best starting place.
 
@@ -48,7 +48,7 @@ Monorepo (pnpm 11 workspaces), repo bootstrap, doc set, Supabase project provisi
   - **killer** (hidden — not in the picker) — 2,500 from QQWing EXPERT (`guess_count ≥ 1`, i.e. requires a guess). Revived by [#0042](DECISIONS.md) as the requires-a-guess tier.
   - hard/expert/extreme/killer carry QQWing metadata columns (`qqwing_difficulty`, `clue_count`, `guess_count`, technique counts, `advanced_technique_count`); easy/medium carry NULLs there. "Advanced techniques" = {naked pair, hidden pair, pointing pair/triple, box-line reduction}.
 - **`apps/web`** — Next.js 15 + React 19 + Tailwind 3.
-  - Routes: `/` (home with mode-first picker + public-lobby list), `/daily` (Easy / Medium / Hard daily set), `/play/[code]` (SP game screen), `/r/[code]` (multiplayer lobby that switches into the battle *or* coop game on start), `/s/[token]` (signed result share/challenge page), and `/share-preview` (local share/OG preview cases).
+  - Routes: `/` (home with mode-first picker + public-lobby list), `/daily` (Easy / Medium / Hard daily set), `/play/[code]` (SP game screen), `/r/[code]` (multiplayer lobby that switches into the battle *or* coop game on start), `/s/[code]/[time]` (short result share/challenge page), and `/share-preview` (local share/OG preview cases).
   - Home flow: mode-first state machine in `home-client.tsx` — picks Single-player / Co-op / Battle first, then either the difficulty list (SP) or the warmed-room multiplayer path. `lib/preloaded-rooms.ts` privately preloads one co-op room and one battle room after home load, so tapping either mode can navigate immediately when the background request has finished. The bottom of the home page shows the `total_completions` leaderboard via `get_completion_leaderboard`, highlighting the current player if ranked. See [DECISIONS #0035](DECISIONS.md), [#0048](DECISIONS.md), and [#0049](DECISIONS.md).
   - SP components: `SudokuBoard`, `NumberPad`, `KeyboardController`, `KeyboardShortcutsOverlay`, `Timer`, `SettingsSheet`, `CompletionOverlay`, `PencilIcon`, `ActionIcons` (Eraser/Undo/Redo).
   - Battle components: `BattleBoard`, `BattleNumberPad`, `BattleKeyboardController`, `BattleWinnerOverlay`, `OpponentProgress`, `LobbySettingsPanel`, `PublicLobbyList` (mode-filterable).
@@ -127,7 +127,7 @@ What does NOT yet exist (Phase 3 remainder): Presence-based colored cursors, the
 ### Beyond the current phases
 
 - **iOS (React Native)** — Phase 4.
-- **Favicon / generic Open Graph metadata** — placeholder Next.js favicon; generic site-level OG image remains pending. Result-specific OG images are implemented for `/s/[token]` shares.
+- **Favicon / generic Open Graph metadata** — placeholder Next.js favicon; generic site-level OG image remains pending. Result-specific OG images are implemented for short `/s/[code]/[time]` shares.
 - **Lighthouse / PWA-installable manifest.**
 - **Mobile audit** — board fonts switched from viewport-clamp to container-query sizing (2026-05-23): cell values are `min(55cqw, 1.75rem)` and notes are `min(24cqw, 0.7rem)`, with each cell `[container-type:inline-size] overflow-hidden min-w-0 min-h-0` so glyph overflow can't perturb the grid. Verified at 320/375/1280 px; in-device confirmation still wanted.
 - **Custom domain** (target: `sudokusquad.com`).
