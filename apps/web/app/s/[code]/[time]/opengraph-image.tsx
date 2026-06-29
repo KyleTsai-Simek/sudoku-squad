@@ -71,18 +71,7 @@ export default async function OpenGraphImage({ params, searchParams }: Props) {
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  fontSize: 58,
-                  fontWeight: 600,
-                  lineHeight: 1.05,
-                  letterSpacing: -2.4,
-                  color: '#0f172a',
-                }}
-              >
-                Sudoku Squad
-              </div>
+              <FauxBoldTitle />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 18 }}>
                   <div style={{ display: 'flex', fontSize: 46, fontWeight: 700, lineHeight: 1 }}>
@@ -145,6 +134,27 @@ export default async function OpenGraphImage({ params, searchParams }: Props) {
       </div>
     ),
     size,
+  );
+}
+
+function FauxBoldTitle() {
+  const baseStyle = {
+    position: 'absolute' as const,
+    top: 0,
+    display: 'flex',
+    fontSize: 58,
+    fontWeight: 700,
+    lineHeight: 1.05,
+    letterSpacing: -2.4,
+    color: '#0f172a',
+  };
+
+  return (
+    <div style={{ position: 'relative', display: 'flex', width: 440, height: 66 }}>
+      <div style={{ ...baseStyle, left: 0 }}>Sudoku Squad</div>
+      <div style={{ ...baseStyle, left: 0.8 }}>Sudoku Squad</div>
+      <div style={{ ...baseStyle, left: 0, top: 0.6 }}>Sudoku Squad</div>
+    </div>
   );
 }
 
