@@ -21,6 +21,7 @@ This is a cross-cutting polish/product feature. It builds on existing single-pla
 - Use the Web Share API when available, with clipboard fallback.
 - Share text shape: "Try this hard puzzle. I finished in 4:12!"
 - Dynamic OG image should use a playful board-card direction with black Sudoku Squad branding, puzzle info (`Medium 3santv`), a visually-separated finished-time badge, a bottom primary-style "Try this puzzle" button, and a board visual that does not expose the solution in a useful way.
+- The OG renderer looks for a supplied logo asset at `apps/web/public/brand/sudoku-squad-logo.png` first, then `apps/web/public/brand/sudoku-squad-logo.svg`. Prefer a transparent PNG for predictable social-image rendering. The route sets the rendered logo size in code instead of relying on the asset's intrinsic dimensions; until an asset exists, it falls back to the text title.
 - The share landing page should not flag solo, co-op, or battle. Its category is either "EASY PUZZLE" or "JUNE 29 DAILY EASY PUZZLE"; its description is "Easy puzzle finished in 5:51."
 - Daily share entry must behave like the home Daily Puzzles row: the "Play this puzzle" link preserves `daily` and `dailyDifficulty` query params so completion records daily progress and shows the daily completion modal.
 - `/share-preview` should list representative share links and direct OG image links so links can be tested without beating a puzzle.

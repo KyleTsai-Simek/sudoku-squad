@@ -1,27 +1,28 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
+import type { NextRequest } from 'next/server';
 import { difficultyLabel } from '@/lib/difficulty-labels';
 import { fetchPublicPuzzle } from '@/lib/public-puzzle';
 import { formatShareTime } from '@/lib/share-copy';
 import { decodeShareTime, isValidDailyDate, isValidShareCode } from '@/lib/share-url';
 
 export const runtime = 'nodejs';
-export const size = { width: 1200, height: 630 };
-export const contentType = 'image/png';
 
 interface Props {
   params: Promise<{ code: string; time: string }>;
-  searchParams?: Promise<{ d?: string }>;
 }
 
-export default async function OpenGraphImage({ params, searchParams }: Props) {
+export async function GET(request: NextRequest, { params }: Props) {
   const { code, time: timeSegment } = await params;
-  const { d } = (await searchParams) ?? {};
   const solveTimeMs = decodeShareTime(timeSegment);
   const puzzle = isValidShareCode(code) ? await fetchPublicPuzzle(code) : null;
   const givens = puzzle?.givens ?? [];
   const difficulty = puzzle ? difficultyLabel(puzzle.difficulty) : 'Sudoku';
   const time = solveTimeMs === null ? '--:--' : formatShareTime(solveTimeMs);
-  const dailyDate = isValidDailyDate(d) ? d : undefined;
+  const dailyDateParam = request.nextUrl.searchParams.get('d') ?? undefined;
+  const dailyDate = isValidDailyDate(dailyDateParam) ? dailyDateParam : undefined;
+  const logoDataUrl = await loadLogoDataUrl();
 
   return new ImageResponse(
     (
@@ -65,13 +66,23 @@ export default async function OpenGraphImage({ params, searchParams }: Props) {
               flex: 1,
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'space-between',
               padding: '48px 56px',
               background: '#ffffff',
             }}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-              <FauxBoldTitle />
+            <BrandLogo logoDataUrl={logoDataUrl} />
+
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                gap: 18,
+                paddingBottom: 18,
+              }}
+            >
+              {dailyDate ? <DailyBadge date={dailyDate} /> : null}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 18 }}>
                   <div style={{ display: 'flex', fontSize: 46, fontWeight: 700, lineHeight: 1 }}>
@@ -98,43 +109,69 @@ export default async function OpenGraphImage({ params, searchParams }: Props) {
                     background: '#dbeafe',
                     padding: '14px 24px',
                     fontSize: 30,
-                    fontWeight: 800,
+                    fontWeight: 850,
                     color: '#1e3a8a',
                   }}
                 >
                   <span>Finished in&nbsp;</span>
-                  <span style={{ fontSize: 34, fontWeight: 950, lineHeight: 1 }}>{time}</span>
+                  <FauxBoldTime value={time} />
                 </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              {dailyDate ? (
-                <div style={{ display: 'flex', fontSize: 22, fontWeight: 800, color: '#475569' }}>
-                  {formatMonthDay(dailyDate)} daily puzzle
-                </div>
-              ) : null}
-              <div
-                style={{
-                  display: 'flex',
-                  alignSelf: 'flex-start',
-                  borderRadius: 12,
-                  background: '#1d4ed8',
-                  padding: '18px 30px',
-                  fontSize: 30,
-                  fontWeight: 800,
-                  color: '#ffffff',
-                }}
-              >
-                Try this puzzle
-              </div>
+            <div
+              style={{
+                display: 'flex',
+                alignSelf: 'flex-start',
+                borderRadius: 12,
+                background: '#1d4ed8',
+                padding: '18px 30px',
+                fontSize: 30,
+                fontWeight: 800,
+                color: '#ffffff',
+              }}
+            >
+              Try this puzzle
             </div>
           </div>
         </div>
       </div>
     ),
-    size,
+    { width: 1200, height: 630 },
   );
+}
+
+async function loadLogoDataUrl(): Promise<string | null> {
+  const publicDir = join(process.cwd(), 'public', 'brand');
+  const candidates = [
+    { path: join(publicDir, 'sudoku-squad-logo.png'), mime: 'image/png' },
+    { path: join(publicDir, 'sudoku-squad-logo.svg'), mime: 'image/svg+xml' },
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const data = await readFile(candidate.path);
+      return `data:${candidate.mime};base64,${data.toString('base64')}`;
+    } catch {
+      // Fall back to the text title until a logo asset is provided.
+    }
+  }
+  return null;
+}
+
+function BrandLogo({ logoDataUrl }: { logoDataUrl: string | null }) {
+  if (logoDataUrl) {
+    return (
+      <img
+        src={logoDataUrl}
+        alt="Sudoku Squad"
+        width={360}
+        height={78}
+        style={{ width: 360, height: 78, objectFit: 'contain', objectPosition: 'left center' }}
+      />
+    );
+  }
+  return <FauxBoldTitle />;
 }
 
 function FauxBoldTitle() {
@@ -155,6 +192,56 @@ function FauxBoldTitle() {
       <div style={{ ...baseStyle, left: 0.8 }}>Sudoku Squad</div>
       <div style={{ ...baseStyle, left: 0, top: 0.6 }}>Sudoku Squad</div>
     </div>
+  );
+}
+
+function FauxBoldTime({ value }: { value: string }) {
+  const baseStyle = {
+    position: 'absolute' as const,
+    top: 0,
+    display: 'flex',
+    fontSize: 38,
+    fontWeight: 900,
+    lineHeight: 1,
+    color: '#1e3a8a',
+  };
+
+  return (
+    <span style={{ position: 'relative', display: 'flex', width: 80, height: 38 }}>
+      <span style={{ ...baseStyle, left: 0 }}>{value}</span>
+      <span style={{ ...baseStyle, left: 0.6 }}>{value}</span>
+    </span>
+  );
+}
+
+function DailyBadge({ date }: { date: string }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignSelf: 'flex-start',
+        alignItems: 'center',
+        gap: 10,
+        borderRadius: 999,
+        background: '#eff6ff',
+        border: '2px solid #bfdbfe',
+        padding: '9px 16px',
+        fontSize: 22,
+        fontWeight: 800,
+        color: '#475569',
+      }}
+    >
+      <CalendarGlyph />
+      <span>{formatMonthDay(date)} Daily Puzzle</span>
+    </div>
+  );
+}
+
+function CalendarGlyph() {
+  return (
+    <svg viewBox="0 -960 960 960" width="24" height="24" fill="#475569">
+      <path d="M280-320h80v-80h-80v80Zm160 0h80v-80h-80v80Zm160 0h80v-80h-80v80ZM280-480h80v-80h-80v80Zm160 0h80v-80h-80v80Zm160 0h80v-80h-80v80ZM200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Z" />
+    </svg>
   );
 }
 

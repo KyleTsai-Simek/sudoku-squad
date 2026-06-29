@@ -61,6 +61,7 @@ export default function SharePreviewPage() {
         <div className="grid gap-4 md:grid-cols-2">
           {CASES.map((preview) => {
             const href = buildSharePath(preview);
+            const imageHref = shareImagePath(href);
             return (
               <section
                 key={preview.label}
@@ -83,7 +84,7 @@ export default function SharePreviewPage() {
                     Open page
                   </Link>
                   <Link
-                    href={`${href}/opengraph-image`}
+                    href={imageHref}
                     className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:bg-surface-muted"
                   >
                     Open OG image
@@ -100,4 +101,9 @@ export default function SharePreviewPage() {
       </div>
     </main>
   );
+}
+
+function shareImagePath(href: string): string {
+  const [path, query] = href.split('?');
+  return `${path}/opengraph-image${query ? `?${query}` : ''}`;
 }
