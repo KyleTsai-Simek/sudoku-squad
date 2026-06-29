@@ -70,11 +70,11 @@ export function PublicLobbyList({ mode, emptyState }: Props) {
               href={`/r/${r.code}`}
               className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm hover:border-primary-border"
             >
-              <span className="flex min-w-0 flex-col">
+              <span className="flex min-w-0 items-baseline gap-2">
                 <span className="truncate font-semibold text-foreground">
                   {r.host_username}
                 </span>
-                <span className="text-xs uppercase tracking-widest text-muted">
+                <span className="shrink-0 text-xs uppercase tracking-widest text-muted">
                   {r.mode} · {difficultyLabel(r.difficulty)}
                 </span>
               </span>
