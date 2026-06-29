@@ -31,17 +31,17 @@ Everything UX-facing: modes, settings, what shows up on the board, what shouldn'
 - Display names come from the current `issued_usernames` row, so a signed-in username change is reflected on the leaderboard for everyone.
 - The first UI requests the top 15 and bolds the current player when present. If the current player is outside the top 15 or has zero completions, their row is pinned above the ranked list; if they are inside the top 15, they appear in the normal ranked position. The backend RPC returns the current player's row outside the requested page and for zero-completion callers, so large leaderboards can show both the leaders and "your place" without loading every ranked user.
 
-### End-game sharing 🔄 implemented locally
+### End-game sharing ✅ implemented
 - End-game modals should offer a Share action once a puzzle is complete: single-player completion, daily completion, battle winner, and coop win.
 - Shared text should be anonymous and simple: "Try this easy puzzle. I finished in 5:51!" plus a link that lets another player try the exact same puzzle.
 - Share links should unfurl with a result-specific Open Graph image: black Sudoku Squad branding, puzzle info, a finished-time badge, a primary-style "Try this puzzle" button, and a playful board-card visual. The visual must not expose the solution in a useful way.
 - The recipient experience should be direct: open a short `/s/{puzzleCode}/{time}` share link, see a compact challenge/result page, then tap to play the same puzzle. Daily share links must preserve daily metadata so completing today's shared daily behaves like entering from the home Daily Puzzles row.
 - Tone and identity are settled for the first pass: anonymous shares with softer "Try this puzzle" copy, not username-based or competitive "Can you beat me?" copy. Local `/share-preview` supports iteration before external unfurl caches are involved. See [SHARE_LINKS_PLAN.md](SHARE_LINKS_PLAN.md).
 
-### Multiplayer lobby sharing 🔄 implemented locally; manual test pending
+### Multiplayer lobby sharing 🔄 implemented; manual test pending
 - Battle and co-op lobby invite links use the existing short room URL shape, `/r/{code}`, and should open directly into the lobby join flow with no interstitial page.
 - Player-created lobbies are public by default. Hosts can uncheck Public lobby inside Lobby Settings to make a lobby private. Unused warmed preload rooms stay private until consumed so public browsing is not polluted by background preloads.
-- When the creator lands in the lobby, the app copies the invite payload to their clipboard and shows a snackbar confirmation. The copied text is: "Tap this link to play sudoku with me!" plus the room URL.
+- During the create-lobby flow, the app copies the invite payload to the creator's clipboard and shows a snackbar confirmation when the lobby opens. The copied text is: "Tap this link to play sudoku with me!" plus the room URL.
 - The lobby copy button uses the iOS share icon and copies the same payload.
 - Room links should unfurl with a lobby-specific Open Graph image: existing Sudoku Squad branding and puzzle preview, middle copy "Play sudoku with me!", and bottom CTA "Join game". Local `/share-preview` includes direct lobby OG-image examples.
 
