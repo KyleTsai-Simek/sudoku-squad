@@ -85,14 +85,14 @@ export async function GET(request: NextRequest, { params }: Props) {
               {dailyDate ? <DailyBadge date={dailyDate} /> : null}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 18 }}>
-                  <div style={{ display: 'flex', fontSize: 46, fontWeight: 700, lineHeight: 1 }}>
+                  <div style={{ display: 'flex', fontSize: 39, fontWeight: 700, lineHeight: 1 }}>
                     {difficulty}
                   </div>
                   <div
                     style={{
                       display: 'flex',
                       paddingBottom: 5,
-                      fontSize: 24,
+                      fontSize: 20,
                       fontWeight: 700,
                       color: '#64748b',
                     }}
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest, { params }: Props) {
                     borderRadius: 999,
                     background: '#dbeafe',
                     padding: '14px 24px',
-                    fontSize: 30,
+                    fontSize: 26,
                     fontWeight: 850,
                     color: '#0f172a',
                   }}
@@ -200,14 +200,14 @@ function FauxBoldTime({ value }: { value: string }) {
     position: 'absolute' as const,
     top: 0,
     display: 'flex',
-    fontSize: 38,
+    fontSize: 32,
     fontWeight: 900,
     lineHeight: 1,
     color: '#0f172a',
   };
 
   return (
-    <span style={{ position: 'relative', display: 'flex', width: 80, height: 38 }}>
+    <span style={{ position: 'relative', display: 'flex', width: 68, height: 32 }}>
       <span style={{ ...baseStyle, left: 0 }}>{value}</span>
       <span style={{ ...baseStyle, left: 0.6 }}>{value}</span>
     </span>
