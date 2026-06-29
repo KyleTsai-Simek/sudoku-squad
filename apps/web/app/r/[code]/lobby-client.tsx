@@ -394,8 +394,6 @@ export function LobbyClient({ code }: { code: string }) {
   const enoughPlayers = liveMode === 'battle' ? visiblePlayers.length >= 2 : visiblePlayers.length >= 1;
   const stragglers = visiblePlayers.filter((p) => !p.has_returned);
   const allReady = stragglers.length === 0;
-  const otherHost = visiblePlayers.find((p) => p.is_host && p.player_id !== room.own_player_id);
-
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center gap-8 px-6 py-4">
       <AppHeader
@@ -498,82 +496,92 @@ export function LobbyClient({ code }: { code: string }) {
         </ul>
       </section>
 
-      <section className="w-full">
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
-          Difficulty
-          {!isHost ? <span className="ml-2 text-muted normal-case tracking-normal">— host chooses</span> : null}
-        </h2>
-        {currentDifficulty === null ? (
-          <p className="text-sm text-muted">Loading…</p>
-        ) : isHost && status === 'lobby' ? (
-          <div className="grid grid-cols-5 gap-2">
-            {VISIBLE_DIFFICULTIES.map((d) => {
-              // Show the optimistic selection if we have one — keeps the
-              // button visually in sync with the user's last click even
-              // before the server confirms.
-              const displayed = optimisticDifficulty ?? currentDifficulty;
-              const selected = displayed === d;
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => onChangeDifficulty(d)}
-                  // Note: stay clickable while syncing. The user can click
-                  // again to change their mind; the in-flight requests
-                  // serialize through Supabase and the latest write wins.
-                  disabled={selected}
-                  className={cn(
-                    'rounded-lg border px-2 py-2 text-xs font-medium transition-colors',
-                    selected ? lobbySelectorSelectedClassName : lobbySelectorIdleClassName,
-                  )}
-                >
-                  {difficultyLabel(d)}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm">
-            <span className="text-xs uppercase tracking-widest text-muted">selected</span>
-            <span className="font-semibold text-foreground">{difficultyLabel(currentDifficulty)}</span>
-          </div>
-        )}
-      </section>
+      {isHost && status === 'lobby' ? (
+        <>
+          <section className="w-full">
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
+              Difficulty
+            </h2>
+            {currentDifficulty === null ? (
+              <p className="text-sm text-muted">Loading…</p>
+            ) : (
+              <div className="grid grid-cols-5 gap-2">
+                {VISIBLE_DIFFICULTIES.map((d) => {
+                  // Show the optimistic selection if we have one — keeps the
+                  // button visually in sync with the user's last click even
+                  // before the server confirms.
+                  const displayed = optimisticDifficulty ?? currentDifficulty;
+                  const selected = displayed === d;
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => onChangeDifficulty(d)}
+                      // Note: stay clickable while syncing. The user can click
+                      // again to change their mind; the in-flight requests
+                      // serialize through Supabase and the latest write wins.
+                      disabled={selected}
+                      className={cn(
+                        'rounded-lg border px-2 py-2 text-xs font-medium transition-colors',
+                        selected ? lobbySelectorSelectedClassName : lobbySelectorIdleClassName,
+                      )}
+                    >
+                      {difficultyLabel(d)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
 
-      <section className="w-full">
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
-          Mode
-          {!isHost ? <span className="ml-2 text-muted normal-case tracking-normal">— host chooses</span> : null}
-        </h2>
-        {isHost && status === 'lobby' ? (
-          <div className="grid grid-cols-2 gap-2">
-            {(['battle', 'coop'] as const).map((m) => {
-              const selected = liveMode === m;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => onChangeMode(m)}
-                  disabled={selected}
-                  className={cn(
-                    'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
-                    selected ? lobbySelectorSelectedClassName : lobbySelectorIdleClassName,
-                  )}
-                >
-                  {m === 'coop' ? 'Co-op' : 'Battle'}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm">
-            <span className="text-xs uppercase tracking-widest text-muted">selected</span>
-            <span className="font-semibold text-foreground">
-              {liveMode === 'coop' ? 'Co-op' : 'Battle'}
-            </span>
-          </div>
-        )}
-      </section>
+          <section className="w-full">
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
+              Mode
+            </h2>
+            <div className="grid grid-cols-2 gap-2">
+              {(['battle', 'coop'] as const).map((m) => {
+                const selected = liveMode === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => onChangeMode(m)}
+                    disabled={selected}
+                    className={cn(
+                      'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                      selected ? lobbySelectorSelectedClassName : lobbySelectorIdleClassName,
+                    )}
+                  >
+                    {m === 'coop' ? 'Co-op' : 'Battle'}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </>
+      ) : (
+        <section className="w-full">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
+            Game
+          </h2>
+          {currentDifficulty === null ? (
+            <p className="text-sm text-muted">Loading…</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm">
+                <span className="text-xs uppercase tracking-widest text-muted">Difficulty</span>
+                <span className="font-semibold text-foreground">{difficultyLabel(currentDifficulty)}</span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm">
+                <span className="text-xs uppercase tracking-widest text-muted">Mode</span>
+                <span className="font-semibold text-foreground">
+                  {liveMode === 'coop' ? 'Co-op' : 'Battle'}
+                </span>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       <LobbySettingsPanel
         roomId={room.room_id}
@@ -623,8 +631,7 @@ export function LobbyClient({ code }: { code: string }) {
         </section>
       ) : (
         <section className="w-full text-center text-sm text-muted">
-          Waiting for the host
-          {otherHost ? ` (${otherHost.username})` : ''} to start…
+          Waiting for the host to start…
         </section>
       )}
 

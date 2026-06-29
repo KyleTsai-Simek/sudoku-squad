@@ -126,9 +126,9 @@ export function LobbySettingsPanel({
         >
           <span className="text-xs font-semibold uppercase tracking-widest text-muted">
             Lobby Settings
-            {locked || !isHost ? (
+            {locked ? (
               <span className="ml-2 text-muted normal-case tracking-normal">
-                {locked ? '- locked' : '- host chooses'}
+                - locked
               </span>
             ) : null}
           </span>
