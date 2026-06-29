@@ -26,12 +26,12 @@ import { getUsername } from '@/lib/username';
 import { AppHeader } from '@/components/app-header';
 import { LobbySettingsPanel } from '@/components/lobby-settings-panel';
 import {
-  GroupsIcon,
+  GroupsOutlinedIcon,
   HandshakeIcon,
   IosShareIcon,
-  JoystickIcon,
+  JoystickOutlinedIcon,
   LinkIcon,
-  SpeedIcon,
+  SpeedOutlinedIcon,
   SportsScoreIcon,
   SwordsIcon,
 } from '@/components/material-icons';
@@ -437,7 +437,7 @@ export function LobbyClient({ code }: { code: string }) {
 
       <section className="w-full">
         <h2 className="mb-3 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted">
-          <GroupsIcon size={16} className="shrink-0" />
+          <GroupsOutlinedIcon size={16} className="shrink-0" />
           <span>Players ({visiblePlayers.length}/8)</span>
         </h2>
         <ul className="flex flex-col gap-2">
@@ -510,7 +510,7 @@ export function LobbyClient({ code }: { code: string }) {
         <>
           <section className="w-full">
             <h2 className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted">
-              <SpeedIcon size={16} className="shrink-0" />
+              <SpeedOutlinedIcon size={16} className="shrink-0" />
               <span>Difficulty</span>
             </h2>
             {currentDifficulty === null ? (
@@ -547,7 +547,7 @@ export function LobbyClient({ code }: { code: string }) {
 
           <section className="w-full">
             <h2 className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted">
-              <JoystickIcon size={16} className="shrink-0" />
+              <JoystickOutlinedIcon size={16} className="shrink-0" />
               <span>Mode</span>
             </h2>
             <div className="grid grid-cols-2 gap-2">
