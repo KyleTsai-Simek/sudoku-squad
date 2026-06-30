@@ -17,6 +17,26 @@ Format:
 
 ---
 
+## 0058 — Server-inferred same-day daily completion credit
+**Date:** 2026-06-29
+**Status:** Accepted and implemented
+
+**Context.** Daily share links carry daily metadata into `/play/[code]`, but single-player also has a durable local resume snapshot. If a player already had a local snapshot for the same puzzle code, `resumeSavedGame(code)` could hydrate the old puzzle before the share-link daily metadata was attached. Completing that resumed board could therefore record only the normal single-player completion and miss the daily row/credit, even though the puzzle was today's active daily.
+
+**Decision.** Make daily credit a server-side inference by current assignment, not a client-metadata dependency. Migration `0031` updates `record_single_player_completion(...)` so it always records the normal `player_completions` row, then checks `daily_puzzles` for `puzzle_code = p_code` on `current_pacific_date()`. If the puzzle is one of today's Pacific daily assignments, the RPC writes `player_daily_completions` with the assigned daily date/difficulty. The client can still pass daily metadata for UI continuity and validation, but missing metadata no longer prevents valid same-day daily credit.
+
+The web local-resume path also overlays URL daily metadata onto the resumed puzzle snapshot when present, so the completion modal/header behave like a normal daily entry immediately after opening a shared daily link.
+
+**Alternatives considered.**
+- Store all single-player in-progress daily state server-side. Rejected because local snapshots remain accurate and lower-cost; only the daily-credit classification needed to move server-side.
+- Keep requiring client daily metadata. Rejected because URL metadata and local resume order can disagree, and the server already owns the daily assignment table.
+- Infer daily status for old daily dates. Rejected for the current product rule: daily credit is only awarded when the puzzle is solved on its assigned Pacific day. Older solves remain normal puzzle completions.
+
+**Consequences.**
+- A share-link recipient who solves today's active daily receives both the regular completion row and the daily row even if local resume metadata was stale or absent.
+- Solving yesterday's daily puzzle today records as a normal puzzle completion only.
+- Single-player solve duration is still measured client-side from the local game timer. Fully server-timed single-player sessions would require a new server session/progress model and is not needed for daily-credit correctness.
+
 ## 0057 — Away pause and server-owned co-op active time
 **Date:** 2026-06-29
 **Status:** Accepted and implemented

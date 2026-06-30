@@ -38,22 +38,24 @@ export function PlayClient({
   const puzzle = useGameStore((s) => s.puzzle);
   const startGame = useGameStore((s) => s.startGame);
   const [status, setStatus] = useState<Status>('loading');
-  const daily = dailyDate
-    ? { date: dailyDate, difficulty: dailyDifficultyOrNull(dailyDifficulty) }
-    : null;
+  const dailyDifficultyValue = dailyDifficultyOrNull(dailyDifficulty);
 
   // Install autosave once so an in-progress game survives a refresh/crash.
   useEffect(() => installSpAutosave(), []);
 
   useEffect(() => {
     let cancelled = false;
+    const daily =
+      dailyDate && dailyDifficultyValue
+        ? { date: dailyDate, difficulty: dailyDifficultyValue }
+        : null;
     if (puzzle?.code === code && board) {
       setStatus('ready');
       return;
     }
     // Auto-resume a persisted in-progress game for this code before fetching.
     // It's self-contained (givens + solution), so this also works offline.
-    if (resumeSavedGame(code)) {
+    if (resumeSavedGame(code, { daily: daily?.difficulty ? daily : null })) {
       setStatus('ready');
       return;
     }
@@ -75,7 +77,7 @@ export function PlayClient({
     return () => {
       cancelled = true;
     };
-  }, [code, daily?.date, daily?.difficulty, puzzle?.code, board, startGame]);
+  }, [code, dailyDate, dailyDifficultyValue, puzzle?.code, board, startGame]);
 
   if (status === 'not-found') {
     return (

@@ -92,12 +92,16 @@ export function clearSavedGame(): void {
   }
 }
 
+interface ResumeSavedGameOptions {
+  daily?: FetchedPuzzle['daily'] | null;
+}
+
 /**
  * If a valid in-progress game is saved for `code`, hydrate the store from it
  * and return true. Otherwise return false (caller should start fresh). Rebases
  * `startedAt` so elapsed continues from where it left off.
  */
-export function resumeSavedGame(code: string): boolean {
+export function resumeSavedGame(code: string, options: ResumeSavedGameOptions = {}): boolean {
   const s = storage();
   if (!s) return false;
   let raw: string | null;
@@ -125,8 +129,9 @@ export function resumeSavedGame(code: string): boolean {
     return false;
   }
   const startedAt = Date.now() - Math.max(0, parsed.elapsedMs);
+  const puzzle = options.daily ? { ...parsed.puzzle, daily: options.daily } : parsed.puzzle;
   useGameStore.getState().hydrate({
-    puzzle: parsed.puzzle,
+    puzzle,
     board: parsed.board,
     history: parsed.history,
     startedAt,

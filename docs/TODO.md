@@ -187,6 +187,7 @@ Same Easy / Medium / Hard puzzle for every player each Pacific day, with daily s
 - [x] Reuse the Daily Puzzles row in the daily completion modal, with completed buttons showing today's solved count plus solve time and the next unsolved daily promoted as primary.
 - [x] Quick Play "Start a game" button routes to the previous Single-player / Co-op / Battle menu.
 - [x] Single-player completion recording includes elapsed time and daily metadata.
+- [x] Server-infer same-day daily credit from `daily_puzzles` so active-daily share links and local SP resume still write `player_daily_completions`.
 - [x] `merge-progress` unions daily completion rows during anonymous → saved-account merges.
 - [x] Apply migration `0020` to the linked Supabase project.
 - [x] Redeploy `merge-progress` after migration `0020`.
@@ -210,7 +211,7 @@ Shareable result links from end-game modals, with result-aware text and dynamic 
 - [~] Add tests for helper formatting/token validation, valid/tampered share routes, completion-modal share UI, clipboard fallback, and mobile layout. Current coverage: single-player Playwright smoke checks Share button, clipboard fallback, signed `/s/` link, and challenge-page navigation; focused unit coverage for token edge cases is still pending because `apps/web` has no unit-test harness yet.
 - [~] Manually verify several share links and direct OG image URLs on desktop/mobile; after deploy, test unfurls in target apps. Local `/share-preview` and direct OG PNG render are verified; external unfurls remain.
 - [x] Replace signed `/s/{token}` links with short `/s/{puzzleCode}/{time}` links, update share copy to "Try this easy puzzle. I finished in x:xx!", and avoid duplicate iMessage previews by keeping URLs out of native share text.
-- [x] Preserve daily metadata from shared daily links into `/play/[code]` so daily backend completion, the daily completion modal, and the home daily row behave like normal daily entry.
+- [x] Preserve daily metadata from shared daily links into `/play/[code]` so daily backend completion, the daily completion modal, and the home daily row behave like normal daily entry; local resume overlays that metadata onto the saved puzzle snapshot when present.
 - [x] Refresh the OG image and landing page: larger Sudoku Squad / Try this puzzle text, no mode label, daily-aware category, puzzle code, and a single white result area.
 - [x] Move the daily completion modal Share action below the daily row next to Back to menu, use the iOS share icon, and add the same Daily Puzzles header treatment as home.
 

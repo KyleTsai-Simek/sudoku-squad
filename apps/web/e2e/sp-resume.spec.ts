@@ -69,3 +69,17 @@ test('single-player: returning after task switching shows a paused resume gate',
   await page.keyboard.press('5');
   await expect(page.getByRole('gridcell', { name: /row 1, column 3, value 5/ })).toBeVisible();
 });
+
+test('single-player: daily metadata survives local resume from a share link', async ({ page }) => {
+  await page.goto(`/play/${SAMPLE_CODE}`);
+  await expect(page.getByRole('grid', { name: 'Sudoku board' })).toBeVisible();
+
+  await page.getByRole('gridcell', { name: /row 1, column 3, empty/ }).click();
+  await page.keyboard.press('4');
+  await expect(page.getByRole('gridcell', { name: /row 1, column 3, value 4/ })).toBeVisible();
+
+  await page.goto(`/play/${SAMPLE_CODE}?daily=2026-06-29&dailyDifficulty=medium`);
+  await expect(page.getByRole('grid', { name: 'Sudoku board' })).toBeVisible();
+  await expect(page.getByText('Medium daily')).toBeVisible();
+  await expect(page.getByRole('gridcell', { name: /row 1, column 3, value 4/ })).toBeVisible();
+});

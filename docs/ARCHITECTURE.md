@@ -239,7 +239,7 @@ Daily-specific completion rows, added in migration 0020. These are separate from
 | `solve_time_ms` | integer nullable | Elapsed solve time, for future leaderboard/stat surfaces. |
 | PK | (`player_id`, `puzzle_date`, `difficulty`) | One daily result per player/tier/day. |
 
-Written only by `record_single_player_completion(...)` when the submitted puzzle matches today's `daily_puzzles` assignment in Pacific time. `merge-progress` unions these rows across anonymous → saved-account merges.
+Written only by `record_single_player_completion(...)` when the submitted puzzle code matches today's `daily_puzzles` assignment in Pacific time. The RPC infers this from `daily_puzzles` and `current_pacific_date()` server-side, so client-carried daily metadata is helpful for UI continuity but is not required for valid same-day daily credit. `merge-progress` unions these rows across anonymous → saved-account merges.
 
 ### `issued_usernames`
 The player's current username. Added in migration 0008 as an immutable "issued once" record ([#0027](DECISIONS.md)); migration 0018 (Phase 5, [#0043](DECISIONS.md)) reshapes it into a **mutable current-username** table to back renames.
@@ -445,7 +445,7 @@ Per [DECISIONS.md #0023](DECISIONS.md), multiplayer mutations go through TypeScr
 | `kick-player` | `{room_id, player_id}` | `{kicked: true}` | ✅ deployed — host-only |
 | `return-to-lobby` | `{room_id}` | `{status, has_returned: true}` | ✅ deployed — flips caller's `has_returned`; transitions room to `lobby` if not already |
 | `record_completion` (RPC) | `(p_code, p_mode)` → bool | legacy completion RPC. SECURITY DEFINER. | ✅ deployed (migration 0009); retained for compatibility |
-| `record_single_player_completion` (RPC) | `(p_code, p_solve_time_ms?, p_daily_date?, p_daily_difficulty?)` → bool | records the ever-solved SP row and, when the puzzle matches today's Pacific daily assignment, records `player_daily_completions`. SECURITY DEFINER. | ✅ deployed (migration 0020, [#0046](DECISIONS.md)) |
+| `record_single_player_completion` (RPC) | `(p_code, p_solve_time_ms?, p_daily_date?, p_daily_difficulty?)` → bool | records the ever-solved SP row and, when the puzzle code matches today's Pacific daily assignment, records `player_daily_completions` by server-side inference. SECURITY DEFINER. | ✅ deployed (migrations 0020/0031, [#0046](DECISIONS.md), [#0058](DECISIONS.md)) |
 | `get_daily_puzzles` (RPC) | `(p_date?)` → `{puzzle_date, difficulty, puzzle_code, givens}[]` | lazily assigns and returns the Easy / Medium / Hard daily set. SECURITY DEFINER. | ✅ deployed (migrations 0020/0021, [#0046](DECISIONS.md)) |
 | `get_completion_count` (RPC) | `()` → int | reads caller's row count. SECURITY DEFINER. | ✅ deployed (migration 0009) |
 | `hint` | (removed for V1) | — | dropped per the May 22 product changes |
